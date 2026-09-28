@@ -1,0 +1,3849 @@
+﻿/* ===== 버전 ===== */
+const APP_VERSION = 'v2.10.0';
+const APP_DATE    = '2026.09.22';
+
+/* ===== 설정 ===== */
+const ADMIN_PASSWORD       = 'airmax87';  /* 관리자 비밀번호 */
+const SUPER_ADMIN_PASSWORD = 'wjdzn';    /* 슈퍼 관리자 비밀번호 */
+const GAS_URL        = 'https://script.google.com/macros/s/AKfycbw61auB8x8HFf_lk-rxEnpjAY1e9AoIxs7yRkkttZG_wqoSHKxpy4w0YkFzjSoMc8nyNw/exec';
+const API      = 'https://api-airmax.testonic.co.kr/api/external/reports';
+const LS_EXTRA        = 'airmax_extra_ids';
+const LS_EXCLUDE      = 'airmax_exclude_reasons';
+const LS_ENDID        = 'airmax_end_id';
+const LS_GLOBAL_ENDID = 'airmax_global_end_id';
+const LS_ADMIN_AUTH = 'airmax_admin_auth'; // 'super' | 'admin' — 한번 인증하면 만료 없이 유지
+const LS_THEME = 'airmax_theme';
+const LS_MODE  = 'airmax_mode';
+const LS_PROD_LOCS    = 'airmax_product_locations';
+const LS_SHEET_CACHE  = 'airmax_sheet_cache';
+const LS_DUST_EXTRA   = 'airmax_dust_extra_ids';
+const LS_COMPARE_MODE = 'airmax_compare_mode';
+const CACHE_TTL       = 3600000; // 1시간 (ms)
+
+const isMobile = () => window.innerWidth <= 768;
+
+/* ===== 상태 ===== */
+let selectedZones   = new Set();
+let zoneGridOpen    = false;
+let zoneLangFilter  = 'ALL';     // 영역 선택 패널 언어 필터 — ALL|KO|ZH|JA
+let adminAuthenticated      = false;
+let superAdminAuthenticated = false;
+let sheetZones      = [];   // [{name, ids[]}] — GAS 시트에서 로드
+let productLocations    = {};   // {id: loc} — GAS 시트에서 로드
+let productLocEditorOpen = false;
+let peEditMode = false;
+let peOriginals = {};
+
+/* ===== 히스토리 / 주간 점검 요청서 ===== */
+const LS_REQUESTERS = 'airmax_requesters';
+const LS_LAST_REQUESTER = 'airmax_last_requester';
+const LS_CL_INSPECTOR = 'airmax_checklist_inspector'; // 점검표 - 마지막으로 입력한 점검자 이름(기기별로 유지, 각자 개인 폰으로 점검하므로 자동 채움에 적합)
+let currentPage = 'inspection'; // 'inspection' | 'history'
+let historyMonths = [];         // ["26년 7월", ...] — GAS에서 로드
+let historyLoadedMonth = null;
+let historyGridData = null;     // {sheetName, dates, rows}
+let historyFilterQ = '';
+let historyDayFilterIdx = -1;   // -1 = 전체 일자, 그 외엔 dates 배열 인덱스
+let weeklyDraft = null;         // getWeeklyReportDraft 결과
+let overdueBadgeItems = [];     // 30일 이상 지속오류 배지 상세 목록
+let requesterList = [];
+
+let results=[], currentFilter='ALL', currentView='grid', currentMode='range';
+let resultZoneGroups=null; // 영역 점검 결과를 영역별로 묶어 보여줄 때 Map(영역명 -> id[]) — 범위 검색 등에서는 null
+let logVisible=false, logs=[], extraIds=[], dustExtraIds=[];
+let excludeReasons={}; // {id: reason}
+let isGlobalLocked=false;
+let selectedDustZones=new Set();
+let dustZoneLangFilter='ALL';    // 먼지 포집 영역 선택 패널 언어 필터 — ALL|KO|ZH|JA
+let excludeZoneGridOpen=false;
+let lastResults = [];
+let lastDateRange=null, cardDetailModalOpen=false;
+let collectStartMs=null;   // 데이터 수집 시작 시각 — 남은 시간 추정/소요 시간 표시용(참고용, 정확한 계측 아님)
+let lastRunElapsedText='';  // 직전 점검 완료까지 걸린 시간(요약 영역 표시용) — 새 점검 시작 시 초기화
+let singleAllItems=[], singlePage=0, singleShowAll=false;
+let compareMode=false; // 단일 검색 - 비교 검색(두 기간) 토글 상태
+const chartRegistry=new Map(); // canvasId -> Chart 인스턴스. 단일 검색/기간 비교 차트가 공용으로 사용
+function destroyChart(canvasId){
+  const c=chartRegistry.get(canvasId);
+  if(c){ c.destroy(); chartRegistry.delete(canvasId); }
+}
+let dustDays=[], dustModalChart=null, dustModalOpen=false;
+const cardDetailCache=new Map();
+const dustResultMap=new Map();
+const SINGLE_PAGE_SIZE=30;
+
+const STATUS = {
+  OK:   {label:'OK',  icon:'check_circle', cls:'card-ok',   textVar:'--ok-text',  chipBgVar:'--ok-chip-bg',  chipBdVar:'--ok-chip-border',  chipTxVar:'--ok-chip-text'  },
+  NO:   {label:'NO',  icon:'cancel',       cls:'card-no',   textVar:'--no-text',  chipBgVar:'--no-chip-bg',  chipBdVar:'--no-chip-border',  chipTxVar:'--no-chip-text'  },
+  EM:   {label:'EM',  icon:'bolt',         cls:'card-em',   textVar:'--em-text',  chipBgVar:'--em-chip-bg',  chipBdVar:'--em-chip-border',  chipTxVar:'--em-chip-text'  },
+  PM:   {label:'PM',  icon:'build',        cls:'card-pm',   textVar:'--pm-text',  chipBgVar:'--pm-chip-bg',  chipBdVar:'--pm-chip-border',  chipTxVar:'--pm-chip-text'  },
+  ERR:  {label:'ERR', icon:'warning',      cls:'card-err',  textVar:'--err-text', chipBgVar:'--err-chip-bg', chipBdVar:'--err-chip-border', chipTxVar:'--err-chip-text' },
+  LOAD: {label:'···', icon:'',             cls:'card-load', textVar:'--text4',    chipBgVar:'--input-bg',    chipBdVar:'--border',          chipTxVar:'--text4'         },
+};
+
+/* ===== 유틸 ===== */
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+
+function renderSummaryDonut(counts){
+  const el=document.getElementById('summaryDonut');
+  if(!el) return;
+  const order=['OK','NO','EM','PM','ERR'];
+  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  const hexColors=isDark
+    ?{OK:'#a0ca92',NO:'#b8b3b0',EM:'#8ab4d6',PM:'#e08d7c',ERR:'#e0b458'}
+    :{OK:'#7fa870',NO:'#a39d97',EM:'#5f8fb3',PM:'#c17262',ERR:'#c19752'};
+  const total=order.reduce((s,k)=>s+(counts[k]||0),0);
+  if(!total){el.innerHTML='';return;}
+  const r=18,C=2*Math.PI*r;
+  let cum=0;
+  const segs=order.filter(k=>(counts[k]||0)>0).map(k=>{
+    const pct=(counts[k]||0)/total;
+    const seg=`<circle cx="22" cy="22" r="${r}" fill="none" stroke="${hexColors[k]}" stroke-width="7"
+      stroke-dasharray="${(pct*C).toFixed(2)} ${((1-pct)*C).toFixed(2)}"
+      stroke-dashoffset="${(-cum*C).toFixed(2)}"
+      transform="rotate(-90 22 22)"/>`;
+    cum+=pct;return seg;
+  }).join('');
+  el.innerHTML=`<svg width="44" height="44" viewBox="0 0 44 44">${segs}</svg>`;
+}
+
+/* ===== 테마 ===== */
+function toggleTheme(){
+  const html=document.documentElement;
+  const next=html.getAttribute('data-theme')==='dark'?'light':'dark';
+  html.setAttribute('data-theme',next); lsSet(LS_THEME,next);
+  document.getElementById('themeIcon').textContent=next==='dark'?'light_mode':'dark_mode';
+  if(results && results.length && document.getElementById('summary').style.display!=='none') renderSummary();
+  if(singleAllItems.length){
+    const start=singlePage*SINGLE_PAGE_SIZE;
+    renderSingleChart([...singleAllItems.slice(start,start+SINGLE_PAGE_SIZE)].reverse());
+  }
+  if(dustModalOpen && dustDays.length) renderDustChart(dustDays, next==='dark', 'dustModalCanvas');
+}
+
+function toggleAdminPwVisibility(){
+  const input=document.getElementById('adminPwInput');
+  const icon=document.querySelector('#adminPwToggleBtn .material-icons-round');
+  const show=input.type==='password';
+  input.type=show?'text':'password';
+  icon.textContent=show?'visibility_off':'visibility';
+}
+
+/* ===== 관리자 인증 ===== */
+function authenticateAdmin(){
+  const pw=document.getElementById('adminPwInput').value;
+  const badge=document.getElementById('adminAuthBadge');
+
+  if(pw===SUPER_ADMIN_PASSWORD){
+    adminAuthenticated=true;
+    superAdminAuthenticated=true;
+    lsSet(LS_ADMIN_AUTH,'super');
+    _applyAdminAuthedUI('super');
+  } else if(pw===ADMIN_PASSWORD){
+    adminAuthenticated=true;
+    superAdminAuthenticated=false;
+    lsSet(LS_ADMIN_AUTH,'admin');
+    _applyAdminAuthedUI('admin');
+  } else {
+    badge.textContent='✗ 비밀번호 오류'; badge.className='admin-auth-badge fail';
+    setTimeout(()=>{ badge.textContent=''; badge.className='admin-auth-badge'; },2500);
+  }
+}
+
+// 인증 성공 시(또는 새로고침 후 저장된 인증 복원 시) UI 반영 — 비밀번호는 한 번만 입력하면 만료 없이 유지됨
+function _applyAdminAuthedUI(level){
+  const badge=document.getElementById('adminAuthBadge');
+  const inp=document.getElementById('adminPwInput');
+  if(level==='super'){
+    badge.textContent='✓ 슈퍼 관리자'; badge.className='admin-auth-badge super';
+  } else {
+    badge.textContent='✓ 일반 관리자'; badge.className='admin-auth-badge ok';
+  }
+  inp.value=''; inp.disabled=true;
+  document.getElementById('deauthBtn').style.display='inline-block';
+  document.getElementById('adminActionsRow').style.display='flex';
+  _applyDustAuthUI();
+  updateRunBtnText(); updateSheetBtn(); updatePageTabsVisibility();
+  fetchOverdueBadge();
+}
+
+/* 30일 이상 지속된 오류 건수를 관리자 로그인 시 백그라운드로 조회해 배지로 표시.
+   실패해도 조용히 무시 — 부가 정보일 뿐 기존 흐름에 영향 없음 */
+async function fetchOverdueBadge(){
+  const badge=document.getElementById('overdueBadge');
+  if(!badge||!GAS_URL) return;
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'getWeeklyReportDraft', asOfDate:todayStr()})});
+    const json=await res.json();
+    if(json.success && Array.isArray(json.overdueItems) && json.overdueItems.length){
+      overdueBadgeItems=json.overdueItems;
+      badge.innerHTML=`<span class="material-icons-round" style="font-size:13px;vertical-align:-2px;margin-right:3px">history_toggle_off</span>30일 이상 지속 ${json.overdueItems.length}건`;
+      badge.title='클릭하면 상세 목록을 볼 수 있습니다';
+      badge.style.display='inline-flex';
+    } else {
+      overdueBadgeItems=[];
+      badge.style.display='none';
+    }
+  }catch(e){ overdueBadgeItems=[]; badge.style.display='none'; }
+}
+
+function openOverdueBadgeModal(){
+  if(!overdueBadgeItems.length) return;
+  document.getElementById('overdueBadgeTable').innerHTML=
+    `<thead><tr><th>순번</th><th>오류 발생 시점</th><th>제품 ID</th><th>설치 장소</th><th>오류 코드</th></tr></thead>
+     <tbody>${overdueBadgeItems.map((it,i)=>`<tr><td>${i+1}</td><td>${escHtml(it.since)}</td><td>${escHtml(it.id)}</td><td>${escHtml(wrLocText(it))}</td><td class="wr-code wr-code-${it.code.toLowerCase()}">${it.code}</td></tr>`).join('')}</tbody>`;
+  document.getElementById('overdueBadgeModal').style.display='flex';
+}
+function closeOverdueBadgeModal(){
+  document.getElementById('overdueBadgeModal').style.display='none';
+}
+function overdueBadgeOverlayClick(e){
+  if(e.target.id==='overdueBadgeModal') closeOverdueBadgeModal();
+}
+
+function updatePageTabsVisibility(){
+  // 점검/점검표 탭은 일반 유저도 항상 사용 가능 — 히스토리 탭만 관리자 인증 시에만 노출
+  const histTab=document.getElementById('pageTabHistory');
+  if(histTab) histTab.style.display=adminAuthenticated?'':'none';
+  if(!adminAuthenticated && currentPage==='history') switchPage('inspection');
+}
+
+// 모바일에서는 관리자 인증(일반/슈퍼 모두 가능) 시 전체 기간 조회 가능 — 미인증(일반 유저)은 당일 데이터만
+function isDustTodayOnlyMode(){ return isMobile() && !adminAuthenticated; }
+function _applyDustAuthUI(){
+  const area=document.getElementById('dustSearchArea');
+  const periodRow=document.getElementById('dustPeriodRow');
+  const todayNote=document.getElementById('dustTodayOnlyNote');
+  const todayOnly=isDustTodayOnlyMode();
+  if(area) area.style.display='block';
+  if(periodRow) periodRow.style.display=todayOnly?'none':'flex';
+  if(todayNote) todayNote.style.display=todayOnly?'block':'none';
+  updateRunBtnText();
+  renderDustZoneGrid();
+}
+
+function deauthAdmin(){
+  adminAuthenticated=false;
+  superAdminAuthenticated=false;
+  lsSet(LS_ADMIN_AUTH,null);
+  const badge=document.getElementById('adminAuthBadge');
+  badge.textContent=''; badge.className='admin-auth-badge';
+  document.getElementById('adminPwInput').disabled=false;
+  document.getElementById('deauthBtn').style.display='none';
+  document.getElementById('adminActionsRow').style.display='none';
+  document.getElementById('productEditorSection').style.display='none';
+  productLocEditorOpen=false;
+  _applyDustAuthUI();
+  updateRunBtnText(); updateSheetBtn(); updatePageTabsVisibility();
+}
+
+function updateRunBtnText(){
+  const btn=document.getElementById('runBtn');
+  const mBtn=document.getElementById('mobileRunBtn');
+  const dustBtn=document.getElementById('dustRangeBtn');
+  btn.style.display='';
+  mBtn.style.display='';
+  dustBtn.style.display='none';
+  if(currentMode==='dust'){
+    btn.style.display='none';
+    mBtn.style.display='none';
+    dustBtn.style.display='';
+    dustBtn.textContent=isDustTodayOnlyMode()?'오늘 먼지 포집 데이터 조회':'먼지 포집 데이터 조회';
+    return;
+  }
+  const label=(currentMode==='single'&&compareMode)?'비교 조회':'점검 시작';
+  btn.textContent=label;
+  mBtn.textContent=label;
+}
+
+function updateSheetBtn(){
+  const btn=document.getElementById('saveSheetBtn');
+  btn.style.display=(adminAuthenticated && currentMode==='range' && lastResults.length>0)?'inline-block':'none';
+}
+
+/* ===== GAS 저장 ===== */
+async function saveToSheet(){
+  if(!GAS_URL){
+    alert('GAS_URL이 설정되지 않았습니다.\nscript.js 상단의 GAS_URL 변수에 배포된 Google Apps Script URL을 입력해주세요.');
+    return;
+  }
+  if(!lastResults.length){ alert('저장할 결과가 없습니다.'); return; }
+  const btn=document.getElementById('saveSheetBtn');
+  btn.disabled=true; btn.textContent='저장 중…';
+  try {
+    const res=await fetch(GAS_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({results:lastResults.map(r=>({id:r.id,status:excludeReasons[r.id]||r.status})), savedAt:new Date().toISOString()})
+    });
+    const json=await res.json();
+    if(json.success){
+      btn.textContent=`✓ ${json.updated}/${json.total}개 저장 완료`;
+      addLog(`시트 저장 완료 — ${json.sheet} [${json.col}] ${json.updated}/${json.total}건`,'ok');
+      if(json.notFound&&json.notFound.length) addLog('미등록 ID: '+json.notFound.join(', '),'warn');
+    } else {
+      btn.textContent='저장 실패';
+      addLog('시트 저장 실패: '+(json.error||'알 수 없는 오류'),'err');
+      alert('시트 저장 실패\n\n'+(json.error||'알 수 없는 오류'));
+    }
+    setTimeout(()=>{ btn.textContent='시트에 저장'; btn.disabled=false; },3000);
+  } catch(e) {
+    addLog('시트 저장 오류: '+e.message,'err');
+    alert('저장 중 오류가 발생했습니다.\n\n'+e.message+'\n\nGAS URL 또는 배포 설정을 확인해주세요.');
+    btn.textContent='시트에 저장'; btn.disabled=false;
+  }
+}
+
+/* ===== 시트 데이터 로드 (영역 + 설치장소, 캐시 1시간) ===== */
+async function loadSheetData(force=false){
+  const cached=lsGet(LS_SHEET_CACHE,null);
+  const now=Date.now();
+  const expired=!cached||(now-cached.ts)>CACHE_TTL;
+
+  if(cached&&cached.zones){
+    sheetZones=cached.zones;
+    productLocations=Object.assign({},cached.locations||{});
+    historyMonths=cached.monthSheets||[];
+    renderZoneGrid();
+    renderDustZoneGrid();
+    renderExcludeZoneGrid();
+  }
+
+  if((expired||force)&&GAS_URL){
+    try{
+      const res=await fetch(GAS_URL);
+      const json=await res.json();
+      if(json.success){
+        sheetZones=json.zones||[];
+        productLocations=Object.assign({},json.locations||{});
+        historyMonths=json.monthSheets||[];
+        lsSet(LS_SHEET_CACHE,{ts:now,zones:sheetZones,locations:json.locations||{},monthSheets:historyMonths});
+        renderZoneGrid();
+        renderDustZoneGrid();
+        renderExcludeZoneGrid();
+        const msg=force?'시트 데이터 새로고침 완료'
+          :(cached?'시트 데이터 갱신':'시트 데이터 로드');
+        addLog(`${msg} — 영역 ${sheetZones.length}개, 설치 장소 ${Object.keys(json.locations||{}).length}건`,'ok');
+        if(force) alert(`영역 새로고침 완료\n\n영역 ${sheetZones.length}개, 설치 장소 ${Object.keys(json.locations||{}).length}건 로드됨`);
+      }
+    }catch(e){
+      if(!cached) addLog('시트 데이터 로드 실패 (GAS 미설정 또는 오류): '+e.message,'warn');
+    }
+  }
+}
+
+/* ===== 날짜 ===== */
+function fmtDate(d){ return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function todayStr(){ return fmtDate(new Date()); }
+function yesterdayStr(){ const d=new Date(); d.setDate(d.getDate()-1); return fmtDate(d); }
+
+function getDateRange(mode){
+  const today=todayStr(), yest=yesterdayStr();
+  if(mode==='single'){
+    const s=document.getElementById('singleStartDate').value||(yest+'T00:00');
+    const e=document.getElementById('singleEndDate').value||(today+'T23:59');
+    return{started_at:s.split('T')[0], finished_at:e.split('T')[0]};
+  }
+  if(mode==='zone'){
+    return{started_at:yest, finished_at:today};
+  }
+  // range: 금일 00:00 ~ 현재
+  return{started_at:today, finished_at:today};
+}
+
+function updateDateInfo(){
+  const dr=getDateRange(currentMode);
+  const txt=dr.started_at===dr.finished_at
+    ? `조회 기간  ${dr.started_at}${dr.started_at===todayStr()?' (금일)':''}`
+    : `조회 기간  ${dr.started_at} ~ ${dr.finished_at}`;
+  document.getElementById('dateInfo').textContent=txt;
+}
+
+/* ===== 모드 전환 ===== */
+function switchMode(mode){
+  currentMode=mode; lsSet(LS_MODE,mode);
+  ['range','single','zone','dust'].forEach(m=>{
+    const cap=m.charAt(0).toUpperCase()+m.slice(1);
+    const tabEl=document.getElementById('tab'+cap);
+    const panelEl=document.getElementById('panel'+cap);
+    if(tabEl) tabEl.classList.toggle('active',m===mode);
+    if(panelEl) panelEl.style.display=m===mode?'block':'none';
+  });
+  if(mode==='zone') renderZoneGrid();
+  updateMobileFixedBtn();
+  updateRunBtnText();
+  updateSheetBtn();
+  if(mode==='dust'){
+    document.getElementById('dateInfo').textContent='조회 기간  2026-04 ~';
+    _applyDustAuthUI();
+  } else {
+    updateDateInfo();
+  }
+  if(mode!=='single'){
+    document.getElementById('singleResultSection').style.display='none';
+    document.getElementById('compareResultSection').style.display='none';
+  }
+  if(mode!=='dust'){
+    document.getElementById('dustResultSection').style.display='none';
+  }
+  if(mode==='single'||mode==='dust'){
+    document.getElementById('summary').style.display='none';
+    document.getElementById('grid').style.display='none';
+    document.getElementById('listView').style.display='none';
+    document.getElementById('listToolbar').style.display='none';
+  } else {
+    if(results.length){
+      document.getElementById('grid').style.display=currentView==='grid'?'grid':'none';
+      document.getElementById('listView').style.display=currentView==='list'?'block':'none';
+      document.getElementById('listToolbar').style.display=currentView==='list'?'flex':'none';
+      document.getElementById('summary').style.display='flex';
+    }
+  }
+  const psh=document.getElementById('preSearchHint');
+  if(psh) psh.style.display=(mode!=='single'&&mode!=='dust'&&!results.length)?'':'none';
+}
+
+/* ===== 모바일 고정 버튼 ===== */
+function updateMobileFixedBtn(){
+  document.body.classList.toggle('zone-active', currentMode==='zone' && selectedZones.size>0);
+  updateMobileZoneInfo();
+}
+
+function updateMobileZoneInfo(){
+  const infoEl=document.getElementById('mobileZoneInfo');
+  const cnt=selectedZones.size;
+  if(cnt===0){ infoEl.textContent='영역을 선택하세요'; return; }
+  const total=[...selectedZones].reduce((s,i)=>s+(sheetZones[i]?sheetZones[i].ids.length:0),0);
+  infoEl.textContent=`${cnt}개 영역 · ${total}개 제품`;
+}
+
+/* ===== 영역 그리드 접기/펼치기 ===== */
+function _applyZoneGridUI(open,wrapId,arrowId,btnId){
+  const wrap=document.getElementById(wrapId);
+  const arrow=document.getElementById(arrowId);
+  const btn=document.getElementById(btnId);
+  if(wrap) wrap.classList.toggle('open',open);
+  if(arrow) arrow.classList.toggle('open',open);
+  if(btn) btn.querySelector('span').textContent=open?'접기':'펼치기';
+}
+function toggleZoneGrid(){
+  zoneGridOpen=!zoneGridOpen;
+  _applyZoneGridUI(zoneGridOpen,'zoneGridWrap','zoneArrow','zoneToggleBtn');
+}
+
+function filterZones(){ renderZoneGrid(); }
+
+/* 영역명에 쓰인 문자 체계로 언어 추정 — 한글 > 가나(일본어 고유) > 그 외 한자(중국어로 간주).
+   순수 한자만 쓰인 일본 지명은 중국어로 분류될 수 있는 한계는 있음(휴리스틱) */
+function detectZoneLang(name){
+  if(/[가-힣ᄀ-ᇿ㄰-㆏]/.test(name)) return 'KO';
+  if(/[぀-ゟ゠-ヿ]/.test(name)) return 'JA';
+  if(/[一-鿿]/.test(name)) return 'ZH';
+  return 'OTHER';
+}
+
+function _renderZoneGrid(gridId,noResultId,searchId,selSet,toggleFn,isOpen,openFn,afterFn,langFilter){
+  const gridEl=document.getElementById(gridId); if(!gridEl) return;
+  const q=(document.getElementById(searchId)?.value||'').trim().toLowerCase();
+  const hasLangFilter=langFilter&&langFilter!=='ALL';
+  gridEl.innerHTML=sheetZones.map((z,i)=>{
+    const sel=selSet.has(i);
+    const rangeText=z.ids.length===1?z.ids[0]:`${z.ids[0]}~${z.ids[z.ids.length-1]} (${z.ids.length}개)`;
+    const matchesQuery=!q||z.name.toLowerCase().includes(q);
+    const matchesLang=!hasLangFilter||detectZoneLang(z.name)===langFilter;
+    const hidden=(!matchesQuery||!matchesLang)?'hidden':'';
+    return`<button class="zone-btn ${sel?'selected':''} ${hidden}" onclick="${toggleFn}(${i})">
+      <span class="zone-name">${escHtml(z.name)}</span>
+      <span class="zone-range">${rangeText}</span>
+    </button>`;
+  }).join('');
+  const noRes=document.getElementById(noResultId);
+  const allHidden=!gridEl.querySelector('.zone-btn:not(.hidden)');
+  if(noRes) noRes.style.display=allHidden?'block':'none';
+  if((q||hasLangFilter)&&!isOpen) openFn();
+  afterFn();
+}
+function _updateZoneInfo(selSet,el,fmt){
+  if(!el) return;
+  const cnt=selSet.size;
+  const total=[...selSet].reduce((s,i)=>s+(sheetZones[i]?sheetZones[i].ids.length:0),0);
+  el.textContent=cnt===0?'선택된 영역 없음':fmt(cnt,total);
+}
+function _toggleZoneItem(selSet,i,renderFn){ if(selSet.has(i)) selSet.delete(i); else selSet.add(i); renderFn(); }
+
+function renderZoneGrid(){
+  _renderZoneGrid('zoneGrid','zoneNoResult','zoneSearchInput',selectedZones,'toggleZone',zoneGridOpen,toggleZoneGrid,updateZoneCount,zoneLangFilter);
+}
+function setZoneLangFilter(lang){
+  zoneLangFilter=lang;
+  document.querySelectorAll('#zoneLangFilter .zone-lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
+  renderZoneGrid();
+}
+function updateZoneCount(){
+  _updateZoneInfo(selectedZones,document.getElementById('zoneSelectCount'),(c,t)=>`${c}개 영역 / 총 ${t}개 제품 선택됨`);
+  updateMobileFixedBtn();
+}
+function toggleZone(i){ _toggleZoneItem(selectedZones,i,renderZoneGrid); }
+
+function clearZones(){
+  selectedZones.clear();
+  renderZoneGrid();
+}
+
+/* ===== 시트 데이터 강제 새로고침 (관리자) ===== */
+function refreshSheetData(){
+  const btn=document.getElementById('zoneRefreshBtn');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="material-icons-round ico">hourglass_empty</span>불러오는 중…'; }
+  addLog('시트 데이터 새로고침 중…','muted');
+  loadSheetData(true).finally(()=>{
+    if(btn){ btn.disabled=false; btn.innerHTML='<span class="material-icons-round ico">refresh</span>영역 새로고침'; }
+  });
+}
+
+/* ===== ID 입력 제한 ===== */
+function restrictIdInput(e){
+  const allowed=['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'];
+  if(allowed.includes(e.key))return;
+  if(/^[a-zA-Z0-9]$/.test(e.key)){
+    if(e.target.value.length>=4){e.preventDefault();return;}
+    if(/^[a-z]$/.test(e.key)){
+      e.preventDefault();
+      const pos=e.target.selectionStart;
+      e.target.value=e.target.value.slice(0,pos)+e.key.toUpperCase()+e.target.value.slice(e.target.selectionEnd);
+      e.target.setSelectionRange(pos+1,pos+1);
+    }
+    return;
+  }
+  e.preventDefault();
+}
+
+/* ===== 전역 잠금 ===== */
+function setGlobalLock(locked){
+  isGlobalLocked=locked;
+  ['runBtn','mobileRunBtn','dustRangeBtn','tabRange','tabSingle','tabZone','tabDust'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.disabled=locked;
+  });
+}
+
+/* ===== 추가 ID ===== */
+function _addExtraId(arr,lsKey,inputId,renderFn){
+  const inp=document.getElementById(inputId);
+  inp.value.trim().split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!arr.includes(v))arr.push(v);});
+  inp.value=''; lsSet(lsKey,arr); renderFn();
+}
+function _renderExtraTags(arr,rowId,removeFn){
+  const row=document.getElementById(rowId); if(!row) return;
+  row.style.display=arr.length?'flex':'none';
+  row.innerHTML=arr.map(id=>`<span class="extra-id-tag">${escHtml(id)}<button onclick="${removeFn}('${escHtml(id)}')" title="삭제">×</button></span>`).join('');
+}
+function addExtraId(){ _addExtraId(extraIds,LS_EXTRA,'extraIdInput',renderExtraTags); }
+function removeExtraId(id){ extraIds=extraIds.filter(v=>v!==id); lsSet(LS_EXTRA,extraIds); renderExtraTags(); }
+function renderExtraTags(){ _renderExtraTags(extraIds,'extraTagsRow','removeExtraId'); }
+
+function addExcludeId(){
+  const inp=document.getElementById('excludeIdInput');
+  const sel=document.getElementById('excludeReasonSel');
+  if(!inp||!sel) return;
+  const ids=inp.value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const reason=sel.value;
+  if(!ids.length||!reason) return;
+  ids.forEach(id=>{ excludeReasons[id]=reason; });
+  lsSet(LS_EXCLUDE,excludeReasons);
+  inp.value='';
+  renderExcludeTags();
+  renderExcludeZoneGrid();
+}
+function removeExcludeId(id){
+  delete excludeReasons[id];
+  lsSet(LS_EXCLUDE,excludeReasons);
+  renderExcludeTags();
+  renderExcludeZoneGrid();
+}
+function renderExcludeTags(){
+  const row=document.getElementById('excludeTagsRow');
+  if(!row) return;
+  row.innerHTML=Object.entries(excludeReasons).map(([id,reason])=>
+    `<span class="extra-id-tag">${escHtml(id)}<span class="exclude-tag-reason"> — ${escHtml(reason)}</span><button onclick="removeExcludeId('${escHtml(id)}')" title="삭제">×</button></span>`
+  ).join('');
+}
+
+/* 개별 제외 ID — 영역 버튼을 누르면 그 자리에서 바로 제외/해제 (선택 후 별도 추가 버튼을 누르는 단계를 없앰).
+   상단 사유(select)를 먼저 고르고 영역을 클릭하면 그 영역의 전체 제품 ID가 즉시 제외 목록에 반영되고,
+   이미 전체 제외된 영역을 다시 클릭하면 그 영역 ID들을 제외 목록에서 뺀다. */
+function toggleExcludeZoneGrid(){
+  excludeZoneGridOpen=!excludeZoneGridOpen;
+  _applyZoneGridUI(excludeZoneGridOpen,'excludeZoneGridWrap','excludeZoneArrow','excludeZoneToggleBtn');
+}
+function _zoneFullyExcluded(z){ return z.ids.length>0 && z.ids.every(id=>id in excludeReasons); }
+function renderExcludeZoneGrid(){
+  const gridEl=document.getElementById('excludeZoneGrid'); if(!gridEl) return;
+  const q=(document.getElementById('excludeZoneSearchInput')?.value||'').trim().toLowerCase();
+  gridEl.innerHTML=sheetZones.map((z,i)=>{
+    const sel=_zoneFullyExcluded(z);
+    const rangeText=z.ids.length===1?z.ids[0]:`${z.ids[0]}~${z.ids[z.ids.length-1]} (${z.ids.length}개)`;
+    const hidden=(q&&!z.name.toLowerCase().includes(q))?'hidden':'';
+    return`<button class="zone-btn ${sel?'selected':''} ${hidden}" onclick="toggleExcludeZone(${i})" title="${sel?'클릭하면 제외 해제':'클릭하면 이 영역 전체를 현재 사유로 제외'}">
+      <span class="zone-name">${escHtml(z.name)}</span>
+      <span class="zone-range">${rangeText}</span>
+    </button>`;
+  }).join('');
+  const noRes=document.getElementById('excludeZoneNoResult');
+  const allHidden=!gridEl.querySelector('.zone-btn:not(.hidden)');
+  if(noRes) noRes.style.display=allHidden?'block':'none';
+  updateExcludeZoneCount();
+}
+function toggleExcludeZone(i){
+  const z=sheetZones[i]; if(!z||!z.ids.length) return;
+  if(_zoneFullyExcluded(z)){
+    z.ids.forEach(id=>{ delete excludeReasons[id]; });
+  }else{
+    const sel=document.getElementById('excludeReasonSel');
+    const reason=sel?sel.value:'';
+    if(!reason) return;
+    z.ids.forEach(id=>{ excludeReasons[id]=reason; });
+  }
+  lsSet(LS_EXCLUDE,excludeReasons);
+  renderExcludeZoneGrid();
+  renderExcludeTags();
+}
+function filterExcludeZones(){ renderExcludeZoneGrid(); }
+function updateExcludeZoneCount(){
+  const el=document.getElementById('excludeZoneSelectCount'); if(!el) return;
+  const cnt=sheetZones.filter(_zoneFullyExcluded).length;
+  el.textContent=cnt===0?'제외된 영역 없음':`${cnt}개 영역 제외 중`;
+}
+function addDustExtraId(){ _addExtraId(dustExtraIds,LS_DUST_EXTRA,'dustExtraIdInput',renderDustExtraTags); }
+function removeDustExtraId(id){ dustExtraIds=dustExtraIds.filter(v=>v!==id); lsSet(LS_DUST_EXTRA,dustExtraIds); renderDustExtraTags(); }
+function renderDustExtraTags(){ _renderExtraTags(dustExtraIds,'dustExtraTagsRow','removeDustExtraId'); }
+
+/* ===== ID 유틸 ===== */
+function parseId(id){
+  const m=id.trim().toUpperCase().match(/^([A-Z]*)(\d+)$/);
+  if(!m)return null;
+  return{prefix:m[1],num:parseInt(m[2],10),padLen:m[2].length};
+}
+function formatId(prefix,num,padLen){return prefix+String(num).padStart(padLen,'0');}
+
+/* ===== 시간/분류 ===== */
+function parseFormatTime(str){
+  if(!str)return null;
+  const d=new Date(str.replace(/\./g,'-').replace(' ','T'));
+  return isNaN(d.getTime())?null:d;
+}
+function classify(item,nowMs,id){
+  if(!item)return'NO';
+  const d=parseFormatTime(item.format_created_time);
+  if(!d)return'NO';
+  // 전 제품 통신 주기가 10분으로 변경돼 최근 30분 이내 통신 기록이 없으면 NO로 판정 (G004/G005 포함, 예외 없음)
+  if((nowMs-d.getTime())/60000>=30)return'NO';
+  // G004/G005는 통신(전원) 확인용 제품 — 30분 이내 통신만 확인되면 판독값(pm/co2)과 무관하게 OK
+  if(id==='G004'||id==='G005')return'OK';
+  const{pm_2_5,pm_10,co2}=item;
+  if(pm_2_5===0&&pm_10===0&&co2===0)return'EM';
+  if(pm_2_5===0&&pm_10===0&&co2!==0)return'PM';
+  return'OK';
+}
+
+/* ===== API ===== */
+async function fetchReport(controllerId,dateRange,token){
+  const p=new URLSearchParams({controller_id:controllerId,started_at:dateRange.started_at,finished_at:dateRange.finished_at,per_page:'100'});
+  const res=await fetch(`${API}?${p}`,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}});
+  if(!res.ok){const body=await res.text().catch(()=>'');throw new Error(`HTTP ${res.status}: ${body.slice(0,80)}`);}
+  const json=await res.json();
+  const data=json.data;
+  if(!Array.isArray(data)||data.length===0)return null;
+  return data[0];
+}
+
+// 페이지 하나를 조회한다 — 순간적인 네트워크/인증서 오류(ERR_CERT_VERIFIER_CHANGED 등, 동시 연결이
+// 많을 때 브라우저 쪽에서 종종 발생함)는 짧게 대기 후 재시도해서, 페이지 하나의 일시적 오류가
+// 전체 조회 실패로 번지지 않게 한다
+async function fetchReportsPage(url,hdrs,retries=2){
+  for(let attempt=0;attempt<=retries;attempt++){
+    try{
+      const r=await fetch(url,{headers:hdrs});
+      if(!r.ok) return null;
+      return await r.json();
+    }catch(e){
+      if(attempt===retries) throw e;
+      await new Promise(res=>setTimeout(res,400*(attempt+1)));
+    }
+  }
+}
+// 동시에 열리는 연결 수를 제한해서 페이지를 모아온다 — 한 제품의 기간이 길면 페이지가 수십~수백
+// 개가 되는데, 이걸 전부 한 번에 Promise.all로 쏘면 같은 호스트로 동시 연결이 폭증해서
+// ERR_CERT_VERIFIER_CHANGED 같은 브라우저 네트워크 오류가 나기 쉬워진다(제품별로도 동시에 조회되니
+// 더 심해짐). 최대 CONCURRENCY개씩만 동시에 요청하도록 제한한다.
+const FETCH_PAGE_CONCURRENCY=6;
+async function fetchAllReports(controllerId,dateRange,token,onProgress){
+  const PER=100;
+  const hdrs={Authorization:`Bearer ${token}`,Accept:'application/json'};
+  const base={controller_id:controllerId,started_at:dateRange.started_at,finished_at:dateRange.finished_at,per_page:String(PER)};
+
+  const j1=await fetchReportsPage(`${API}?${new URLSearchParams({...base,page:'1'})}`,hdrs);
+  if(!j1) throw new Error('먼지 포집 데이터 조회 실패 (1페이지)');
+  const all=Array.isArray(j1.data)?[...j1.data]:[];
+  const lastPage=j1.meta?.last_page??j1.last_page??1;
+  if(onProgress) onProgress(1,lastPage);
+
+  if(lastPage>1){
+    const pages=Array.from({length:lastPage-1},(_,i)=>i+2);
+    const results=new Array(pages.length);
+    let next=0;
+    async function worker(){
+      while(next<pages.length){
+        const idx=next++;
+        const pg=pages[idx];
+        let j=null;
+        try{ j=await fetchReportsPage(`${API}?${new URLSearchParams({...base,page:String(pg)})}`,hdrs); }
+        catch{ j=null; } // 재시도까지 실패하면 그 페이지만 빈 값 처리(전체 실패로 번지지 않도록)
+        results[idx]=Array.isArray(j?.data)?j.data:[];
+        if(onProgress) onProgress(pg,lastPage);
+      }
+    }
+    await Promise.all(Array.from({length:Math.min(FETCH_PAGE_CONCURRENCY,pages.length)},worker));
+    results.forEach(d=>all.push(...d));
+  }
+  return all;
+}
+
+/* ===== 로그 ===== */
+function addLog(msg,type='muted'){
+  logs.push({t:new Date().toLocaleTimeString('ko-KR'),msg,type});
+  if(logVisible)renderLog();
+}
+function renderLog(){
+  const box=document.getElementById('debugBox');
+  box.innerHTML=logs.map(l=>`<div class="log-${l.type}">[${l.t}] ${escHtml(l.msg)}</div>`).join('');
+  box.scrollTop=box.scrollHeight;
+}
+function toggleLog(){
+  logVisible=!logVisible;
+  document.getElementById('debugBox').style.display=logVisible?'block':'none';
+  document.getElementById('logBtn').textContent=logVisible?'로그 닫기':'로그 보기';
+  if(logVisible)renderLog();
+}
+
+/* ===== 로딩 ===== */
+// 참고용 총 소요 시간 문자열(예: "3.2초") — 정확한 계측이 아닌 대략적인 표시용. 완료 후 요약 영역/로그에 사용.
+function elapsedText(){
+  if(!collectStartMs) return '';
+  return `${((Date.now()-collectStartMs)/1000).toFixed(1)}초`;
+}
+// 남은 시간 추정 문자열(예: "약 8초 남음") — 지금까지 처리 속도(done/경과시간)로 남은 개수를 단순 외삽.
+// 정확한 계측이 아닌 대략적인 안내용이며, 초반(done이 작을 때)엔 편차가 클 수 있음.
+function remainingText(done,total){
+  if(!collectStartMs||!total||done<=0) return '';
+  const avgMs=(Date.now()-collectStartMs)/done;
+  const remainSec=Math.round(avgMs*(total-done)/1000);
+  return remainSec>0?`약 ${remainSec}초 남음`:'';
+}
+function setLoading(on,done=0,total=0){
+  document.getElementById('loadingOverlay').classList.toggle('active',on);
+  if(on){
+    if(done===0) collectStartMs=Date.now();
+    document.getElementById('loadingBar').style.width=(total>0?Math.round(done/total*100):0)+'%';
+    const base=total>0?`데이터 수집 중… ${done} / ${total}`:'데이터 수집 중…';
+    const rt=remainingText(done,total);
+    document.getElementById('loadingText').textContent=rt?`${base}  (${rt})`:base;
+  }
+}
+
+/* ===== Summary ===== */
+function renderSummary(){
+  const counts={};
+  results.forEach(r=>{counts[r.status]=(counts[r.status]||0)+1;});
+  const chipsHtml=['ALL','OK','NO','EM','PM','ERR'].map(s=>{
+    const isAll=s==='ALL', cfg=isAll?null:STATUS[s];
+    const cnt=isAll?results.length:(counts[s]||0);
+    const active=currentFilter===s;
+    let bg,bd,tx;
+    if(active){
+      bg=isAll?'var(--input-bg)':`var(${cfg.chipBgVar})`;
+      bd=isAll?'var(--text3)':`var(${cfg.chipBdVar})`;
+      tx=isAll?'var(--text2)':`var(${cfg.chipTxVar})`;
+    }else{bg='transparent';bd='var(--chip-def-border)';tx='var(--chip-def-text)';}
+    return`<button class="chip" onclick="setFilter('${s}')" style="border-color:${bd};background:${bg}">
+      <span class="chip-label" style="color:${tx}">${isAll?'전체':cfg.label}</span>
+      <span class="chip-count" style="color:${active?tx:'var(--chip-def-count)'};">${cnt}</span>
+    </button>`;
+  }).join('');
+  const viewHtml=`<div class="summary-right">
+    <div id="summaryDonut" class="summary-donut"></div>
+    <div class="view-tabs">
+      <button class="view-tab ${currentView==='grid'?'active':''}" onclick="switchView('grid')">그리드</button>
+      <button class="view-tab ${currentView==='list'?'active':''}" onclick="switchView('list')">리스트</button>
+    </div>
+  </div>`;
+  const elapsedHtml=lastRunElapsedText?`<div class="summary-elapsed">완료 · ${lastRunElapsedText} 소요</div>`:'';
+  document.getElementById('summary').innerHTML=chipsHtml+viewHtml+elapsedHtml;
+  renderSummaryDonut(counts);
+}
+
+/* ===== Grid / List ===== */
+function cardHtml(r){
+  const cfg=STATUS[r.status]||STATUS.LOAD;
+  const loc=productLocations[r.id]||'';
+  const tip=r.errMsg?escHtml(r.errMsg):r.item
+    ?`PM10: ${r.item.pm_10}㎍/㎥<br>PM2.5: ${r.item.pm_2_5}㎍/㎥<br>CO₂: ${r.item.co2}ppm<br><span class="tooltip-time">수집: ${escHtml(r.item.format_created_time)}</span>`
+    :'<span style="display:block;text-align:center">데이터 없음</span>';
+  const exReason=excludeReasons[r.id]||'';
+  return`<div class="card ${cfg.cls}" data-id="${escHtml(r.id)}" onclick="openCardDetailModal('${escHtml(r.id)}')">
+    <div class="card-status" style="color:var(${cfg.textVar})">${cfg.icon?`<span class="material-icons-round card-icon">${cfg.icon}</span>`:''}${cfg.label}</div>
+    <div class="card-id">${escHtml(r.id)}</div>
+    ${exReason?`<div class="exclude-reason-badge">${escHtml(exReason)}</div>`:''}
+    ${loc?`<div class="card-location">${escHtml(loc)}</div>`:''}
+    ${r.item?`<div class="card-meta">${r.item.pm_10}㎍/㎥ | ${r.item.pm_2_5}㎍/㎥ | ${r.item.co2}ppm</div>`:''}
+    ${r.status==='ERR'&&r.errMsg?`<div class="card-err-text">${escHtml(r.errMsg.slice(0,50))}</div>`:''}
+    <div class="tooltip">${tip}</div>
+  </div>`;
+}
+function renderGrid(){
+  const filtered=currentFilter==='ALL'?results:results.filter(r=>r.status===currentFilter);
+  const gridEl=document.getElementById('grid');
+  if(!filtered.length){
+    const msg=currentFilter==='ALL'?'검색 결과가 없습니다':'해당 상태의 결과가 없습니다';
+    gridEl.style.display=''; gridEl.style.flexDirection=''; gridEl.style.gap='';
+    gridEl.innerHTML=`<div class="empty-inline"><span class="material-icons-round empty-inline-icon">search_off</span><span>${msg}</span></div>`;
+    return;
+  }
+  if(resultZoneGroups){
+    // 영역 점검 결과 — 먼지 포집처럼 영역별로 묶어서 표시.
+    // 인라인 style로 직접 지정 — style.css가 (배포 캐시 등으로) 최신이 아니어도 레이아웃이 깨지지 않도록 함
+    gridEl.style.display='flex'; gridEl.style.flexDirection='column'; gridEl.style.gap='0';
+    const byId=new Map(filtered.map(r=>[r.id,r]));
+    let html='';
+    resultZoneGroups.forEach((ids,zoneName)=>{
+      const zoneResults=ids.map(id=>byId.get(id)).filter(Boolean);
+      if(!zoneResults.length) return;
+      html+=`<div class="zone-result-group">
+        <div class="zone-result-header">${escHtml(zoneName)}<span class="zone-result-count">${zoneResults.length}개</span></div>
+        <div class="zone-result-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">${zoneResults.map(cardHtml).join('')}</div>
+      </div>`;
+    });
+    gridEl.innerHTML=html;
+    return;
+  }
+  gridEl.style.display=''; gridEl.style.flexDirection=''; gridEl.style.gap='';
+  gridEl.innerHTML=filtered.map(cardHtml).join('');
+}
+
+/* ===== 제품 편집 (시트 연동) ===== */
+function toggleProductEditor(){
+  productLocEditorOpen=!productLocEditorOpen;
+  const sec=document.getElementById('productEditorSection');
+  sec.style.display=productLocEditorOpen?'block':'none';
+  if(productLocEditorOpen) refreshProductEditorDropdowns(), renderProductEditor();
+}
+
+function refreshProductEditorDropdowns(){
+  const zones=[...new Set(sheetZones.map(z=>z.name))];
+  const filterSel=document.getElementById('peZoneFilter');
+  const newZoneSel=document.getElementById('peNewZone');
+  const curFilter=filterSel.value;
+  filterSel.innerHTML='<option value="">전체 영역</option>'+zones.map(z=>`<option value="${escHtml(z)}"${z===curFilter?'selected':''}>${escHtml(z)}</option>`).join('');
+  newZoneSel.innerHTML='<option value="">영역 선택</option>'+zones.map(z=>`<option value="${escHtml(z)}">${escHtml(z)}</option>`).join('');
+}
+
+function toggleNewZoneCustom(){
+  const custom=document.getElementById('peNewZoneCustomToggle').checked;
+  document.getElementById('peNewZone').style.display=custom?'none':'block';
+  document.getElementById('peNewZoneCustom').style.display=custom?'block':'none';
+}
+
+function renderProductEditor(){
+  const zoneFilter=document.getElementById('peZoneFilter').value;
+  const q=document.getElementById('peSearch').value.trim().toLowerCase();
+  const allProducts=[];
+  sheetZones.forEach(z=>z.ids.forEach(id=>{
+    allProducts.push({id, zone:z.name, loc:productLocations[id]||''});
+  }));
+  allProducts.sort((a,b)=>a.id.localeCompare(b.id));
+  const filtered=allProducts.filter(p=>{
+    if(zoneFilter && p.zone!==zoneFilter) return false;
+    if(q && !p.id.toLowerCase().includes(q) && !p.zone.toLowerCase().includes(q) && !p.loc.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const el=document.getElementById('peList');
+  if(!filtered.length){
+    el.innerHTML=`<div class="pe-empty">${sheetZones.length?'검색 결과 없음':'시트 데이터 없음 — GAS URL 확인 또는 영역 새로고침'}</div>`;
+    return;
+  }
+  peOriginals={};
+  filtered.forEach(p=>{ peOriginals[p.id]={zone:p.zone, loc:p.loc}; });
+
+  const allZoneNames=[...new Set(sheetZones.map(z=>z.name))];
+  const datalist=`<datalist id="pe-zone-dl">${allZoneNames.map(z=>`<option value="${escHtml(z)}">`).join('')}</datalist>`;
+
+  // 각 존의 첫 제품 ID 기준으로 정렬
+  const groupedZones=[...new Set(filtered.map(p=>p.zone))]
+    .sort((a,b)=>{
+      const fa=filtered.filter(p=>p.zone===a).map(p=>p.id).sort()[0]||'';
+      const fb=filtered.filter(p=>p.zone===b).map(p=>p.id).sort()[0]||'';
+      return fa.localeCompare(fb);
+    });
+
+  const viewCard=p=>`<div class="pe-card" id="pe-row-${escHtml(p.id)}" onclick="toggleCardEdit('${escHtml(p.id)}')">
+    <div class="pe-card-id">${escHtml(p.id)}</div>
+    <div class="pe-card-loc">${escHtml(p.loc)||'—'}</div>
+  </div>`;
+  const editCard=p=>`<div class="pe-card editing" id="pe-row-${escHtml(p.id)}">
+    <div class="pe-card-id">${escHtml(p.id)}</div>
+    <div class="pe-card-edit-form">
+      <input id="pe-ez-${escHtml(p.id)}" value="${escHtml(p.zone)}" list="pe-zone-dl"
+        placeholder="영역" oninput="markChanged(this,'${escHtml(p.id)}')"/>
+      <input id="pe-el-${escHtml(p.id)}" value="${escHtml(p.loc)}" placeholder="설치 장소"
+        oninput="markChanged(this,'${escHtml(p.id)}')"/>
+    </div>
+    <div class="pe-card-actions">
+      <button class="pe-btn del" onclick="deleteProductFromSheet('${escHtml(p.id)}')">삭제</button>
+    </div>
+  </div>`;
+  const cardFn=peEditMode?editCard:viewCard;
+
+  let html=datalist;
+  let compactBuf=[];
+  const flushCompact=()=>{
+    if(!compactBuf.length) return;
+    html+=`<div class="pe-compact-row">${compactBuf.map(({zone,ps})=>`
+      <div class="pe-compact-zone">
+        <div class="pe-zone-header mini">${escHtml(zone)}</div>
+        ${ps.map(cardFn).join('')}
+      </div>`).join('')}</div>`;
+    compactBuf=[];
+  };
+
+  groupedZones.forEach(zone=>{
+    const ps=filtered.filter(p=>p.zone===zone);
+    if(ps.length<=2){
+      compactBuf.push({zone,ps});
+    } else {
+      flushCompact();
+      html+=`<div class="pe-zone-group">
+        <div class="pe-zone-header">${escHtml(zone)}<span class="pe-zone-count">${ps.length}</span></div>
+        <div class="pe-grid">${ps.map(cardFn).join('')}</div>
+      </div>`;
+    }
+  });
+  flushCompact();
+  el.innerHTML=html;
+}
+
+function toggleCardEdit(id){
+  const card=document.getElementById('pe-row-'+id);
+  const orig=peOriginals[id];
+  if(!card||!orig) return;
+  if(card.classList.contains('editing')){
+    cancelCardEdit(id); return;
+  }
+  card.classList.add('editing');
+  card.removeAttribute('onclick');
+  card.innerHTML=`
+    <div class="pe-card-id">${escHtml(id)}</div>
+    <div class="pe-card-edit-form">
+      <input id="pe-ez-${escHtml(id)}" value="${escHtml(orig.zone)}" list="pe-zone-dl" placeholder="영역"/>
+      <input id="pe-el-${escHtml(id)}" value="${escHtml(orig.loc)}" placeholder="설치 장소"/>
+    </div>
+    <div class="pe-card-actions">
+      <button class="pe-btn save" onclick="event.stopPropagation();saveCardEdit('${escHtml(id)}')">저장</button>
+      <button class="pe-btn" onclick="event.stopPropagation();cancelCardEdit('${escHtml(id)}')">취소</button>
+      <button class="pe-btn del" onclick="event.stopPropagation();deleteProductFromSheet('${escHtml(id)}')">삭제</button>
+    </div>`;
+  document.getElementById('pe-el-'+id)?.focus();
+}
+
+function cancelCardEdit(id){
+  const orig=peOriginals[id];
+  const card=document.getElementById('pe-row-'+id);
+  if(!card||!orig) return;
+  card.classList.remove('editing');
+  card.innerHTML=`
+    <div class="pe-card-id">${escHtml(id)}</div>
+    <div class="pe-card-loc">${escHtml(orig.loc)||'—'}</div>`;
+  card.setAttribute('onclick',`toggleCardEdit('${escHtml(id)}')`);
+}
+
+async function saveCardEdit(id){
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  const zEl=document.getElementById('pe-ez-'+id);
+  const lEl=document.getElementById('pe-el-'+id);
+  const zone=zEl?.value.trim(), loc=lEl?.value.trim()||'';
+  if(!zone){ alert('영역을 입력해주세요.'); return; }
+  const card=document.getElementById('pe-row-'+id);
+  const saveBtn=card?.querySelector('.pe-btn.save');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='저장 중…'; }
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'updateProduct',id,zone,location:loc})});
+    const json=await res.json();
+    if(json.success){
+      sheetZones.forEach(z=>{ z.ids=z.ids.filter(i=>i!==id); });
+      sheetZones=sheetZones.filter(z=>z.ids.length>0);
+      let zoneObj=sheetZones.find(z=>z.name===zone);
+      if(!zoneObj){ zoneObj={name:zone,ids:[]}; sheetZones.push(zoneObj); }
+      if(!zoneObj.ids.includes(id)) zoneObj.ids.push(id);
+      if(loc) productLocations[id]=loc; else delete productLocations[id];
+      updateSheetCache();
+      refreshProductEditorDropdowns();
+      addLog(`[${id}] 저장 완료`,'ok');
+      renderProductEditor();
+    } else {
+      alert('저장 실패: '+(json.error||'오류'));
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='저장'; }
+    }
+  }catch(e){
+    alert('오류: '+e.message);
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='저장'; }
+  }
+}
+
+function markChanged(input, id){
+  const orig=peOriginals[id];
+  if(!orig) return;
+  const zEl=document.getElementById('pe-ez-'+id);
+  const lEl=document.getElementById('pe-el-'+id);
+  if(zEl) zEl.classList.toggle('changed', zEl.value.trim()!==orig.zone);
+  if(lEl) lEl.classList.toggle('changed', lEl.value.trim()!==orig.loc);
+  const changedCount=Object.keys(peOriginals).filter(i=>{
+    const z=document.getElementById('pe-ez-'+i), l=document.getElementById('pe-el-'+i);
+    return (z&&z.value.trim()!==peOriginals[i].zone)||(l&&l.value.trim()!==peOriginals[i].loc);
+  }).length;
+  const statusEl=document.getElementById('peBulkStatus');
+  if(statusEl) statusEl.textContent=changedCount>0?`${changedCount}개 변경됨 — 일괄 저장으로 반영`:'편집 모드 — 수정 후 일괄 저장';
+}
+
+function toggleEditMode(){
+  peEditMode=!peEditMode;
+  document.getElementById('peEditModeBtn').innerHTML=peEditMode?'<span class="material-icons-round ico">visibility</span>보기 모드':'<span class="material-icons-round ico">edit</span>전체 편집';
+  document.getElementById('peBulkBar').style.display=peEditMode?'flex':'none';
+  renderProductEditor();
+}
+
+function exitEditMode(){
+  peEditMode=false;
+  document.getElementById('peEditModeBtn').innerHTML='<span class="material-icons-round ico">edit</span>전체 편집';
+  document.getElementById('peBulkBar').style.display='none';
+  renderProductEditor();
+}
+
+async function bulkSaveProducts(){
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  const changed=[];
+  Object.keys(peOriginals).forEach(id=>{
+    const zEl=document.getElementById('pe-ez-'+id);
+    const lEl=document.getElementById('pe-el-'+id);
+    if(!zEl) return;
+    const zone=zEl.value.trim(), loc=lEl?lEl.value.trim():'';
+    if(zone!==peOriginals[id].zone || loc!==peOriginals[id].loc){
+      if(!zone){ return; }
+      changed.push({id, zone, location:loc});
+    }
+  });
+  if(!changed.length){ alert('변경된 항목이 없습니다.'); return; }
+  const saveBtn=document.querySelector('#peBulkBar .pe-btn.save');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='저장 중…'; }
+  try{
+    const results=await Promise.all(changed.map(item=>
+      fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+        body:JSON.stringify({action:'updateProduct',...item})})
+        .then(r=>r.json())
+    ));
+    const ok=results.filter(r=>r.success).length;
+    const fail=results.filter(r=>!r.success);
+    changed.forEach(({id,zone,location})=>{
+      const res=results[changed.findIndex(c=>c.id===id)];
+      if(!res||!res.success) return;
+      sheetZones.forEach(z=>{ z.ids=z.ids.filter(i=>i!==id); });
+      sheetZones=sheetZones.filter(z=>z.ids.length>0);
+      let zoneObj=sheetZones.find(z=>z.name===zone);
+      if(!zoneObj){ zoneObj={name:zone,ids:[]}; sheetZones.push(zoneObj); }
+      if(!zoneObj.ids.includes(id)) zoneObj.ids.push(id);
+      if(location) productLocations[id]=location; else delete productLocations[id];
+    });
+    updateSheetCache();
+    refreshProductEditorDropdowns();
+    addLog(`일괄 저장 완료: ${ok}개 성공${fail.length?` / ${fail.length}개 실패`:''}`, 'ok');
+    alert(`일괄 저장 완료\n\n${ok}개 저장됨${fail.length?`\n실패 ${fail.length}개: ${fail.map((_,i)=>changed[i]?.id).join(', ')}`:``}`);
+    exitEditMode();
+  }catch(e){
+    alert('저장 중 오류: '+e.message);
+  }
+  if(saveBtn){ saveBtn.disabled=false; saveBtn.innerHTML='<span class="material-icons-round ico">save</span>일괄 저장'; }
+}
+
+async function deleteProductFromSheet(id){
+  if(!confirm(`[${id}] 제품을 시트에서 삭제하시겠습니까?`)) return;
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  const row=document.getElementById('pe-row-'+id);
+  if(row) row.style.opacity='0.4';
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'deleteProduct',id})});
+    const json=await res.json();
+    if(json.success){
+      sheetZones.forEach(z=>{ z.ids=z.ids.filter(i=>i!==id); });
+      sheetZones=sheetZones.filter(z=>z.ids.length>0);
+      delete productLocations[id];
+      updateSheetCache();
+      refreshProductEditorDropdowns();
+      renderProductEditor();
+      addLog(`[${id}] 삭제 완료`,'ok');
+      alert(`[${id}] 삭제 완료`);
+    } else {
+      alert('삭제 실패: '+(json.error||'오류'));
+      if(row) row.style.opacity='1';
+    }
+  }catch(e){ alert('오류: '+e.message); if(row) row.style.opacity='1'; }
+}
+
+async function addProductToSheet(){
+  const id=document.getElementById('peNewId').value.trim().toUpperCase();
+  const custom=document.getElementById('peNewZoneCustomToggle').checked;
+  const zone=custom
+    ? document.getElementById('peNewZoneCustom').value.trim()
+    : document.getElementById('peNewZone').value.trim();
+  const loc=document.getElementById('peNewLoc').value.trim();
+  if(!id||id.length<2){ alert('제품 ID를 입력해주세요.'); return; }
+  if(!zone){ alert('영역을 선택하거나 입력해주세요.'); return; }
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  const btn=document.querySelector('.pe-add-form .btn-add');
+  btn.disabled=true; btn.textContent='추가 중…';
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'addProduct',id,zone,location:loc})});
+    const json=await res.json();
+    if(json.success){
+      let zoneObj=sheetZones.find(z=>z.name===zone);
+      if(!zoneObj){ zoneObj={name:zone,ids:[]}; sheetZones.push(zoneObj); }
+      if(!zoneObj.ids.includes(id)) zoneObj.ids.push(id);
+      if(loc) productLocations[id]=loc;
+      updateSheetCache();
+      document.getElementById('peNewId').value='';
+      document.getElementById('peNewLoc').value='';
+      refreshProductEditorDropdowns();
+      renderProductEditor();
+      addLog(`[${id}] 추가 완료 (${zone})`,'ok');
+      alert(`[${id}] 추가 완료\n영역: ${zone}${loc?'\n설치 장소: '+loc:''}`);
+    } else {
+      alert('추가 실패: '+(json.error||'오류'));
+    }
+  }catch(e){ alert('오류: '+e.message); }
+  btn.disabled=false; btn.textContent='+ 추가';
+}
+
+function updateSheetCache(){
+  lsSet(LS_SHEET_CACHE,{ts:Date.now(),zones:sheetZones,locations:productLocations,monthSheets:historyMonths});
+}
+
+function updateGridCard(r){
+  const cfg=STATUS[r.status]||STATUS.LOAD;
+  const loc=productLocations[r.id]||'';
+  const tip=r.errMsg?escHtml(r.errMsg):r.item
+    ?`PM10: ${r.item.pm_10}㎍/㎥<br>PM2.5: ${r.item.pm_2_5}㎍/㎥<br>CO₂: ${r.item.co2}ppm<br><span class="tooltip-time">수집: ${escHtml(r.item.format_created_time)}</span>`
+    :'<span style="display:block;text-align:center">데이터 없음</span>';
+  const el=document.querySelector(`#grid .card[data-id="${CSS.escape(r.id)}"]`);
+  if(!el) return;
+  const exReason=excludeReasons[r.id]||'';
+  el.className=`card ${cfg.cls} card-updated`;
+  el.innerHTML=`
+    <div class="card-status" style="color:var(${cfg.textVar})">${cfg.icon?`<span class="material-icons-round card-icon">${cfg.icon}</span>`:''}${cfg.label}</div>
+    <div class="card-id">${escHtml(r.id)}</div>
+    ${exReason?`<div class="exclude-reason-badge">${escHtml(exReason)}</div>`:''}
+    ${loc?`<div class="card-location">${escHtml(loc)}</div>`:''}
+    ${r.item?`<div class="card-meta">${r.item.pm_10}㎍/㎥ | ${r.item.pm_2_5}㎍/㎥ | ${r.item.co2}ppm</div>`:''}
+    ${r.status==='ERR'&&r.errMsg?`<div class="card-err-text">${escHtml(r.errMsg.slice(0,50))}</div>`:''}
+    <div class="tooltip">${tip}</div>`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.remove('card-updated')));
+}
+
+function getZoneAndLoc(id){
+  const zone=(sheetZones.find(z=>z.ids.includes(id))||{}).name||'';
+  const loc=productLocations[id]||'';
+  return [zone,loc].filter(Boolean).join(' · ')||'—';
+}
+function filterByListSel(sel){
+  if(sel==='ALL') return results;
+  if(sel==='EM_PM') return results.filter(r=>r.status==='EM'||r.status==='PM');
+  return results.filter(r=>r.status===sel);
+}
+function renderList(){
+  const sel=document.getElementById('listFilterSel').value;
+  const filtered=filterByListSel(sel);
+  document.getElementById('listBody').innerHTML=filtered.map(r=>{
+    const cfg=STATUS[r.status]||STATUS.LOAD;
+    const loc=getZoneAndLoc(r.id);
+    const time=r.item?r.item.format_created_time:(r.errMsg?r.errMsg.slice(0,60):'—');
+    return`<div class="list-row" onclick="openCardDetailModal('${escHtml(r.id)}')">
+      <div class="list-id-cell">${escHtml(r.id)}</div>
+      <div class="list-loc-cell">${escHtml(loc)}</div>
+      <div class="list-status-cell" style="color:var(${cfg.textVar})">${cfg.icon?`<span class="material-icons-round" style="font-size:13px;vertical-align:-2px;margin-right:2px">${cfg.icon}</span>`:''}${cfg.label}</div>
+      <div class="list-time-cell">${escHtml(time||'—')}</div>
+    </div>`;
+  }).join('');
+}
+function copyListToClipboard(){
+  const sel=document.getElementById('listFilterSel').value;
+  const filtered=filterByListSel(sel);
+  navigator.clipboard.writeText(filtered.map(r=>`${r.id}\t${getZoneAndLoc(r.id)}\t${r.status}`).join('\n')).then(()=>{
+    const msg=document.getElementById('copyMsg');
+    msg.style.display='inline';
+    setTimeout(()=>{msg.style.display='none';},2000);
+  });
+}
+function switchView(v){
+  currentView=v;
+  document.getElementById('grid').style.display       =v==='grid'?'grid':'none';
+  document.getElementById('listView').style.display   =v==='list'?'block':'none';
+  document.getElementById('listToolbar').style.display=v==='list'?'flex':'none';
+  renderSummary(); if(v==='list')renderList();
+}
+function setFilter(f){currentFilter=f;renderSummary();renderGrid();}
+
+/* ===== 단일 검색 결과 렌더 ===== */
+function fmtTime(str){
+  if(!str) return '—';
+  const m=str.match(/\d{4}[.\-](\d{2})[.\-](\d{2})\s+(\d{2}:\d{2}|\d{2}시)/);
+  return m?`${m[1]}.${m[2]} ${m[3]}`:str.slice(5,16);
+}
+
+/* 가동시간(HH:MM:SS) <-> 초 변환 — 단일점검/카드상세 가동 차트에서 공용으로 사용 */
+function hmsToSec(str){
+  if(str==null) return null;
+  const p=String(str).trim().split(':');
+  if(p.length!==3) return null;
+  const [h,m,s]=p.map(Number);
+  return (isNaN(h)||isNaN(m)||isNaN(s))?null:h*3600+m*60+s;
+}
+function secToHms(s){
+  if(s==null||isNaN(s)) return '—';
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  const parts=[];
+  if(h>0) parts.push(`${h}시간`);
+  if(m>0) parts.push(`${m}분`);
+  if(sec>0||parts.length===0) parts.push(`${sec}초`);
+  return parts.join(' ');
+}
+// motorRunningCount는 기기가 4자리(0~9999)까지만 보내고 10000이 되면 앞자리가 잘려 다시
+// 작은 값부터 표기되는 랩어라운드 필드다 (예: 9846 다음에 12가 오면 실제로는 10012 — 12가
+// 아니라 10000+12임). 그래서 "마지막값-첫값"이나 "리셋 구간을 그냥 버리는" 방식은 실제보다
+// 총량이 훨씬 작게 나온다. 연속된 두 값의 diff가 음수면 랩어라운드로 보고 10000을 더해
+// 보정한 뒤 누적한다 (10분~20분 간격 수집 대비 리셋은 며칠에 한 번꼴이라 두 리포트 사이에
+// 두 번 이상 랩어라운드가 겹칠 가능성은 사실상 없음).
+// motorRunningTime(가동 시간, HH:MM:SS)은 랩어라운드 증거가 없어 기존처럼 음수 구간만 건너뛴다.
+// itemsAsc: 오름차순(과거→최신) 원본 데이터
+const MOTOR_COUNT_MODULUS=10000;
+function calcMotorTotal(itemsAsc){
+  let totalCount=0, totalTimeSec=0, hasCount=false, hasTime=false;
+  for(let i=1;i<itemsAsc.length;i++){
+    const curCount=itemsAsc[i].report_data?.motorRunningCount;
+    const prvCount=itemsAsc[i-1].report_data?.motorRunningCount;
+    if(curCount!=null&&prvCount!=null){
+      hasCount=true;
+      let diff=Number(curCount)-Number(prvCount);
+      if(diff<0) diff+=MOTOR_COUNT_MODULUS; // 랩어라운드 보정
+      totalCount+=diff;
+    }
+    const curSec=hmsToSec(itemsAsc[i].report_data?.motorRunningTime);
+    const prvSec=hmsToSec(itemsAsc[i-1].report_data?.motorRunningTime);
+    if(curSec!=null&&prvSec!=null){
+      hasTime=true;
+      const diff=curSec-prvSec;
+      if(diff>0) totalTimeSec+=diff;
+    }
+  }
+  return{totalCount:hasCount?totalCount:null, totalTimeSec:hasTime?totalTimeSec:null};
+}
+/* 차트 좌/우 Y축 단위 라벨 — 차트 상단 모서리에 수평 표시 */
+function yLabelPlugin(lText,lColor,rText,rColor){
+  return {
+    id:'yLabels',
+    afterDraw(chart){
+      const{ctx,chartArea:{top,left,right}}=chart;
+      ctx.save();
+      ctx.font='bold 12px system-ui,sans-serif';
+      ctx.textBaseline='bottom';
+      ctx.fillStyle=lColor; ctx.textAlign='left';
+      ctx.fillText(lText,left+6,top-6);
+      ctx.fillStyle=rColor; ctx.textAlign='right';
+      ctx.fillText(rText,right-6,top-6);
+      ctx.restore();
+    }
+  };
+}
+
+/* ===== 먼지 포집 데이터 렌더 ===== */
+// 스파이크 감지 배수: 직전값 대비 이 배수 이상 증가 후 다음값이 내려오면 오류로 판정
+const DUST_SPIKE_RATIO = 5;
+
+function isSpike(prev, cur, next){
+  if(prev==null||next==null) return false;
+  // 직전값 대비 SPIKE_RATIO배 이상 튀어오르고, 다음값이 cur보다 낮게 내려오면 스파이크
+  return (cur - prev) > Math.max(prev * (DUST_SPIKE_RATIO - 1), 10000) && next < cur;
+}
+
+// 0 구간 이후 회복 감지 배수: 0이 하나 이상 이어지다가 그 다음 값이 마지막 유효값의 이 비율
+// 이상으로 돌아오면 실제 리셋이 아니라 기기 통신 오류(0/0 연속 오전송)로 판정
+const DUST_ZERO_GLITCH_RECOVERY_RATIO = 0.5;
+
+// 진짜 리셋(기기 청소 등으로 카운터가 실제로 초기화돼 이후 소량부터 다시 누적)과
+// 0/0 통신 오류(카운터는 그대로인데 한 건이든 수십~수백 건이든 0으로 잘못 전송되다가 원래 수준
+// 근처로 복귀)를 구분해서, 오류 구간 전체(연속된 0들)를 시퀀스에서 통째로 제외한다.
+// 단일 레코드만 보고 판단하면 0이 여러 건 연달아 찍힌 경우(기기 이슈가 며칠 지속된 경우 등) 놓치므로,
+// "마지막 유효값 → 0 구간 → 그 구간 다음 첫 유효값"을 통째로 비교해서 판단한다.
+// 그대로 두면 다음 정상값과의 diff가 "0 -> 회복값"이 되어, 이미 쌓여있던 누적값이 그 순간 증가분인 것처럼
+// 한 번 더 더해지는 문제가 생김(예: 3524g -> 0/0(오류, N건) -> 3773g 이면 diff가 +3773이 되어버림).
+function stripZeroGlitchRuns(points){
+  const result=[];
+  let lastGood=null; // 마지막으로 확인된 0 초과 값
+  let i=0;
+  while(i<points.length){
+    const p=points[i];
+    if(p.grams!==0){
+      result.push(p);
+      lastGood=p.grams;
+      i++;
+      continue;
+    }
+    let j=i;
+    while(j<points.length&&points[j].grams===0) j++;
+    const nextGood=j<points.length?points[j].grams:null;
+    const isGlitch=lastGood!=null&&lastGood>0&&nextGood!=null&&nextGood>=lastGood*DUST_ZERO_GLITCH_RECOVERY_RATIO;
+    if(!isGlitch){
+      for(let k=i;k<j;k++) result.push(points[k]); // 진짜 리셋(또는 판단 불가) — 그대로 유지
+    }
+    i=j; // 오류 구간이면 result에 넣지 않고 통째로 건너뜀
+  }
+  return result;
+}
+
+const DUST_BASELINE_THRESHOLD = 150000; // 최초 입력값이 이 값 초과면 기준점(baseline)으로 정규화
+
+function calcDust(items){
+  const sorted=[...items]
+    .filter(it=>it.report_data?.dustTotal!==undefined&&it.report_data?.dustTotal!==null)
+    .sort((a,b)=>{
+      const ta=new Date((a.report_data.readTime||a.format_created_time||'').replace(' ','T'));
+      const tb=new Date((b.report_data.readTime||b.format_created_time||'').replace(' ','T'));
+      return ta-tb;
+    });
+
+  if(!sorted.length) return{total:0, days:[], scanCount:0};
+
+  // grams 변환
+  const raw=sorted.map(it=>{
+    const rd=it.report_data;
+    const time=rd.readTime||it.format_created_time||'';
+    const grams=(Number(rd.dustTotal)||0)*1000+(Number(rd.dustTotal1)||0);
+    return{time, grams, date:time.slice(0,10)};
+  });
+
+  // 0/0 통신 오류 구간 제외 (스파이크 필터보다 먼저 — 0은 스파이크 판정 대상이 아니므로 별도 처리)
+  const noZeroGlitch=stripZeroGlitchRuns(raw);
+
+  // 스파이크 레코드 제외
+  const noSpike=noZeroGlitch.filter((p,i)=>{
+    const prev=i>0?noZeroGlitch[i-1].grams:null;
+    const next=i<noZeroGlitch.length-1?noZeroGlitch[i+1].grams:null;
+    return !isSpike(prev, p.grams, next);
+  });
+
+  if(!noSpike.length) return{total:0, days:[], scanCount:sorted.length};
+
+  // 최초 입력값이 15만g 초과면 그 값을 기준(0점)으로 정규화
+  // 15만 이하 레코드(리셋 후 소량값 등)는 그대로 유지
+  const baseline = noSpike[0].grams > DUST_BASELINE_THRESHOLD ? noSpike[0].grams : 0;
+  const pts = baseline === 0 ? noSpike : noSpike.map(p=>({
+    ...p,
+    grams: p.grams > DUST_BASELINE_THRESHOLD ? p.grams - baseline : p.grams
+  }));
+
+  // 증가분만 합산 (리셋 시 음수 diff는 무시)
+  let total=0;
+  for(let i=1;i<pts.length;i++){
+    const diff=pts[i].grams-pts[i-1].grams;
+    if(diff>0) total+=diff;
+  }
+
+  // 일별 집계
+  const dayMap=new Map();
+  pts.forEach(p=>{
+    if(!dayMap.has(p.date)) dayMap.set(p.date,[]);
+    dayMap.get(p.date).push(p);
+  });
+  const dayEntries=[...dayMap.entries()].sort((a,b)=>a[0]<b[0]?-1:1);
+  const days=dayEntries.map(([date,ps],idx)=>{
+    let inc=0;
+    for(let i=1;i<ps.length;i++){
+      const diff=ps[i].grams-ps[i-1].grams;
+      if(diff>0) inc+=diff;
+    }
+    let displayFirst=ps[0].grams;
+    if(idx>0){
+      const prevPs=dayEntries[idx-1][1];
+      const prevLast=prevPs[prevPs.length-1].grams;
+      const crossDiff=ps[0].grams-prevLast;
+      if(crossDiff>0){ inc+=crossDiff; displayFirst=prevLast; }
+    }
+    return{date,count:ps.length,first:displayFirst,last:ps[ps.length-1].grams,inc};
+  });
+
+  return{total,days,scanCount:sorted.length};
+}
+
+function renderDustChart(days,isDark,canvasId){
+  if(dustModalChart){dustModalChart.destroy();dustModalChart=null;}
+  const canvas=document.getElementById(canvasId||'dustModalCanvas');
+  if(!canvas||!days.length) return;
+  const grid=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.07)';
+  const tick=isDark?'#8a8380':'#6b6560';
+  dustModalChart=new Chart(canvas,{
+    type:'bar',
+    data:{
+      labels:days.map(d=>d.date.slice(5)),
+      datasets:[{
+        label:'회별 포집량 (g)',
+        data:days.map(d=>d.inc),
+        backgroundColor:isDark?'rgba(95,143,179,0.65)':'rgba(95,143,179,0.55)',
+        borderColor:'#5f8fb3',borderWidth:1,borderRadius:4,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      animation:{
+        duration:600,
+        easing:'easeOutCubic',
+        delay:ctx=>ctx.type==='data'&&ctx.mode==='default'?ctx.dataIndex*40:0
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:isDark?'#1d1a18':'#ffffff',
+          titleColor:isDark?'#eeeeee':'#171514',bodyColor:isDark?'#b8b3b0':'#433f3d',
+          borderColor:isDark?'#3d3a39':'#ddd9d5',borderWidth:1,padding:10,
+          callbacks:{label:ctx=>`${ctx.parsed.y.toLocaleString()}g`}
+        }
+      },
+      scales:{
+        x:{ticks:{color:tick,font:{size:10}},grid:{color:grid}},
+        y:{ticks:{color:tick,font:{size:10},callback:v=>Number.isInteger(v)?v:null},
+           grid:{color:grid},beginAtZero:true,min:0}
+      }
+    }
+  });
+}
+
+/* ===== 먼지 포집 범위 검색 ===== */
+/* ===== 먼지 포집 영역 선택기 ===== */
+let dustZoneGridOpen=false;
+
+function toggleDustZoneGrid(){
+  dustZoneGridOpen=!dustZoneGridOpen;
+  _applyZoneGridUI(dustZoneGridOpen,'dustZoneGridWrap','dustZoneArrow','dustZoneToggleBtn');
+}
+
+function renderDustZoneGrid(){
+  _renderZoneGrid('dustZonePickerGrid','dustZoneNoResult','dustZoneSearchInput',selectedDustZones,'toggleDustZone',dustZoneGridOpen,toggleDustZoneGrid,updateDustZoneInfo,dustZoneLangFilter);
+}
+function setDustZoneLangFilter(lang){
+  dustZoneLangFilter=lang;
+  document.querySelectorAll('#dustZoneLangFilter .zone-lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
+  renderDustZoneGrid();
+}
+function toggleDustZone(i){ _toggleZoneItem(selectedDustZones,i,renderDustZoneGrid); }
+function filterDustZones(){ renderDustZoneGrid(); }
+function selectAllDustZones(){ sheetZones.forEach((_,i)=>selectedDustZones.add(i)); renderDustZoneGrid(); }
+function clearAllDustZones(){ selectedDustZones.clear(); renderDustZoneGrid(); }
+function updateDustZoneInfo(){
+  _updateZoneInfo(selectedDustZones,document.getElementById('dustZoneSelectInfo'),(c,t)=>`${c}개 영역 · ${t}개 제품`);
+}
+
+/* ===== 먼지 포집 localStorage 캐시 =====
+   이제는 일자별 계산 결과를 IndexedDB에 저장한다(아래 fetchDustResult 참고) — 이 함수는
+   예전 버전에서 쓰던 localStorage 잔여 캐시만 정리한다 */
+function cleanOldDustCache(){
+  const today=todayStr();
+  for(let i=localStorage.length-1;i>=0;i--){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('dustCache_')) continue;
+    const dateMatch=k.match(/_(\d{4}-\d{2}-\d{2})$/);
+    if(dateMatch&&dateMatch[1]!==today) localStorage.removeItem(k);
+  }
+}
+
+// ===== 먼지 포집 일자별 결과 캐시 (IndexedDB) =====
+// 원본 리포트가 아니라 "하루 단위로 계산된 결과"(합산 전/합산 후/증가량)만 캐싱한다 — 원본을 통째로
+// 들고 있는 것보다 훨씬 용량이 작아서 제품이 많아도 부담이 없다. 포집이 발생하지 않은 날(증가량 0)은
+// 저장하지 않고, 대신 "어느 날짜까지 이미 확인이 끝났는지"를 제품별로 별도 기록(coverage)해서 —
+// 다음 조회 때 이미 확인된 구간은 API를 전혀 부르지 않고, 아직 확인 안 된 새 구간(gap)만 조회한다.
+// 지나온(끝난) 날짜는 다시 바뀔 일이 없으므로 영구 캐싱해도 되지만, 당일은 계속 누적되는 중이라
+// 절대 캐싱하지 않고 매번 새로 조회한다.
+function openDustDB(){
+  if(!window.indexedDB) return Promise.resolve(null);
+  return new Promise(resolve=>{
+    const req=indexedDB.open('airmaxDustCache',2);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(db.objectStoreNames.contains('monthlyReports')) db.deleteObjectStore('monthlyReports'); // 이전 버전(달 단위 원본 캐시) 정리
+      if(!db.objectStoreNames.contains('days')) db.createObjectStore('days',{keyPath:'key'});
+      if(!db.objectStoreNames.contains('coverage')) db.createObjectStore('coverage',{keyPath:'id'});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>resolve(null);
+  });
+}
+let _dustDBPromise=null;
+function getDustDB(){ if(!_dustDBPromise) _dustDBPromise=openDustDB(); return _dustDBPromise; }
+async function idbGetCoverage(id){
+  try{
+    const db=await getDustDB(); if(!db) return null;
+    return await new Promise(resolve=>{
+      const req=db.transaction('coverage','readonly').objectStore('coverage').get(id);
+      req.onsuccess=()=>resolve(req.result||null);
+      req.onerror=()=>resolve(null);
+    });
+  }catch{ return null; }
+}
+async function idbSetCoverage(id,from,through){
+  try{
+    const db=await getDustDB(); if(!db) return;
+    await new Promise(resolve=>{
+      const tx=db.transaction('coverage','readwrite');
+      tx.objectStore('coverage').put({id,from,through});
+      tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve();
+    });
+  }catch{}
+}
+async function idbPutDustDays(id,dayEntries){
+  if(!dayEntries.length) return;
+  try{
+    const db=await getDustDB(); if(!db) return;
+    await new Promise(resolve=>{
+      const tx=db.transaction('days','readwrite');
+      const store=tx.objectStore('days');
+      dayEntries.forEach(d=>store.put({key:`${id}_${d.date}`,id,date:d.date,count:d.count,first:d.first,last:d.last,inc:d.inc}));
+      tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve();
+    });
+  }catch{}
+}
+async function idbGetDustDaysInRange(id,fromDate,toDate){
+  try{
+    const db=await getDustDB(); if(!db) return [];
+    return await new Promise(resolve=>{
+      const range=IDBKeyRange.bound(`${id}_${fromDate}`,`${id}_${toDate}`);
+      const req=db.transaction('days','readonly').objectStore('days').getAll(range);
+      req.onsuccess=()=>resolve(req.result||[]);
+      req.onerror=()=>resolve([]);
+    });
+  }catch{ return []; }
+}
+// calcDust()에 필요한 필드만 남겨서 임시 조회 용량을 줄인다 (캐시엔 이 raw가 아니라 계산된 day만 저장됨)
+function slimDustItem(it){
+  const rd=it.report_data||{};
+  return{format_created_time:it.format_created_time, report_data:{dustTotal:rd.dustTotal, dustTotal1:rd.dustTotal1, readTime:rd.readTime}};
+}
+function addDaysStr(dateStr,n){
+  const[y,m,d]=dateStr.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  dt.setDate(dt.getDate()+n);
+  return fmtDate(dt);
+}
+// 캐시 경계(gap의 시작/끝)에서 0/0 통신 오류 판정에 필요한 이전 맥락을 며칠치 함께 재조회해서
+// stripZeroGlitchRuns가 올바르게 판단할 수 있게 한다 (재조회 비용은 며칠치라 무시할 만한 수준)
+const DUST_GAP_OVERLAP_DAYS=7;
+// id의 startYm~endYm 구간 먼지 포집 결과를 반환한다. 이미 확인된(캐시된) 날짜는 API를 부르지 않고
+// 캐시에 없는 새 구간(gap)만 조회해서 채워 넣는다. 당일은 절대 캐싱하지 않고 항상 새로 조회한다.
+// 조회 구간 끝이 0/0 오류로 아직 회복되지 않은 채 끝나면(그 시점까지는 진짜 리셋인지 오류인지
+// 판단 불가) 그 부분은 캐싱을 보류하고 다음 조회 때 다시 포함시킨다 — 이번 조회 화면에는 표시는
+// 하되(freshDays), 캐시에는 반영하지 않는 식으로 정확성과 즉시성을 둘 다 챙긴다.
+async function fetchDustResult(id,startYm,endYm,token){
+  const today=todayStr();
+  const curYm=today.slice(0,7);
+  const reqStart=`${startYm}-01`;
+  const[eY,eM]=endYm.split('-').map(Number);
+  const lastDay=new Date(eY,eM,0).getDate();
+  const reqEndFull=endYm===curYm?today:`${endYm}-${String(lastDay).padStart(2,'0')}`;
+  const yesterday=addDaysStr(today,-1);
+  const closedEnd=reqEndFull<yesterday?reqEndFull:yesterday; // 요청 범위 중 "확정된"(당일 제외) 마지막 날짜
+
+  const daysMap=new Map(); // date -> {date,count,first,last,inc}
+  let scanCount=0;
+
+  if(closedEnd>=reqStart){
+    const coverage=await idbGetCoverage(id);
+    const gaps=[];
+    if(!coverage){
+      gaps.push({start:reqStart,end:closedEnd});
+    }else{
+      if(reqStart<coverage.from){
+        const leadEnd=addDaysStr(coverage.from,-1);
+        if(reqStart<=leadEnd) gaps.push({start:reqStart,end:leadEnd});
+      }
+      if(closedEnd>coverage.through){
+        const trailStart=addDaysStr(coverage.through,1);
+        if(trailStart<=closedEnd) gaps.push({start:trailStart,end:closedEnd});
+      }
+    }
+
+    let curCoverage=coverage;
+    for(const gap of gaps){
+      const overlapStart=addDaysStr(gap.start,-DUST_GAP_OVERLAP_DAYS);
+      const fetchStart=overlapStart<reqStart?reqStart:overlapStart;
+      const rawItems=await fetchAllReports(id,{started_at:fetchStart,finished_at:gap.end},token,()=>{});
+      const slim=rawItems.map(slimDustItem);
+      const{days:gapDays}=calcDust(slim);
+
+      // 이번에 조회한 원본의 맨 끝이 0/0 오류 구간 도중(아직 회복 안 됨)인지 확인
+      let unresolvedFromDate=null;
+      const sortedRaw=[...slim].sort((a,b)=>{
+        const ta=new Date((a.report_data.readTime||a.format_created_time||'').replace(' ','T'));
+        const tb=new Date((b.report_data.readTime||b.format_created_time||'').replace(' ','T'));
+        return ta-tb;
+      });
+      if(sortedRaw.length){
+        const lastGrams=(Number(sortedRaw[sortedRaw.length-1].report_data.dustTotal)||0)*1000+(Number(sortedRaw[sortedRaw.length-1].report_data.dustTotal1)||0);
+        if(lastGrams===0){
+          let i=sortedRaw.length-1;
+          while(i>0){
+            const rd=sortedRaw[i-1].report_data;
+            const g=(Number(rd.dustTotal)||0)*1000+(Number(rd.dustTotal1)||0);
+            if(g!==0) break;
+            i--;
+          }
+          const t=sortedRaw[i].report_data.readTime||sortedRaw[i].format_created_time||'';
+          unresolvedFromDate=t.slice(0,10).replace(/\./g,'-');
+        }
+      }
+
+      // 화면 표시용 — 이번 조회분은 캐싱 여부와 무관하게 전부 반영
+      gapDays.forEach(d=>{
+        if(d.date>=gap.start&&d.date<=gap.end&&d.inc>0) daysMap.set(d.date,d);
+      });
+
+      // 캐시 반영용 — "확정된" 날짜만 (미해결 0/0 구간에 걸린 날짜는 제외)
+      const cacheable=gapDays.filter(d=>d.date>=gap.start&&d.date<=gap.end&&d.inc>0&&(!unresolvedFromDate||d.date<unresolvedFromDate));
+      await idbPutDustDays(id,cacheable);
+
+      const safeEnd=unresolvedFromDate?addDaysStr(unresolvedFromDate,-1):gap.end;
+      if(safeEnd>=gap.start){
+        const newFrom=curCoverage?(gap.start<curCoverage.from?gap.start:curCoverage.from):gap.start;
+        const newThrough=curCoverage?(safeEnd>curCoverage.through?safeEnd:curCoverage.through):safeEnd;
+        curCoverage={from:newFrom,through:newThrough};
+      }
+    }
+    if(curCoverage&&curCoverage!==coverage) await idbSetCoverage(id,curCoverage.from,curCoverage.through);
+
+    // 캐시에 남아있는(위에서 새로 채운 gap 포함) 날짜들도 합쳐서 최종 결과 구성
+    const cachedDays=await idbGetDustDaysInRange(id,reqStart,closedEnd);
+    cachedDays.forEach(d=>{ if(!daysMap.has(d.date)) daysMap.set(d.date,d); });
+  }
+
+  // 당일은 절대 캐싱하지 않고 항상 새로 조회 — 어제 값과 이어서 정확한 증가량을 내기 위해 어제치도
+  // 함께 조회하되(캐시엔 손대지 않음), 오늘 항목만 취한다
+  if(reqEndFull>=today){
+    const rawToday=await fetchAllReports(id,{started_at:yesterday,finished_at:today},token,()=>{});
+    const slimToday=rawToday.map(slimDustItem);
+    const{days:todayDays}=calcDust(slimToday);
+    const todayEntry=todayDays.find(d=>d.date===today);
+    if(todayEntry&&todayEntry.inc>0) daysMap.set(today,todayEntry);
+  }
+
+  const days=[...daysMap.values()].sort((a,b)=>a.date<b.date?-1:1);
+  const total=days.reduce((s,d)=>s+d.inc,0);
+  scanCount=days.reduce((s,d)=>s+d.count,0);
+  return{total,days,scanCount};
+}
+// 모바일 일반 유저용 — 캐시/기간 선택 없이 당일 데이터만 가볍게 조회 (어제 값과 이어서 정확한
+// 증가량을 내기 위해 어제치도 함께 조회하되, 캐시에는 손대지 않고 오늘 항목만 취한다)
+async function fetchDustResultTodayOnly(id,token){
+  const today=todayStr();
+  const yesterday=addDaysStr(today,-1);
+  const rawItems=await fetchAllReports(id,{started_at:yesterday,finished_at:today},token,()=>{});
+  const slim=rawItems.map(slimDustItem);
+  const{days:todayDays}=calcDust(slim);
+  const todayEntry=todayDays.find(d=>d.date===today);
+  const days=(todayEntry&&todayEntry.inc>0)?[todayEntry]:[];
+  return{total:days.reduce((s,d)=>s+d.inc,0),days,scanCount:days.reduce((s,d)=>s+d.count,0)};
+}
+function initDustMonthPicker(){
+  const startSel=document.getElementById('dustStartMonth');
+  const endSel=document.getElementById('dustEndMonth');
+  if(!startSel||!endSel) return;
+  const curYm=todayStr().slice(0,7);
+  const minDate=new Date(2025,11,1); // 2025-12
+  const opts=[];
+  const d=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+  while(d>=minDate){
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), ym=`${y}-${m}`;
+    opts.push(`<option value="${ym}">${y}년 ${parseInt(m)}월${ym===curYm?' (이번 달)':''}</option>`);
+    d.setMonth(d.getMonth()-1);
+  }
+  const html=opts.join('');
+  startSel.innerHTML=html;
+  endSel.innerHTML=html;
+  startSel.value='2026-04'; // 수집 시작 기본값
+  endSel.value=curYm;
+}
+function onDustStartMonthChange(){
+  const startSel=document.getElementById('dustStartMonth');
+  const endSel=document.getElementById('dustEndMonth');
+  if(startSel.value>endSel.value) endSel.value=startSel.value;
+}
+
+// ids를 sheetZones 기준으로 영역별로 묶는다. 어느 영역에도 속하지 않은 ID는 '미분류'로 모음 (먼지 포집/영역 점검 결과 공용)
+function groupIdsByZone(ids){
+  const idSet=new Set(ids);
+  const zoneGroups=new Map();
+  sheetZones.forEach(z=>{
+    const zIds=z.ids.filter(zid=>idSet.has(zid));
+    if(zIds.length) zoneGroups.set(z.name,zIds);
+  });
+  const zonedIds=new Set([...zoneGroups.values()].flat());
+  const unzoned=ids.filter(id=>!zonedIds.has(id));
+  if(unzoned.length) zoneGroups.set('미분류',unzoned);
+  return zoneGroups;
+}
+
+async function startDustSearch(){
+  if(isGlobalLocked) return;
+  const todayOnly=isDustTodayOnlyMode(); // 모바일 + 관리자 미인증 — 당일 데이터만 조회 가능
+  if(dustZoneGridOpen) toggleDustZoneGrid();
+  const errEl=document.getElementById('errorMsg');
+  errEl.textContent='';
+  const token=document.getElementById('tokenInput').value.trim();
+  const added=new Set();
+  const ids=[];
+  [...selectedDustZones].forEach(i=>{
+    if(sheetZones[i]) sheetZones[i].ids.forEach(id=>{ if(!added.has(id)){added.add(id);ids.push(id);} });
+  });
+  dustExtraIds.forEach(id=>{ if(!added.has(id)){added.add(id);ids.push(id);} });
+  if(!ids.length){errEl.textContent='⚠ 조회할 영역을 선택해주세요.';return;}
+
+  const curYm=todayStr().slice(0,7);
+  const startYm=todayOnly?curYm:(document.getElementById('dustStartMonth')?.value||'2026-04');
+  const endYm=todayOnly?curYm:(document.getElementById('dustEndMonth')?.value||curYm);
+  if(startYm>endYm){errEl.textContent='⚠ 시작 월이 종료 월보다 클 수 없습니다.';return;}
+  const resultSection=document.getElementById('dustResultSection');
+  const progressEl=document.getElementById('dustProgressRow');
+  const gridEl=document.getElementById('dustCardsGrid');
+  dustResultMap.clear();
+  const monthBar=document.getElementById('dustMonthCopyBar');
+  if(monthBar) monthBar.style.display='none';
+  const srchEl=document.getElementById('dustResultSearch');
+  if(srchEl) srchEl.value='';
+  const cntEl=document.getElementById('dustResultCount');
+  if(cntEl) cntEl.textContent='';
+  resultSection.style.display='block';
+  gridEl.innerHTML='';
+
+  // 영역별 그룹핑
+  const zoneGroups=groupIdsByZone(ids);
+
+  const cardHtmlLoading=id=>`
+    <div class="dust-card loading" id="dust-card-${escHtml(id)}">
+      <div class="dust-card-id">${escHtml(id)}</div>
+      <div class="dust-card-meta">로딩 중…</div>
+    </div>`;
+
+  zoneGroups.forEach((zIds,zoneName)=>{
+    gridEl.insertAdjacentHTML('beforeend',`
+      <div class="dust-zone-group">
+        <div class="dust-zone-header">${escHtml(zoneName)}<span class="dust-zone-count">${zIds.length}개</span></div>
+        <div class="dust-zone-cards">${zIds.map(cardHtmlLoading).join('')}</div>
+      </div>`);
+  });
+
+  setGlobalLock(true);
+  let done=0;
+  progressEl.textContent=`조회 중 0 / ${ids.length}`;
+  progressEl.style.display='block';
+
+  await Promise.all(ids.map(async id=>{
+    const card=document.getElementById('dust-card-'+id);
+    const loc=productLocations[id]?`<div class="dust-card-loc">${escHtml(productLocations[id])}</div>`:'';
+    try{
+      // 이미 확인된 날짜는 캐시에서, 아직 확인 안 된 새 구간(gap)만 API 조회 — 조회 기간이 누적돼도
+      // 매번 전체 기간을 다시 긁지 않도록 함. 모바일 일반 유저는 당일 데이터만 조회
+      const dustResult=todayOnly?await fetchDustResultTodayOnly(id,token):await fetchDustResult(id,startYm,endYm,token);
+      const{total,days,scanCount}=dustResult;
+      const activeDays=days.filter(d=>d.inc>0);
+      if(!card) return;
+      if(!activeDays.length){
+        card.className='dust-card empty';
+        card.innerHTML=`<div class="dust-card-id">${escHtml(id)}</div>${loc}
+          <div class="dust-card-meta" style="color:var(--text4);margin-top:4px">포집 데이터 없음</div>`;
+      } else {
+        dustResultMap.set(id,dustResult);
+        const lastDate=activeDays[activeDays.length-1].date;
+        card.className='dust-card';
+        card.innerHTML=`<div class="dust-card-id">${escHtml(id)}</div>${loc}
+          <div class="dust-card-total">${total.toLocaleString()}g</div>
+          <div class="dust-card-meta">${activeDays.length}회 포집 · 최근 ${lastDate}</div>`;
+        card.addEventListener('click',()=>openDustModal(id));
+      }
+    }catch(e){
+      if(card){
+        card.className='dust-card empty';
+        card.innerHTML=`<div class="dust-card-id">${escHtml(id)}</div>${loc}
+          <div class="dust-card-meta" style="color:var(--pm-text);margin-top:4px">조회 오류</div>`;
+      }
+    }
+    progressEl.textContent=`조회 중 ${++done} / ${ids.length}`;
+  }));
+
+  progressEl.style.display='none';
+  setGlobalLock(false);
+  updateDustMonthBar();
+  setTimeout(()=>{
+    const el=document.getElementById('dustResultSection');
+    if(el&&el.offsetParent!==null) el.scrollIntoView({behavior:'smooth',block:'start'});
+  },150);
+}
+
+
+function updateDustMonthBar(){
+  const months=new Set();
+  dustResultMap.forEach(({days})=>{
+    days.filter(d=>d.inc>0).forEach(d=>months.add(d.date.slice(0,7)));
+  });
+  const bar=document.getElementById('dustMonthCopyBar');
+  const sel=document.getElementById('dustMonthSelect');
+  if(!months.size){bar.style.display='none';return;}
+  const sorted=[...months].sort().reverse();
+  sel.innerHTML=sorted.map(ym=>{
+    const[y,m]=ym.split('-');
+    return`<option value="${ym}">${y}년 ${parseInt(m)}월</option>`;
+  }).join('');
+  bar.style.display='flex';
+}
+
+function copyDustByMonth(){
+  const sel=document.getElementById('dustMonthSelect');
+  const ym=sel.value;
+  if(!ym||!dustResultMap.size) return;
+  const[y,m]=ym.split('-');
+  const lines=[`=== ${y}년 ${parseInt(m)}월 포집 데이터 ===`];
+  dustResultMap.forEach(({days},id)=>{
+    const monthDays=days.filter(d=>d.inc>0&&d.date.startsWith(ym));
+    if(!monthDays.length) return;
+    const loc=productLocations[id]||'';
+    lines.push('');
+    lines.push(loc?`${id} (${loc})`:id);
+    monthDays.forEach(d=>lines.push(`${d.date} : ${d.inc}g`));
+  });
+  const btn=document.getElementById('dustMonthCopyBtn');
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(()=>{btn.innerHTML='<span class="material-icons-round ico">check</span>복사됨';setTimeout(()=>{btn.innerHTML='<span class="material-icons-round ico">content_copy</span>월별 복사';},2000);})
+    .catch(()=>{alert('클립보드 복사에 실패했습니다.');});
+}
+
+function openDustModal(id){
+  const dustResult=dustResultMap.get(id);
+  if(!dustResult) return;
+  const{total,days,scanCount}=dustResult;
+  const activeDays=days.filter(d=>d.inc>0);
+  dustDays=activeDays;
+
+  document.getElementById('dustModalTitle').textContent=`${id} — 먼지 포집 상세`;
+  document.getElementById('dustModalSummary').innerHTML=`
+    <div class="dust-stat"><span class="dust-stat-label">총 포집량</span>
+      <span class="dust-stat-value">${total.toLocaleString()}g</span></div>
+    <div class="dust-stat"><span class="dust-stat-label">포집 발생 수</span>
+      <span class="dust-stat-value">${activeDays.length}회</span></div>
+    <div class="dust-stat"><span class="dust-stat-label">리포트 데이터 수</span>
+      <span class="dust-stat-value">${scanCount.toLocaleString()}건</span></div>`;
+
+  const headEl=document.getElementById('dustModalHead');
+  const bodyEl=document.getElementById('dustModalBody');
+  const chartWrap=document.getElementById('dustModalChartWrap');
+
+  if(activeDays.length){
+    headEl.innerHTML='<th>날짜</th><th>시작 (g)</th><th>마지막 (g)</th><th>회별 포집 (g)</th>';
+    bodyEl.innerHTML=activeDays.map(d=>`<tr>
+      <td>${escHtml(d.date)}</td>
+      <td>${d.first.toLocaleString()}</td><td>${d.last.toLocaleString()}</td>
+      <td style="font-weight:500;color:var(--ok-text)">+${d.inc.toLocaleString()}</td>
+    </tr>`).join('');
+    chartWrap.style.display='block';
+  } else {
+    headEl.innerHTML='';
+    bodyEl.innerHTML='<tr><td style="padding:16px;color:var(--text3)">포집량 변화가 없습니다</td></tr>';
+    chartWrap.style.display='none';
+  }
+
+  dustModalOpen=true;
+  document.getElementById('dustModal').style.display='flex';
+  document.body.style.overflow='hidden';
+
+  if(activeDays.length){
+    requestAnimationFrame(()=>setTimeout(()=>{
+      const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+      renderDustChart(activeDays,isDark,'dustModalCanvas');
+    },50));
+  }
+}
+
+function filterDustResults(q){
+  const lower=q.trim().toLowerCase();
+  const grid=document.getElementById('dustCardsGrid');
+  if(!grid) return;
+  let visible=0;
+  grid.querySelectorAll('.dust-zone-group').forEach(group=>{
+    const zoneHeader=group.querySelector('.dust-zone-header');
+    const zoneName=(zoneHeader?.textContent||'').toLowerCase();
+    const zoneNameMatch=!lower||zoneName.includes(lower);
+    let groupVisible=0;
+    group.querySelectorAll('.dust-card').forEach(card=>{
+      const id=(card.querySelector('.dust-card-id')?.textContent||'').toLowerCase();
+      const loc=(card.querySelector('.dust-card-loc')?.textContent||'').toLowerCase();
+      const match=!lower||zoneNameMatch||id.includes(lower)||loc.includes(lower);
+      card.classList.toggle('result-hidden',!match);
+      if(match) groupVisible++;
+    });
+    const groupMatch=!lower||groupVisible>0;
+    group.classList.toggle('result-hidden',!groupMatch);
+    visible+=groupVisible;
+  });
+  const countEl=document.getElementById('dustResultCount');
+  if(countEl) countEl.textContent=lower?`${visible}개 표시`:'';
+}
+
+function closeDustModal(){
+  dustModalOpen=false;
+  const modal=document.getElementById('dustModal');
+  if(modal) modal.style.display='none';
+  document.body.style.overflow='';
+  if(dustModalChart){dustModalChart.destroy();dustModalChart=null;}
+}
+
+function dustModalOverlayClick(e){
+  if(e.target===document.getElementById('dustModal')) closeDustModal();
+}
+
+/* ===== 카드 상세 모달 (범위/영역 점검 결과 클릭) ===== */
+async function openCardDetailModal(id){
+  const token=document.getElementById('tokenInput').value.trim();
+  if(!token||!lastDateRange) return;
+  const r=results.find(x=>x.id===id);
+  const cfg=r?(STATUS[r.status]||STATUS.LOAD):null;
+  const loc=getZoneAndLoc(id);
+  const period=`${lastDateRange.started_at} ~ ${lastDateRange.finished_at}`;
+
+  document.getElementById('cardDetailTitle').textContent=id;
+  document.getElementById('cardDetailSubtitle').textContent=loc!=='—'?`${loc}  ·  ${period}`:period;
+  const tabsEl=document.getElementById('cardDetailIdTabs');
+  if(tabsEl&&results.length>1){
+    tabsEl.innerHTML=results.map(rx=>{
+      const c=STATUS[rx.status]||STATUS.LOAD;
+      return`<button class="card-detail-id-tab${rx.id===id?' active':''}" style="color:var(${c.textVar});border-color:var(${c.textVar})" onclick="openCardDetailModal('${escHtml(rx.id)}')">${escHtml(rx.id)}</button>`;
+    }).join('');
+    tabsEl.style.display='flex';
+    const activeTab=tabsEl.querySelector('.card-detail-id-tab.active');
+    if(activeTab) activeTab.scrollIntoView({block:'nearest',inline:'center'});
+  } else if(tabsEl){ tabsEl.style.display='none'; }
+  document.getElementById('cardDetailSummary').innerHTML=cfg?`
+    <div class="dust-stat">
+      <span class="dust-stat-label">최근 상태</span>
+      <span class="dust-stat-value" style="font-size:18px;color:var(${cfg.textVar})">${cfg.icon?`<span class="material-icons-round" style="font-size:18px;vertical-align:-3px;margin-right:2px">${cfg.icon}</span>`:''}${cfg.label}</span>
+    </div>
+    ${r.item?`<div class="dust-stat">
+      <span class="dust-stat-label">PM10</span>
+      <span class="dust-stat-value">${r.item.pm_10}<span class="dust-stat-sub">㎍/㎥</span></span>
+    </div>
+    <div class="dust-stat">
+      <span class="dust-stat-label">PM2.5</span>
+      <span class="dust-stat-value">${r.item.pm_2_5}<span class="dust-stat-sub">㎍/㎥</span></span>
+    </div>
+    <div class="dust-stat">
+      <span class="dust-stat-label">CO₂</span>
+      <span class="dust-stat-value">${r.item.co2}<span class="dust-stat-sub">ppm</span></span>
+    </div>
+    <div style="width:100%;font-size:11px;color:var(--text3);font-weight:500;text-align:right;margin-top:4px">마지막 수집: ${escHtml(r.item.format_created_time)}</div>`:''}
+  `:'';
+
+  cardDetailModalOpen=true;
+  document.getElementById('cardDetailModal').style.display='flex';
+  document.body.style.overflow='hidden';
+
+  if(cardDetailCache.has(id)){
+    _renderCardDetailContent(cardDetailCache.get(id));
+    return;
+  }
+
+  const loadEl=document.getElementById('cardDetailLoading');
+  const tableWrap=document.getElementById('cardDetailTableWrap');
+  loadEl.textContent='데이터 불러오는 중…';
+  loadEl.style.display='block';
+  tableWrap.style.display='none';
+
+  try{
+    const items=await fetchAllReports(id,lastDateRange,token);
+    const sorted=[...items].sort((a,b)=>new Date(b.format_created_time)-new Date(a.format_created_time));
+    cardDetailCache.set(id,sorted);
+    if(!cardDetailModalOpen) return;
+    _renderCardDetailContent(sorted);
+  }catch(e){
+    loadEl.textContent='⚠ 오류: '+e.message;
+  }
+}
+// 분단위 원본 수집 데이터를 정시(시간대) 단위로 묶어 PM10/PM2.5/CO2 평균을 냄
+// — 예: 09:09~09:59 사이 6건이 있으면 "09시" 한 행으로 합쳐 평균값을 보여줌
+// rawItems엔 그 시간대에 실제 수집된 원본 항목들을 시간순으로 담아둠 (행 클릭 시 상세 표시용)
+function aggregateHourlyReadings(items){
+  const buckets=new Map(); // 시간대(getTime) -> {date, count, pm10Sum, pm25Sum, co2Sum, rawItems}
+  items.forEach(item=>{
+    const d=new Date(item.format_created_time);
+    if(isNaN(d.getTime())) return;
+    const hourDate=new Date(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours());
+    const key=hourDate.getTime();
+    if(!buckets.has(key)) buckets.set(key,{date:hourDate,count:0,pm10Sum:0,pm25Sum:0,co2Sum:0,rawItems:[]});
+    const b=buckets.get(key);
+    b.count++;
+    b.pm10Sum+=Number(item.pm_10)||0;
+    b.pm25Sum+=Number(item.pm_2_5)||0;
+    b.co2Sum +=Number(item.co2)||0;
+    b.rawItems.push(item);
+  });
+  const p2=n=>String(n).padStart(2,'0');
+  const round1=n=>Math.round(n*10)/10; // 소수점 한 자리까지 반올림
+  return [...buckets.values()]
+    .sort((a,b)=>b.date-a.date) // 최신 시간대 먼저 — 기존 정렬 방향과 동일
+    .map(b=>({
+      format_created_time:`${b.date.getFullYear()}.${p2(b.date.getMonth()+1)}.${p2(b.date.getDate())} ${p2(b.date.getHours())}시`,
+      pm_10:round1(b.pm10Sum/b.count),
+      pm_2_5:round1(b.pm25Sum/b.count),
+      co2:round1(b.co2Sum/b.count),
+      sampleCount:b.count,
+      rawItems:[...b.rawItems].sort((x,y)=>new Date(y.format_created_time)-new Date(x.format_created_time)) // 최신 먼저 — 바깥 표와 정렬 방향 통일
+    }));
+}
+
+let cardDetailHourlyData=[]; // 현재 열린 카드 상세 모달의 시간대별 집계 결과 (행 클릭 시 원본 breakdown 조회용)
+
+function _renderCardDetailContent(sorted){
+  const loadEl=document.getElementById('cardDetailLoading');
+  const tableWrap=document.getElementById('cardDetailTableWrap');
+  if(!sorted.length){
+    loadEl.innerHTML='<div style="padding:40px 0 20px;text-align:center"><span class="material-icons-round" style="font-size:28px;line-height:1;color:var(--text4);margin-bottom:10px;display:inline-block">inbox</span><div style="font-size:13px;font-weight:500;color:var(--text2);margin-bottom:4px">수집 데이터 없음</div><div style="font-size:11px;color:var(--text3)">해당 기간에 수집된 데이터가 없습니다</div></div>';
+    loadEl.style.display='block';
+    tableWrap.style.display='none';
+    return;
+  }
+  loadEl.style.display='none';
+  tableWrap.style.display='block';
+  const hourly=aggregateHourlyReadings(sorted);
+  cardDetailHourlyData=hourly;
+  document.getElementById('cardDetailCount').textContent=`시간대 ${hourly.length}개 (원본 ${sorted.length}건 평균) — 행을 누르면 원본 상세가 펼쳐집니다`;
+  document.getElementById('cardDetailBody').innerHTML=hourly.map((item,idx)=>`<tr class="card-detail-hour-row" onclick="toggleCardDetailHourRow(${idx})">
+      <td title="${item.sampleCount}건 평균 — 눌러서 원본 보기">${escHtml(item.format_created_time||'—')}</td>
+      <td>${item.pm_10??'—'}</td>
+      <td>${item.pm_2_5??'—'}</td>
+      <td>${item.co2??'—'}</td>
+    </tr>`).join('');
+  _renderCardDetailChart([...hourly].reverse(), [...sorted].reverse());
+}
+
+// 시간대별 평균 행을 클릭하면 그 시간대에 실제 수집된 원본 데이터를 작은 표로 펼쳐 보여줌 (아코디언)
+function toggleCardDetailHourRow(idx){
+  const body=document.getElementById('cardDetailBody');
+  const row=body.querySelectorAll('tr.card-detail-hour-row')[idx];
+  if(!row) return;
+  const next=row.nextElementSibling;
+  if(next&&next.classList.contains('card-detail-hour-expand')){
+    next.remove();
+    row.classList.remove('expanded');
+    return;
+  }
+  body.querySelectorAll('tr.card-detail-hour-expand').forEach(el=>el.remove());
+  body.querySelectorAll('tr.card-detail-hour-row.expanded').forEach(el=>el.classList.remove('expanded'));
+
+  const item=cardDetailHourlyData[idx];
+  if(!item||!item.rawItems.length) return;
+  row.classList.add('expanded');
+  const expandRow=document.createElement('tr');
+  expandRow.className='card-detail-hour-expand';
+  expandRow.innerHTML=`<td colspan="4">
+    <div class="card-detail-hour-raw-wrap">
+      <table class="card-detail-hour-raw-table">
+        <thead><tr><th>수집 시간</th><th>PM10</th><th>PM2.5</th><th>CO₂</th></tr></thead>
+        <tbody>${item.rawItems.map(r=>`<tr>
+          <td>${escHtml(r.format_created_time||'—')}</td>
+          <td>${r.pm_10??'—'}</td>
+          <td>${r.pm_2_5??'—'}</td>
+          <td>${r.co2??'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </td>`;
+  row.after(expandRow);
+}
+// items: 시간대별 평균(오름차순) — 공기질 차트/최소·최대 요약용
+// rawItems: 원본 미집계 데이터(오름차순) — 가동횟수/가동시간은 누적값이라 평균이 아닌 diff로 계산해야 해서 별도로 받음
+// ids로 캔버스/최소·최대 표시 영역을 지정하면 카드 상세 모달 외 다른 화면(기간 비교 등)에도 동일한 차트를 재사용 가능
+// 반환값은 해당 기간의 총 가동 횟수/시간 — 기간 비교 요약 표에서 재사용
+function _renderCardDetailChart(items, rawItems, ids={}){
+  const dustCanvasId=ids.dustCanvas||'cardDetailChartDust';
+  const motorCanvasId=ids.motorCanvas||'cardDetailChartMotor';
+  const dustMinMaxId=ids.dustMinMax||'cardDetailDustMinMax';
+  const co2MinMaxId=ids.co2MinMax||'cardDetailCo2MinMax';
+  destroyChart(dustCanvasId);
+  destroyChart(motorCanvasId);
+  const dustEl=document.getElementById(dustMinMaxId);
+  const co2El=document.getElementById(co2MinMaxId);
+  if(dustEl) dustEl.innerHTML='';
+  if(co2El)  co2El.innerHTML='';
+  // 총 가동 횟수/시간 — 아래 차트 렌더는 비동기(requestAnimationFrame)라 별도로 먼저 동기 계산해서 반환.
+  // 중간에 리셋이 있어도 정확히 합산 (마지막-첫값 방식은 리셋 시 총량이 깎이는 문제가 있음)
+  const{totalCount, totalTimeSec}=calcMotorTotal(rawItems);
+  if(!items.length) return{totalCount, totalTimeSec};
+
+  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.07)';
+  const tickColor=isDark?'#8a8380':'#6b6560';
+  const tooltipBase={
+    backgroundColor:isDark?'#1d1a18':'#ffffff',
+    titleColor:isDark?'#eeeeee':'#171514',
+    bodyColor:isDark?'#b8b3b0':'#433f3d',
+    borderColor:isDark?'#3d3a39':'#ddd9d5',
+    borderWidth:1, padding:10,
+  };
+  const labels=items.map(d=>fmtTime(d.format_created_time));
+  const pt=items.length>15?2:4;
+
+  const pm10Vals=items.map(d=>d.pm_10!==undefined?Number(d.pm_10):null);
+  const pm25Vals=items.map(d=>d.pm_2_5!==undefined?Number(d.pm_2_5):null);
+  const co2Vals =items.map(d=>d.co2!==undefined?Number(d.co2):null);
+  const allZeroMask=items.map(d=>Number(d.pm_10)===0&&Number(d.pm_2_5)===0&&Number(d.co2)===0);
+  const safeMinMax=vals=>{const v=vals.filter((x,i)=>x!==null&&!allZeroMask[i]);return v.length?[Math.min(...v),Math.max(...v)]:[null,null];};
+  const [minPm10,maxPm10]=safeMinMax(pm10Vals);
+  const [minPm25,maxPm25]=safeMinMax(pm25Vals);
+  const [minCo2, maxCo2 ]=safeMinMax(co2Vals);
+
+  const minMaxRow=(items2)=>items2.filter(([,mn])=>mn!==null).map(([label,mn,mx,unit])=>
+    `<span>${label} <b style="color:#a0ca92">${mn}${unit}</b> · <b style="color:#c17262">${mx}${unit}</b></span>`
+  ).join('<span style="color:var(--border2)">|</span>');
+
+  const rowStyle='display:flex;gap:10px;align-items:center;font-size:11px;color:var(--text3);padding:4px 0 10px;flex-wrap:wrap';
+  if(dustEl) dustEl.innerHTML=`<div style="${rowStyle}">${minMaxRow([['PM10 ',minPm10,maxPm10,'㎍/㎥'],['PM2.5 ',minPm25,maxPm25,'㎍/㎥']])}</div>`;
+  if(co2El)  co2El.innerHTML=`<div style="${rowStyle}">${minMaxRow([['CO₂ ',minCo2,maxCo2,'ppm']])}</div>`;
+
+  requestAnimationFrame(()=>setTimeout(()=>{
+    /* ── 공기질 차트: PM10·PM2.5(좌) + CO₂(우) 하나로 통합 — 단일점검과 동일 스타일 ── */
+    const canvasDust=document.getElementById(dustCanvasId);
+    if(canvasDust){
+      chartRegistry.set(dustCanvasId, new Chart(canvasDust,{type:'line', data:{labels, datasets:[
+        {label:'PM10 (㎍/㎥)', data:pm10Vals,
+         yAxisID:'y', borderColor:'#5f8fb3', backgroundColor:'rgba(95,143,179,0.12)',
+         fill:true, tension:0.4, pointRadius:pt, pointHoverRadius:7,
+         pointBackgroundColor:'#5f8fb3', borderWidth:2.5, spanGaps:false},
+        {label:'PM2.5 (㎍/㎥)', data:pm25Vals,
+         yAxisID:'y', borderColor:'#a0ca92', backgroundColor:'rgba(160,202,146,0.07)',
+         fill:true, tension:0.4, pointRadius:pt, pointHoverRadius:7,
+         pointBackgroundColor:'#a0ca92', borderWidth:2.5, spanGaps:false},
+        {label:'CO₂ (ppm)', data:co2Vals,
+         yAxisID:'y1', borderColor:'#ee6018', backgroundColor:'rgba(238,96,24,0.10)',
+         fill:true, tension:0.4, pointRadius:pt, pointHoverRadius:7,
+         pointBackgroundColor:'#ee6018', borderWidth:2.5, spanGaps:false},
+      ]}, options:{
+        responsive:true, maintainAspectRatio:false,
+        animation:{duration:400},
+        layout:{padding:{top:22}},
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            ...tooltipBase,
+            callbacks:{
+              label:ctx=>{
+                const v=ctx.parsed.y;
+                if(v===null||v===undefined) return null;
+                const u=ctx.dataset.yAxisID==='y1'?' ppm':' ㎍/㎥';
+                return ` ${ctx.dataset.label.split(' ')[0]}: ${v}${u}`;
+              }
+            }
+          }
+        },
+        scales:{
+          x:{ticks:{color:tickColor,font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10},
+             grid:{color:gridColor},border:{display:false}},
+          y:{position:'left',
+             ticks:{color:'#5f8fb3',font:{size:9},maxTicksLimit:6,callback:v=>Number.isInteger(v)?v:null},
+             grid:{color:gridColor},border:{display:false},beginAtZero:true,min:0},
+          y1:{position:'right',
+              ticks:{color:'#ee6018',font:{size:9},maxTicksLimit:6,callback:v=>Number.isInteger(v)?v:null},
+              grid:{drawOnChartArea:false},border:{display:false},beginAtZero:true,min:0},
+        }
+      }, plugins:[yLabelPlugin('㎍/㎥','#5f8fb3','ppm','#ee6018')]}));
+      injectChartLegend(canvasDust,[
+        {borderColor:'#5f8fb3', label:'PM10 (㎍/㎥)'},
+        {borderColor:'#a0ca92', label:'PM2.5 (㎍/㎥)'},
+        {borderColor:'#ee6018', label:'CO₂ (ppm)'},
+      ]);
+    }
+
+    /* ── 가동 횟수/시간 차트: 통신마다 찍으면 너무 촘촘해서 알아보기 어려우므로,
+       공기질 차트와 같은 시간대(items) 버킷 단위로 묶어 그 시간대 총 가동량을 한 막대로 표시.
+       각 시간대 버킷의 rawItems는 최신순 정렬이므로 rawItems[0]이 그 시간대 마지막(=누적값) 값 ── */
+    const canvasMotor=document.getElementById(motorCanvasId);
+    if(canvasMotor){
+      const hourlyMotor=items.map(b=>{
+        const latest=(b.rawItems&&b.rawItems[0])||null;
+        return{count:latest?.report_data?.motorRunningCount, timeSec:hmsToSec(latest?.report_data?.motorRunningTime)};
+      });
+      const motorLabels=labels.slice(1);
+      const motorPt=hourlyMotor.length>15?2:4;
+      const countDiffs=hourlyMotor.slice(1).map((h,i)=>{
+        const prv=hourlyMotor[i];
+        if(h.count==null||prv.count==null) return null;
+        let diff=Number(h.count)-Number(prv.count);
+        if(diff<0) diff+=MOTOR_COUNT_MODULUS; // motorRunningCount 랩어라운드 보정 — calcMotorTotal과 동일한 규칙
+        return diff;
+      });
+      const timeDiffs=hourlyMotor.slice(1).map((h,i)=>{
+        const prv=hourlyMotor[i];
+        if(h.timeSec==null||prv.timeSec==null) return null;
+        const diff=h.timeSec-prv.timeSec;
+        return diff>=0?diff:null;
+      });
+      chartRegistry.set(motorCanvasId, new Chart(canvasMotor,{type:'bar', data:{labels:motorLabels, datasets:[
+        {label:'가동 횟수 (회)', data:countDiffs,
+         yAxisID:'y', backgroundColor:'rgba(193,114,98,0.55)', borderColor:'#c17262',
+         borderWidth:1.5, borderRadius:3, type:'bar'},
+        {label:'가동 시간 (초)', data:timeDiffs,
+         yAxisID:'y1', borderColor:'#ee6018', backgroundColor:'rgba(238,96,24,0.15)',
+         fill:true, tension:0.4, pointRadius:motorPt, pointHoverRadius:7,
+         pointBackgroundColor:'#ee6018', borderWidth:2.5, type:'line', spanGaps:false},
+      ]}, options:{
+        responsive:true, maintainAspectRatio:false,
+        animation:{duration:400},
+        layout:{padding:{top:22}},
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            ...tooltipBase,
+            callbacks:{
+              label:ctx=>{
+                const v=ctx.parsed.y;
+                if(v===null||v===undefined) return null;
+                if(ctx.dataset.yAxisID==='y1') return ` 가동 시간: ${secToHms(v)}`;
+                return ` 가동 횟수: ${v}회`;
+              }
+            }
+          }
+        },
+        scales:{
+          x:{ticks:{color:tickColor,font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10},
+             grid:{color:gridColor},border:{display:false}},
+          y:{position:'left',
+             ticks:{color:'#c17262',font:{size:9},callback:v=>Number.isInteger(v)?v:null,maxTicksLimit:6},
+             grid:{color:gridColor},border:{display:false},beginAtZero:true,min:0},
+          y1:{position:'right',
+              ticks:{color:'#ee6018',font:{size:9},callback:v=>Number.isInteger(v)?v:null,maxTicksLimit:6},
+              grid:{drawOnChartArea:false},border:{display:false},beginAtZero:true,min:0},
+        }
+      }, plugins:[yLabelPlugin('회','#c17262','초','#ee6018')]}));
+      // totalCount/totalTimeSec은 함수 상단에서 이미 계산됨(동기 반환용) — 여기선 그대로 재사용
+      injectChartLegend(canvasMotor,[
+        {type:'bar', borderColor:'#c17262', label:'가동 횟수 (회)'},
+        {borderColor:'#ee6018', label:'가동 시간 (초)'},
+      ]);
+      const panel=canvasMotor.closest('.single-chart-panel');
+      const legendBar=panel?.querySelector('.chart-legend-bar');
+      if(legendBar){
+        const statWrap=document.createElement('span');
+        statWrap.style.cssText='display:inline-flex;gap:6px;margin-left:auto';
+        statWrap.innerHTML=
+          `<span class="chart-legend-chip motor-stat-chip" style="color:#c17262;border-color:rgba(193,114,98,0.4)"><span class="clc-bar" style="background:#c17262"></span>${totalCount!=null?Number(totalCount).toLocaleString()+'회':'—'}</span>`+
+          `<span class="chart-legend-chip motor-stat-chip" style="color:#ee6018;border-color:rgba(238,96,24,0.4)"><span class="clc-dot" style="background:#ee6018"></span>${secToHms(totalTimeSec)}</span>`;
+        legendBar.appendChild(statWrap);
+      }
+    }
+  },50));
+  return{totalCount, totalTimeSec};
+}
+function closeCardDetailModal(){
+  cardDetailModalOpen=false;
+  document.getElementById('cardDetailModal').style.display='none';
+  document.body.style.overflow='';
+  destroyChart('cardDetailChartDust');
+  destroyChart('cardDetailChartMotor');
+}
+function cardDetailOverlayClick(e){
+  if(e.target===document.getElementById('cardDetailModal')) closeCardDetailModal();
+}
+
+function renderSingleDetail(id, items){
+  singleAllItems=[...items].sort((a,b)=>
+    new Date(b.format_created_time)-new Date(a.format_created_time));
+  singlePage=0; singleShowAll=false;
+  const showAllBtn=document.getElementById('singleShowAllBtn');
+  if(showAllBtn) showAllBtn.classList.remove('active');
+  document.getElementById('singleDetailTitle').textContent=`${id} — 총 ${items.length}건`;
+  document.getElementById('singleResultSection').style.display='block';
+  const copyBtn=document.getElementById('singleCopyBtn');
+  if(!items.length){
+    document.getElementById('singleDetailBody').innerHTML=
+      `<tr><td colspan="4" class="single-detail-empty" style="text-align:center">조회된 데이터가 없습니다</td></tr>`;
+    document.getElementById('singlePagination').innerHTML='';
+    document.getElementById('singlePageInfo').textContent='';
+    copyBtn.style.display='none';
+    renderSingleChart([]);
+    return;
+  }
+  copyBtn.style.display='inline-block';
+  renderSinglePage();
+}
+
+function renderSinglePage(){
+  const total=singleAllItems.length;
+  const totalPages=Math.ceil(total/SINGLE_PAGE_SIZE);
+  const start=singlePage*SINGLE_PAGE_SIZE;
+  const pageItems=singleShowAll ? singleAllItems : singleAllItems.slice(start, start+SINGLE_PAGE_SIZE);
+
+  document.getElementById('singlePageInfo').textContent= singleShowAll
+    ? `전체 ${total}건`
+    : `${start+1}–${Math.min(start+SINGLE_PAGE_SIZE,total)} / ${total}건`;
+
+  document.getElementById('singleDetailBody').innerHTML=pageItems.map(item=>`<tr>
+    <td>${escHtml(fmtTime(item.format_created_time))}</td>
+    <td>${item.pm_10!==undefined?item.pm_10:'—'}</td>
+    <td>${item.pm_2_5!==undefined?item.pm_2_5:'—'}</td>
+    <td>${item.co2!==undefined?item.co2:'—'}</td>
+  </tr>`).join('');
+
+  renderSingleChart([...pageItems].reverse());
+
+  const pg=document.getElementById('singlePagination');
+  if(singleShowAll||totalPages<=1){pg.innerHTML='';return;}
+  let html=`<button class="pg-btn" onclick="goSinglePage(${singlePage-1})" ${singlePage===0?'disabled':''}>← 이전</button>`;
+  const range=3, start2=Math.max(0,singlePage-range), end2=Math.min(totalPages-1,singlePage+range);
+  if(start2>0) html+=`<button class="pg-btn" onclick="goSinglePage(0)">1</button>${start2>1?'<span class="pg-info">…</span>':''}`;
+  for(let i=start2;i<=end2;i++)
+    html+=`<button class="pg-btn${i===singlePage?' active':''}" onclick="goSinglePage(${i})">${i+1}</button>`;
+  if(end2<totalPages-1) html+=`${end2<totalPages-2?'<span class="pg-info">…</span>':''}<button class="pg-btn" onclick="goSinglePage(${totalPages-1})">${totalPages}</button>`;
+  html+=`<button class="pg-btn" onclick="goSinglePage(${singlePage+1})" ${singlePage===totalPages-1?'disabled':''}>다음 →</button>`;
+  pg.innerHTML=html;
+}
+
+function goSinglePage(p){
+  const totalPages=Math.ceil(singleAllItems.length/SINGLE_PAGE_SIZE);
+  if(p<0||p>=totalPages) return;
+  singlePage=p;
+  renderSinglePage();
+  document.getElementById('singleResultSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function toggleSingleShowAll(){
+  singleShowAll=!singleShowAll;
+  document.getElementById('singleShowAllBtn').classList.toggle('active',singleShowAll);
+  singlePage=0;
+  if(singleAllItems.length) renderSinglePage();
+}
+
+/* ===== 비교 검색 (단일 검색 확장) ===== */
+function applyCompareModeUI(){
+  document.getElementById('compareModeBtn').classList.toggle('active',compareMode);
+  document.getElementById('comparePeriod2Row').style.display=compareMode?'flex':'none';
+  document.getElementById('singlePeriodLabel').textContent=compareMode?'기간 1':'기간';
+  const showAllBtn=document.getElementById('singleShowAllBtn');
+  if(showAllBtn) showAllBtn.style.display=compareMode?'none':'';
+  updateRunBtnText();
+}
+function toggleCompareMode(){
+  compareMode=!compareMode;
+  lsSet(LS_COMPARE_MODE,compareMode);
+  applyCompareModeUI();
+  // 모드 전환 시 이전 결과는 숨겨서 서로 다른 기준의 결과가 섞여 보이지 않게 함
+  document.getElementById('singleResultSection').style.display='none';
+  document.getElementById('compareResultSection').style.display='none';
+}
+
+function copySingleToClipboard(){
+  if(!singleAllItems.length) return;
+  const header='수집 시간\tPM10\tPM2.5\tCO₂';
+  const rows=singleAllItems.map(d=>
+    [fmtTime(d.format_created_time),
+     d.pm_10!==undefined?d.pm_10:'',
+     d.pm_2_5!==undefined?d.pm_2_5:'',
+     d.co2!==undefined?d.co2:''].join('\t')
+  );
+  const text=[header,...rows].join('\n');
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=document.getElementById('singleCopyBtn');
+    btn.innerHTML='<span class="material-icons-round ico">check</span>복사됨';
+    setTimeout(()=>{ btn.innerHTML='<span class="material-icons-round ico">content_copy</span>전체 복사'; }, 2000);
+  }).catch(()=>{ alert('클립보드 복사에 실패했습니다.'); });
+}
+
+function injectChartLegend(canvasEl, datasets){
+  const panel=canvasEl.closest('.single-chart-panel');
+  if(!panel) return;
+  let bar=panel.querySelector('.chart-legend-bar');
+  if(bar) bar.remove();
+  bar=document.createElement('div');
+  bar.className='chart-legend-bar';
+  panel.querySelector('.single-chart-wrap').before(bar);
+  bar.innerHTML=datasets.map(ds=>{
+    const dot=ds.type==='bar'
+      ?`<span class="clc-bar" style="background:${ds.borderColor};opacity:0.8"></span>`
+      :`<span class="clc-dot" style="background:${ds.borderColor}"></span>`;
+    return `<span class="chart-legend-chip">${dot}${escHtml(ds.label)}</span>`;
+  }).join('');
+}
+
+// dustCanvasId/motorCanvasId를 지정하면 단일 검색 외 다른 캔버스(기간 비교 등)에도 동일한 차트를 그릴 수 있음.
+// 반환값은 해당 기간의 총 가동 횟수/시간 — 기간 비교 요약 표에서 재사용
+function renderSingleChart(items, dustCanvasId='singleChartDust', motorCanvasId='singleChartMotor'){
+  destroyChart(dustCanvasId);
+  destroyChart(motorCanvasId);
+  if(!items.length) return{totalCount:null, totalTimeSec:null};
+
+  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.07)';
+  const tickColor=isDark?'#8a8380':'#6b6560';
+  const tooltipBase={
+    backgroundColor:isDark?'#1d1a18':'#ffffff',
+    titleColor:isDark?'#eeeeee':'#171514',
+    bodyColor:isDark?'#b8b3b0':'#433f3d',
+    borderColor:isDark?'#3d3a39':'#ddd9d5',
+    borderWidth:1, padding:10,
+  };
+  const labels=items.map(d=>fmtTime(d.format_created_time));
+  const pt=items.length>15?2:4;
+
+  /* ── Chart 1: PM10 · PM2.5 (좌/㎍/㎥) + CO₂ (우/ppm) ── */
+  const canvasDust=document.getElementById(dustCanvasId);
+  if(canvasDust){
+    chartRegistry.set(dustCanvasId, new Chart(canvasDust,{type:'line', data:{labels, datasets:[
+      {label:'PM10 (㎍/㎥)', data:items.map(d=>d.pm_10!==undefined?Number(d.pm_10):null),
+       yAxisID:'y', borderColor:'#5f8fb3', backgroundColor:'rgba(95,143,179,0.12)',
+       fill:true, tension:0.4, pointRadius:pt, pointHoverRadius:7,
+       pointBackgroundColor:'#5f8fb3', borderWidth:2.5, spanGaps:false},
+      {label:'PM2.5 (㎍/㎥)', data:items.map(d=>d.pm_2_5!==undefined?Number(d.pm_2_5):null),
+       yAxisID:'y', borderColor:'#a0ca92', backgroundColor:'rgba(160,202,146,0.07)',
+       fill:true, tension:0.4, pointRadius:pt, pointHoverRadius:7,
+       pointBackgroundColor:'#a0ca92', borderWidth:2.5, spanGaps:false},
+      {label:'CO₂ (ppm)', data:items.map(d=>d.co2!==undefined?Number(d.co2):null),
+       yAxisID:'y1', borderColor:'#ee6018', backgroundColor:'rgba(238,96,24,0.10)',
+       fill:true, tension:0.4, pointRadius:pt, pointHoverRadius:7,
+       pointBackgroundColor:'#ee6018', borderWidth:2.5, spanGaps:false},
+    ]}, options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:400},
+      layout:{padding:{top:22}},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          ...tooltipBase,
+          callbacks:{
+            label:ctx=>{
+              const v=ctx.parsed.y;
+              if(v===null||v===undefined) return null;
+              const u=ctx.dataset.yAxisID==='y1'?' ppm':' ㎍/㎥';
+              return ` ${ctx.dataset.label.split(' ')[0]}: ${v}${u}`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:tickColor,font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:12},
+           grid:{color:gridColor},border:{display:false}},
+        y:{position:'left',
+           ticks:{color:'#5f8fb3',font:{size:10},maxTicksLimit:6,callback:v=>Number.isInteger(v)?v:null},
+           grid:{color:gridColor},border:{display:false},beginAtZero:true,min:0},
+        y1:{position:'right',
+            ticks:{color:'#ee6018',font:{size:10},maxTicksLimit:6,callback:v=>Number.isInteger(v)?v:null},
+            grid:{drawOnChartArea:false},border:{display:false},beginAtZero:true,min:0},
+      }
+    }, plugins:[yLabelPlugin('㎍/㎥','#5f8fb3','ppm','#ee6018')]}));
+    injectChartLegend(canvasDust,[
+      {borderColor:'#5f8fb3', label:'PM10 (㎍/㎥)'},
+      {borderColor:'#a0ca92', label:'PM2.5 (㎍/㎥)'},
+      {borderColor:'#ee6018', label:'CO₂ (ppm)'},
+    ]);
+  }
+
+  /* ── Chart 2: 가동 횟수(좌/회) + 가동 시간(우/초) — 첫 항목 제외 후 diff ── */
+  const motorItems=items.slice(1);
+  const motorLabels=motorItems.map(d=>fmtTime(d.format_created_time));
+  const motorPt=motorItems.length>15?2:4;
+  const countDiffs=motorItems.map((d,i)=>{
+    const cur=d.report_data?.motorRunningCount;
+    const prv=items[i].report_data?.motorRunningCount;
+    if(cur==null||prv==null) return null;
+    let diff=Number(cur)-Number(prv);
+    if(diff<0) diff+=MOTOR_COUNT_MODULUS; // motorRunningCount 랩어라운드 보정 — calcMotorTotal과 동일한 규칙
+    return diff;
+  });
+  const timeDiffs=motorItems.map((d,i)=>{
+    const cur=hmsToSec(d.report_data?.motorRunningTime);
+    const prv=hmsToSec(items[i].report_data?.motorRunningTime);
+    if(cur==null||prv==null) return null;
+    const diff=cur-prv;
+    return diff>=0?diff:null;
+  });
+
+  const canvasMotor=document.getElementById(motorCanvasId);
+  let totalCount=null, totalTimeSec=null;
+  if(canvasMotor){
+    chartRegistry.set(motorCanvasId, new Chart(canvasMotor,{type:'bar', data:{labels:motorLabels, datasets:[
+      {label:'가동 횟수 (회)', data:countDiffs,
+       yAxisID:'y', backgroundColor:'rgba(193,114,98,0.55)', borderColor:'#c17262',
+       borderWidth:1.5, borderRadius:3, type:'bar'},
+      {label:'가동 시간 (초)', data:timeDiffs,
+       yAxisID:'y1', borderColor:'#ee6018', backgroundColor:'rgba(238,96,24,0.15)',
+       fill:true, tension:0.4, pointRadius:motorPt, pointHoverRadius:7,
+       pointBackgroundColor:'#ee6018', borderWidth:2.5, type:'line', spanGaps:false},
+    ]}, options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:400},
+      layout:{padding:{top:22}},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          ...tooltipBase,
+          callbacks:{
+            label:ctx=>{
+              const v=ctx.parsed.y;
+              if(v===null||v===undefined) return null;
+              if(ctx.dataset.yAxisID==='y1') return ` 가동 시간: ${secToHms(v)}`;
+              return ` 가동 횟수: ${v}회`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:tickColor,font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:12},
+           grid:{color:gridColor},border:{display:false}},
+        y:{position:'left',
+           ticks:{color:'#c17262',font:{size:10},callback:v=>Number.isInteger(v)?v:null,maxTicksLimit:6},
+           grid:{color:gridColor},border:{display:false},beginAtZero:true,min:0},
+        y1:{position:'right',
+            ticks:{color:'#ee6018',font:{size:10},callback:v=>Number.isInteger(v)?v:null,maxTicksLimit:6},
+            grid:{drawOnChartArea:false},border:{display:false},beginAtZero:true,min:0},
+      }
+    }, plugins:[yLabelPlugin('회','#c17262','초','#ee6018')]}));
+    /* 총 가동 횟수 / 시간 — 중간에 리셋이 있어도 정확히 합산 (마지막-첫값 방식은 리셋 시 총량이 깎이는 문제가 있음) */
+    ({totalCount, totalTimeSec}=calcMotorTotal(items));
+
+    injectChartLegend(canvasMotor,[
+      {type:'bar', borderColor:'#c17262', label:'가동 횟수 (회)'},
+      {borderColor:'#ee6018', label:'가동 시간 (초)'},
+    ]);
+
+    /* 합산 칩을 범례 바 오른쪽에 추가 */
+    const panel=canvasMotor.closest('.single-chart-panel');
+    const legendBar=panel?.querySelector('.chart-legend-bar');
+    if(legendBar){
+      const statWrap=document.createElement('span');
+      statWrap.style.cssText='display:inline-flex;gap:5px;margin-left:auto;flex-shrink:0;';
+      statWrap.innerHTML=
+        `<span class="chart-legend-chip motor-stat-chip" style="color:#c17262;border-color:rgba(193,114,98,0.4)"><span class="clc-bar" style="background:#c17262"></span>${totalCount!=null?Number(totalCount).toLocaleString()+'회':'—'}</span>`+
+        `<span class="chart-legend-chip motor-stat-chip" style="color:#ee6018;border-color:rgba(238,96,24,0.4)"><span class="clc-dot" style="background:#ee6018"></span>${secToHms(totalTimeSec)}</span>`;
+      legendBar.appendChild(statWrap);
+    }
+  }
+  return{totalCount, totalTimeSec};
+}
+
+/* ===== 비교 검색 결과 — 카드 상세와 동일하게 시간대 평균으로 표시 =====
+   차트(공기질/가동)는 기간 1·2를 동시에 나란히 보여주고, 그 아래 원본 시간대 표만
+   탭으로 기간을 선택해서 보게 함(둘 다 펼쳐두면 표가 너무 길어지므로) */
+let compareSortedDesc1=[], compareSortedDesc2=[]; // 기간별 원본 데이터(최신순) — 탭 전환 시 재조회 없이 재사용
+let compareActivePeriod=1;
+let compareHourlyData1=[], compareHourlyData2=[]; // 기간별 시간대별 집계 결과 — 행 펼치기(원본 보기)/엑셀 다운로드용
+let compareExportId='', compareExportLabel1='', compareExportLabel2=''; // 엑셀 다운로드 파일명/시트 안내용
+const COMPARE_CHART_IDS1={dustCanvas:'compareChartDust1', motorCanvas:'compareChartMotor1', dustMinMax:'compareDustMinMax1', co2MinMax:'compareCo2MinMax1'};
+const COMPARE_CHART_IDS2={dustCanvas:'compareChartDust2', motorCanvas:'compareChartMotor2', dustMinMax:'compareDustMinMax2', co2MinMax:'compareCo2MinMax2'};
+
+function compareAvg(items,key){
+  const vals=items.map(it=>it[key]).filter(v=>v!==undefined&&v!==null).map(Number).filter(v=>!isNaN(v));
+  if(!vals.length) return null;
+  return Math.round((vals.reduce((s,v)=>s+v,0)/vals.length)*10)/10;
+}
+function compareDiffText(v1,v2,unit){
+  if(v1==null||v2==null) return '—';
+  const d=Math.round((v2-v1)*10)/10;
+  if(d===0) return `±0${unit||''}`;
+  return `${d>0?'+':''}${d.toLocaleString()}${unit||''}`;
+}
+function compareDiffSec(sec1,sec2){
+  if(sec1==null||sec2==null) return '—';
+  const d=sec2-sec1;
+  if(d===0) return '±0초';
+  return `${d>0?'+':'-'}${secToHms(Math.abs(d))}`;
+}
+
+// 시간대별 평균 행을 클릭하면 그 시간대에 실제 수집된 원본 데이터를 펼쳐 보여줌 (카드 상세와 동일한 방식)
+function toggleCompareHourRow(idx){
+  const body=document.getElementById('compareDetailBody');
+  const row=body.querySelectorAll('tr.card-detail-hour-row')[idx];
+  if(!row) return;
+  const next=row.nextElementSibling;
+  if(next&&next.classList.contains('card-detail-hour-expand')){
+    next.remove();
+    row.classList.remove('expanded');
+    return;
+  }
+  body.querySelectorAll('tr.card-detail-hour-expand').forEach(el=>el.remove());
+  body.querySelectorAll('tr.card-detail-hour-row.expanded').forEach(el=>el.classList.remove('expanded'));
+
+  const hourlyData=compareActivePeriod===1?compareHourlyData1:compareHourlyData2;
+  const item=hourlyData[idx];
+  if(!item||!item.rawItems.length) return;
+  row.classList.add('expanded');
+  const expandRow=document.createElement('tr');
+  expandRow.className='card-detail-hour-expand';
+  expandRow.innerHTML=`<td colspan="4">
+    <div class="card-detail-hour-raw-wrap">
+      <table class="card-detail-hour-raw-table">
+        <thead><tr><th>수집 시간</th><th>PM10</th><th>PM2.5</th><th>CO₂</th></tr></thead>
+        <tbody>${item.rawItems.map(r=>`<tr>
+          <td>${escHtml(r.format_created_time||'—')}</td>
+          <td>${r.pm_10??'—'}</td>
+          <td>${r.pm_2_5??'—'}</td>
+          <td>${r.co2??'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </td>`;
+  row.after(expandRow);
+}
+
+// 기간 탭 전환 — 아래 원본 시간대 표만 갱신 (차트는 이미 두 기간 다 그려져 있어 그대로 둠)
+function showComparePeriod(which){
+  compareActivePeriod=which;
+  document.getElementById('comparePeriodTab1').classList.toggle('active',which===1);
+  document.getElementById('comparePeriodTab2').classList.toggle('active',which===2);
+  const sortedDesc=which===1?compareSortedDesc1:compareSortedDesc2;
+  const loadEl=document.getElementById('compareDetailLoading');
+  const wrap=document.getElementById('compareDetailWrap');
+  if(!sortedDesc.length){
+    loadEl.innerHTML='<div style="padding:40px 0 20px;text-align:center"><span class="material-icons-round" style="font-size:28px;line-height:1;color:var(--text4);margin-bottom:10px;display:inline-block">inbox</span><div style="font-size:13px;font-weight:500;color:var(--text2);margin-bottom:4px">수집 데이터 없음</div><div style="font-size:11px;color:var(--text3)">해당 기간에 수집된 데이터가 없습니다</div></div>';
+    loadEl.style.display='block';
+    wrap.style.display='none';
+    return;
+  }
+  loadEl.style.display='none';
+  wrap.style.display='block';
+  const hourly=which===1?compareHourlyData1:compareHourlyData2;
+  document.getElementById('compareDetailCount').textContent=`시간대 ${hourly.length}개 (원본 ${sortedDesc.length}건 평균) — 행을 누르면 원본 상세가 펼쳐집니다`;
+  document.getElementById('compareDetailBody').innerHTML=hourly.map((item,idx)=>`<tr class="card-detail-hour-row" onclick="toggleCompareHourRow(${idx})">
+      <td title="${item.sampleCount}건 평균 — 눌러서 원본 보기">${escHtml(item.format_created_time||'—')}</td>
+      <td>${item.pm_10??'—'}</td>
+      <td>${item.pm_2_5??'—'}</td>
+      <td>${item.co2??'—'}</td>
+    </tr>`).join('');
+}
+
+function renderCompareDetail(id, items1, items2, label1, label2){
+  document.getElementById('singleResultSection').style.display='none';
+  document.getElementById('compareResultSection').style.display='block';
+  document.getElementById('compareDetailTitle').textContent=`${id} — 기간 비교`;
+  document.getElementById('compareChartLabel1').textContent=`기간 1 · ${label1} (${items1.length}건)`;
+  document.getElementById('compareChartLabel2').textContent=`기간 2 · ${label2} (${items2.length}건)`;
+  document.getElementById('comparePeriodTab1').textContent=`기간 1 (${items1.length}건)`;
+  document.getElementById('comparePeriodTab2').textContent=`기간 2 (${items2.length}건)`;
+
+  compareSortedDesc1=[...items1].sort((a,b)=>new Date(b.format_created_time)-new Date(a.format_created_time));
+  compareSortedDesc2=[...items2].sort((a,b)=>new Date(b.format_created_time)-new Date(a.format_created_time));
+  compareHourlyData1=aggregateHourlyReadings(compareSortedDesc1);
+  compareHourlyData2=aggregateHourlyReadings(compareSortedDesc2);
+  compareExportId=id; compareExportLabel1=label1; compareExportLabel2=label2;
+
+  // 차트는 기간 1·2를 동시에 렌더 — 한눈에 비교 가능하도록
+  const motor1=_renderCardDetailChart([...compareHourlyData1].reverse(), [...compareSortedDesc1].reverse(), COMPARE_CHART_IDS1);
+  const motor2=_renderCardDetailChart([...compareHourlyData2].reverse(), [...compareSortedDesc2].reverse(), COMPARE_CHART_IDS2);
+
+  const pm10_1=compareAvg(items1,'pm_10'), pm10_2=compareAvg(items2,'pm_10');
+  const pm25_1=compareAvg(items1,'pm_2_5'), pm25_2=compareAvg(items2,'pm_2_5');
+  const co2_1=compareAvg(items1,'co2'), co2_2=compareAvg(items2,'co2');
+
+  const rows=[
+    ['리포트 건수', items1.length.toLocaleString()+'건', items2.length.toLocaleString()+'건', compareDiffText(items1.length,items2.length,'건')],
+    ['PM10 평균 (㎍/㎥)', pm10_1??'—', pm10_2??'—', compareDiffText(pm10_1,pm10_2)],
+    ['PM2.5 평균 (㎍/㎥)', pm25_1??'—', pm25_2??'—', compareDiffText(pm25_1,pm25_2)],
+    ['CO₂ 평균 (ppm)', co2_1??'—', co2_2??'—', compareDiffText(co2_1,co2_2)],
+    ['가동 횟수 (회)', motor1.totalCount!=null?motor1.totalCount.toLocaleString():'—', motor2.totalCount!=null?motor2.totalCount.toLocaleString():'—', compareDiffText(motor1.totalCount,motor2.totalCount)],
+    ['가동 시간', secToHms(motor1.totalTimeSec), secToHms(motor2.totalTimeSec), compareDiffSec(motor1.totalTimeSec,motor2.totalTimeSec)],
+  ];
+  document.getElementById('compareSummaryBody').innerHTML=rows.map(([label,v1,v2,diff])=>
+    `<tr><td>${escHtml(label)}</td><td>${escHtml(String(v1))}</td><td>${escHtml(String(v2))}</td><td>${escHtml(diff)}</td></tr>`
+  ).join('');
+
+  showComparePeriod(1);
+
+  setTimeout(()=>{
+    const s=document.getElementById('compareResultSection');
+    if(s&&s.offsetParent!==null) s.scrollIntoView({behavior:'smooth',block:'start'});
+  },150);
+}
+
+// 비교 검색 결과(시간대별 표)를 엑셀로 다운로드 — 기간 1/기간 2 각각 별도 시트
+async function exportCompareXlsx(){
+  if(typeof ExcelJS==='undefined'){ alert('ExcelJS 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.'); return; }
+  if(!compareHourlyData1.length&&!compareHourlyData2.length){ alert('다운로드할 데이터가 없습니다.'); return; }
+  const btn=document.getElementById('compareExportBtn');
+  btn.disabled=true; btn.innerHTML='<span class="material-icons-round ico">hourglass_empty</span>생성 중…';
+  try{
+    const wb=new ExcelJS.Workbook();
+    const addPeriodSheet=(sheetName, periodLabel, hourly)=>{
+      const ws=wb.addWorksheet(sheetName);
+      ws.columns=[{width:20},{width:12},{width:12},{width:12}];
+      const info=ws.addRow([`${compareExportId} — ${periodLabel}`]);
+      info.getCell(1).font={bold:true};
+      ws.mergeCells(`A${info.number}:D${info.number}`);
+      const header=ws.addRow(['수집 시간','PM10 (㎍/㎥)','PM2.5 (㎍/㎥)','CO₂ (ppm)']);
+      header.eachCell(c=>{ c.font={bold:true}; c.alignment={horizontal:'center',vertical:'middle'}; c.border={bottom:{style:'thin'}}; });
+      // 화면 표와 동일하게 최신 시간대가 위로 오도록(오름차순으로 뒤집지 않음)
+      [...hourly].forEach(item=>{
+        const row=ws.addRow([item.format_created_time, item.pm_10??'', item.pm_2_5??'', item.co2??'']);
+        row.eachCell(c=>{ c.alignment={horizontal:'center',vertical:'middle'}; });
+      });
+      if(!hourly.length){
+        const emptyRow=ws.addRow(['수집된 데이터가 없습니다.']);
+        ws.mergeCells(`A${emptyRow.number}:D${emptyRow.number}`);
+        emptyRow.getCell(1).alignment={horizontal:'center'};
+      }
+    };
+    addPeriodSheet('기간 1', compareExportLabel1, compareHourlyData1);
+    addPeriodSheet('기간 2', compareExportLabel2, compareHourlyData2);
+
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`${compareExportId||'제품'}_기간비교_${todayStr().replace(/-/g,'.')}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('엑셀 생성 중 오류: '+e.message);
+  }
+  btn.disabled=false; btn.innerHTML='<span class="material-icons-round ico">file_download</span>엑셀 다운로드';
+}
+
+/* ===== 공통 실행 ===== */
+async function runInspection(allIds){
+  const token=document.getElementById('tokenInput').value.trim();
+  if(!token){document.getElementById('errorMsg').textContent='⚠ 토큰이 설정되지 않았습니다.';return;}
+  setGlobalLock(true);
+  cardDetailCache.clear();
+  document.body.classList.remove('zone-active');
+  const psh=document.getElementById('preSearchHint');
+  if(psh) psh.style.display='none';
+  document.getElementById('summary').style.display='none';
+  document.getElementById('grid').innerHTML=''; document.getElementById('listBody').innerHTML='';
+  currentFilter='ALL'; currentView='grid';
+  const dateRange=getDateRange(currentMode); lastDateRange=dateRange;
+  const nowMs=Date.now(),total=allIds.length;
+  lastRunElapsedText='';
+  setLoading(true,0,total);
+  addLog(`총 ${total}개 점검 시작`,'info');
+  addLog(`기간: ${dateRange.started_at} ~ ${dateRange.finished_at}`,'muted');
+
+  // LOAD 카드 선렌더
+  results=allIds.map(id=>({id,status:'LOAD',item:null,errMsg:''}));
+  lastResults=results;
+  document.getElementById('summary').style.display='flex';
+  document.getElementById('grid').style.display='grid';
+  document.getElementById('listView').style.display='none';
+  document.getElementById('listToolbar').style.display='none';
+  renderSummary(); renderGrid();
+
+  let done=0;
+  await Promise.all(allIds.map(async(id,idx)=>{
+    try{
+      const item=await fetchReport(id,dateRange,token);
+      const status=id==='A139'?'OK':classify(item,nowMs,id);
+      results[idx]={id,status,item,errMsg:''};
+      addLog(`[${id}] ${status}`+(item?` | ${item.format_created_time}`:'  | 데이터 없음'),status==='OK'?'ok':status==='ERR'?'err':'warn');
+    }catch(err){
+      results[idx]={id,status:'ERR',item:null,errMsg:err.message};
+      addLog(`[${id}] ERR → ${err.message}`,'err');
+    }
+    updateGridCard(results[idx]);
+    renderSummary();
+    setLoading(true,++done,total);
+  }));
+
+  lastResults=[...results];
+  setLoading(false);
+  setGlobalLock(false);
+  if(zoneGridOpen) toggleZoneGrid();
+  selectedZones.clear();
+  renderZoneGrid();
+  updateZoneCount();
+  document.body.classList.remove('zone-active');
+  lastRunElapsedText=elapsedText();
+  renderSummary();
+  addLog(`✓ 점검 완료 (${lastRunElapsedText} 소요)`,'ok');
+  document.getElementById('logBtn').style.display='inline-block';
+  if(adminAuthenticated) updateSheetBtn();
+  if(logVisible)renderLog();
+  setTimeout(()=>{
+    const s=document.getElementById('summary');
+    if(s&&s.offsetParent!==null) s.scrollIntoView({behavior:'smooth',block:'start'});
+  },150);
+}
+
+/* ===== 메인 진입 ===== */
+async function startInspection(){
+  if(isGlobalLocked) return;
+  const errEl=document.getElementById('errorMsg');
+  errEl.textContent=''; logs=[];
+  const token=document.getElementById('tokenInput').value.trim();
+
+  /* 단일 검색 */
+  if(currentMode==='single'){
+    const raw=document.getElementById('singleIdInput').value.trim();
+    if(!raw){errEl.textContent='⚠ 제품 ID를 입력해주세요.';return;}
+
+    /* 비교 검색 — 같은 제품 ID를 두 기간으로 나눠 조회 후 나란히 비교 */
+    if(compareMode){
+      const s1=document.getElementById('singleStartDate').value;
+      const e1=document.getElementById('singleEndDate').value;
+      const s2=document.getElementById('compareStartDate2').value;
+      const e2=document.getElementById('compareEndDate2').value;
+      if(!s1||!e1||!s2||!e2){errEl.textContent='⚠ 비교할 두 기간을 모두 입력해주세요.';return;}
+      const s1Ms=new Date(s1).getTime(), e1Ms=new Date(e1).getTime()+59999;
+      const s2Ms=new Date(s2).getTime(), e2Ms=new Date(e2).getTime()+59999;
+      if(s1Ms>=e1Ms){errEl.textContent='⚠ 기간 1의 종료 시간이 시작 시간보다 뒤여야 합니다.';return;}
+      if(s2Ms>=e2Ms){errEl.textContent='⚠ 기간 2의 종료 시간이 시작 시간보다 뒤여야 합니다.';return;}
+      const range1={started_at:s1.slice(0,10), finished_at:e1.slice(0,10)};
+      const range2={started_at:s2.slice(0,10), finished_at:e2.slice(0,10)};
+      setGlobalLock(true);
+      setLoading(true);
+      document.getElementById('loadingText').textContent='기간 1 데이터 수집 중…';
+      try{
+        const allItems1=await fetchAllReports(raw,range1,token,(pg,last)=>{
+          document.getElementById('loadingText').textContent='기간 1 수집 중…'+(last>1?` (${pg}/${last} 페이지)`:'');
+        });
+        document.getElementById('loadingText').textContent='기간 2 데이터 수집 중…';
+        const allItems2=await fetchAllReports(raw,range2,token,(pg,last)=>{
+          document.getElementById('loadingText').textContent='기간 2 수집 중…'+(last>1?` (${pg}/${last} 페이지)`:'');
+        });
+        // API는 날짜 단위로만 필터링되므로 시간 범위는 클라이언트에서 처리
+        const items1=allItems1.filter(item=>{
+          const d=parseFormatTime(item.format_created_time);
+          return !!d && d.getTime()>=s1Ms && d.getTime()<=e1Ms;
+        });
+        const items2=allItems2.filter(item=>{
+          const d=parseFormatTime(item.format_created_time);
+          return !!d && d.getTime()>=s2Ms && d.getTime()<=e2Ms;
+        });
+        addLog(`비교 검색 완료 — 기간1 ${items1.length}건 / 기간2 ${items2.length}건 (${elapsedText()} 소요)`,'ok');
+        renderCompareDetail(raw, items1, items2,
+          `${s1.replace('T',' ')} ~ ${e1.replace('T',' ')}`,
+          `${s2.replace('T',' ')} ~ ${e2.replace('T',' ')}`);
+      }catch(e){
+        errEl.textContent='⚠ 오류: '+e.message;
+      }finally{
+        setLoading(false);
+        setGlobalLock(false);
+      }
+      return;
+    }
+
+    const startVal=document.getElementById('singleStartDate').value;
+    const endVal=document.getElementById('singleEndDate').value;
+    const startMs=startVal?new Date(startVal).getTime():null;
+    const endMs=endVal?new Date(endVal).getTime()+59999:null;
+    if(startMs&&endMs&&startMs>=endMs){errEl.textContent='⚠ 종료 시간이 시작 시간보다 뒤여야 합니다.';return;}
+    const dateRange=getDateRange('single');
+    setGlobalLock(true);
+    setLoading(true);
+    document.getElementById('loadingText').textContent='데이터 수집 중…';
+    try{
+      const allItems=await fetchAllReports(raw,dateRange,token,(pg,last)=>{
+        const base=last>1?`데이터 수집 중… (${pg}/${last} 페이지)`:'데이터 수집 중…';
+        const rt=remainingText(pg,last);
+        document.getElementById('loadingText').textContent=rt?`${base}  (${rt})`:base;
+      });
+      // API는 날짜 단위로만 필터링되므로 시간 범위는 클라이언트에서 처리
+      const items=allItems.filter(item=>{
+        const d=parseFormatTime(item.format_created_time);
+        if(!d) return false;
+        if(startMs&&d.getTime()<startMs) return false;
+        if(endMs&&d.getTime()>endMs) return false;
+        return true;
+      });
+      addLog(`단일 검색 완료 — 수집 ${allItems.length}건 / 시간 필터 후 ${items.length}건 (${elapsedText()} 소요)`,'ok');
+      renderSingleDetail(raw,items);
+    }catch(e){
+      errEl.textContent='⚠ 오류: '+e.message;
+    }finally{
+      setLoading(false);
+      setGlobalLock(false);
+    }
+    return;
+  }
+
+  /* 영역 점검 */
+  if(currentMode==='zone'){
+    if(selectedZones.size===0){errEl.textContent='⚠ 영역을 하나 이상 선택해주세요.';return;}
+    const zoneIds=[];
+    selectedZones.forEach(i=>{ if(sheetZones[i]) zoneIds.push(...sheetZones[i].ids); });
+    const dedupedIds=[...new Set(zoneIds)];
+    resultZoneGroups=groupIdsByZone(dedupedIds); // 결과를 먼지 포집처럼 영역별로 묶어서 보여줌
+    await runInspection(dedupedIds);
+    return;
+  }
+  resultZoneGroups=null; // 범위/단일 검색은 기존처럼 영역 구분 없이 표시
+
+  /* 범위 검색 */
+  const domStartRaw    = document.getElementById('domStartId').value.trim()||'A001';
+  const domEndRaw      = document.getElementById('domEndId').value.trim();
+  const globalStartRaw = document.getElementById('globalStartId').value.trim()||'G001';
+  const globalEndRaw   = document.getElementById('globalEndId').value.trim();
+
+  function buildRange(startRaw, endRaw, label){
+    const s=parseId(startRaw), e=parseId(endRaw);
+    if(!s||!e){errEl.textContent=`⚠ ${label} ID 형식이 잘못되었습니다.`;return null;}
+    if(s.prefix!==e.prefix){errEl.textContent=`⚠ ${label} 시작/끝 ID 접두사가 같아야 합니다.`;return null;}
+    if(s.num>e.num){errEl.textContent=`⚠ ${label} 끝 ID가 시작 ID보다 작습니다.`;return null;}
+    const padLen=Math.max(s.padLen,e.padLen);
+    const ids=[];
+    for(let n=s.num;n<=e.num;n++) ids.push(formatId(s.prefix,n,padLen));
+    return ids;
+  }
+
+  let rangeIds=[];
+  if(domEndRaw){
+    const ids=buildRange(domStartRaw, domEndRaw, '국내');
+    if(ids===null) return;
+    rangeIds.push(...ids);
+    lsSet(LS_ENDID, domEndRaw);
+  }
+  if(globalEndRaw){
+    const ids=buildRange(globalStartRaw, globalEndRaw, '글로벌');
+    if(ids===null) return;
+    rangeIds.push(...ids);
+    lsSet(LS_GLOBAL_ENDID, globalEndRaw);
+  }
+
+  const allIds=[...new Set([...rangeIds,...extraIds])];
+  if(allIds.length===0){errEl.textContent='⚠ 점검할 ID가 없습니다.';return;}
+  await runInspection(allIds);
+}
+
+/* ===== 페이지 전환 (점검 / 히스토리) ===== */
+function switchPage(page){
+  currentPage=page;
+  document.getElementById('pageTabInspection').classList.toggle('active', page==='inspection');
+  document.getElementById('pageTabChecklist').classList.toggle('active', page==='checklist');
+  document.getElementById('pageTabHistory').classList.toggle('active', page==='history');
+  document.getElementById('inspectionPage').style.display = page==='inspection' ? '' : 'none';
+  document.getElementById('checklistPage').style.display = page==='checklist' ? '' : 'none';
+  document.getElementById('historyPage').style.display = page==='history' ? '' : 'none';
+  // 히스토리/점검표 페이지는 모바일 고정 버튼이 없어 body의 넉넉한 padding-bottom(80px)이 불필요 —
+  // 그대로 두면 그리드/폼 높이를 아무리 정확히 맞춰도 그 여유분만큼 페이지 자체 스크롤(더블 스크롤)이 남음
+  document.body.classList.toggle('history-page-active', page==='history');
+  document.body.classList.toggle('checklist-page-active', page==='checklist');
+  // 히스토리 탭에 들어올 때마다 최신 데이터로 동기화 (당일 점검 후 바로 확인 못했을 수 있으므로 캐시된 월도 강제 재조회)
+  if(page==='history') loadHistoryMonths(true);
+  if(page==='checklist') initChecklistDate();
+}
+
+/* ===== 점검표 (현장 체크리스트 폼) =====
+   구글 폼처럼 한 화면에서 항목을 채우고 제출하면 GAS를 통해 구글 시트(구글 드라이브 내)에 한 행으로
+   저장된다. 1차 버전 — 사진 첨부는 제외, 추후 필요 시 확장 */
+function initChecklistDate(){
+  const d=document.getElementById('clDate');
+  if(d && !d.value) d.value=todayStr();
+  // 점검자 이름은 각자 개인 폰으로 점검을 진행하므로, 이 기기에서 마지막으로 제출했던 이름을 자동으로 채워둠
+  const insp=document.getElementById('clInspector');
+  if(insp && !insp.value){
+    const last=lsGet(LS_CL_INSPECTOR,'');
+    if(last) insp.value=last;
+  }
+  // 풍속 측정 그룹의 초기 data-value가 아직 안 잡혀있으면(최초 진입) "미실시"로 세팅 — 이미 값이
+  // 있으면(다른 탭 갔다가 돌아온 경우 등) 사용자가 고른 값을 건드리지 않음
+  const windGroup=document.getElementById('clWindTest');
+  if(windGroup && !windGroup.dataset.value) clResetWindTestDefault();
+  // 점검 구분도 마찬가지로 기본값 "정기"를 세팅 — 대부분의 점검이 정기 점검이라 매번 누르지 않게 함
+  const typeGroup=document.getElementById('clType');
+  if(typeGroup && !typeGroup.dataset.value) clResetTypeDefault();
+}
+function clResetTypeDefault(){
+  const group=document.getElementById('clType');
+  if(!group) return;
+  group.dataset.value='정기';
+  const btns=group.querySelectorAll('.checklist-toggle-btn');
+  btns.forEach(b=>b.classList.remove('on-ok','on-bad','on-sel'));
+  if(btns[0]) btns[0].classList.add('on-sel');
+}
+// 사용률/포집량/풍속 입력란 — type=number만으로는 일부 모바일 브라우저(한글 IME 등)에서 숫자 아닌
+// 문자가 섞여 들어가는 경우가 있어(예: "222ㅇ"), text+inputmode로 바꾸고 입력할 때마다 숫자 아닌
+// 문자를 직접 걸러낸다. maxVal이 있으면 그 값을 넘지 않게 자름(사용률 0~100%용). allowDecimal이면
+// 소수점 하나까지 허용(풍속 m/s용)
+function clSanitizeNumberInput(el,maxVal,allowDecimal){
+  let cleaned=el.value.replace(allowDecimal?/[^0-9.]/g:/[^0-9]/g,'');
+  if(allowDecimal){
+    const parts=cleaned.split('.');
+    if(parts.length>2) cleaned=parts[0]+'.'+parts.slice(1).join('');
+  }
+  if(maxVal!=null&&cleaned!==''){
+    const n=parseFloat(cleaned);
+    if(!isNaN(n)&&n>maxVal) cleaned=String(maxVal);
+  }
+  if(cleaned!==el.value) el.value=cleaned;
+}
+// 정상/이상, OK/NO, 정기/수시/긴급 등 단일 선택 토글 그룹 — 같은 그룹 내 클릭된 버튼만 강조되고
+// group의 data-value 속성에 선택값을 보관한다(제출 시 여기서 읽음).
+// issueFieldId를 주면 "이상"(또는 NO) 선택 시에만 그 이상 부분 입력란을 보여주고, "정상"으로
+// 돌아가면 다시 숨기면서 값도 비운다 — 필수는 아니고 이상일 때만 작성 가능하게 하기 위함
+function clSetToggle(groupId,value,btnEl,cls,issueFieldId){
+  const group=document.getElementById(groupId);
+  if(!group) return;
+  group.dataset.value=value;
+  group.querySelectorAll('.checklist-toggle-btn').forEach(b=>b.classList.remove('on-ok','on-bad','on-sel'));
+  btnEl.classList.add(cls||((value==='정상'||value==='OK')?'on-ok':'on-bad'));
+  if(issueFieldId){
+    const isBad=(value==='이상'||value==='NO');
+    const el=document.getElementById(issueFieldId);
+    if(el){
+      el.style.display=isBad?'block':'none';
+      if(!isBad) el.value='';
+    }
+  }
+}
+// 풍속 측정 — 기본값은 "미실시"(선택 사항이라 안 재도 제출 막히지 않음). "실시" 선택 시에만
+// 측정 위치/풍속 입력 줄이 보임. 여러 지점을 잴 수 있어 줄을 계속 추가할 수 있게 함
+function clSelectWindTest(value,btnEl){
+  clSetToggle('clWindTest',value,btnEl,'on-sel');
+  const detail=document.getElementById('clWindTestDetail');
+  if(detail) detail.style.display=value==='실시'?'block':'none';
+  const rowsWrap=document.getElementById('clWindTestRows');
+  if(value==='실시'){
+    if(rowsWrap&&!rowsWrap.children.length) clAddWindTestRow();
+  } else if(rowsWrap){
+    rowsWrap.innerHTML='';
+  }
+}
+function clAddWindTestRow(){
+  const wrap=document.getElementById('clWindTestRows');
+  if(!wrap) return;
+  const row=document.createElement('div');
+  row.className='checklist-wind-row';
+  row.innerHTML=
+    '<input type="text" class="checklist-input" placeholder="측정 위치 (예: 매트 상단)"/>'+
+    '<input type="text" inputmode="decimal" class="checklist-input" placeholder="풍속 (m/s)" oninput="clSanitizeNumberInput(this,null,true)"/>'+
+    '<button type="button" class="cl-wind-row-remove" onclick="clRemoveWindTestRow(this)" title="삭제"><span class="material-icons-round" style="font-size:18px">close</span></button>';
+  wrap.appendChild(row);
+  clUpdateWindRowRemoveButtons();
+}
+// 실시 상태에선 측정 줄이 최소 1개는 남아있어야 해서, 남은 줄이 1개면 삭제 버튼을 숨김
+function clRemoveWindTestRow(btnEl){
+  const wrap=document.getElementById('clWindTestRows');
+  if(!wrap||wrap.children.length<=1) return;
+  btnEl.closest('.checklist-wind-row')?.remove();
+  clUpdateWindRowRemoveButtons();
+}
+function clUpdateWindRowRemoveButtons(){
+  const wrap=document.getElementById('clWindTestRows');
+  if(!wrap) return;
+  const rows=wrap.querySelectorAll('.checklist-wind-row');
+  rows.forEach(row=>{
+    const btn=row.querySelector('.cl-wind-row-remove');
+    if(btn) btn.style.display=rows.length>1?'flex':'none';
+  });
+}
+function clCollectWindTestRows(){
+  const wrap=document.getElementById('clWindTestRows');
+  if(!wrap) return[];
+  return[...wrap.querySelectorAll('.checklist-wind-row')].map(row=>{
+    const inputs=row.querySelectorAll('input');
+    return{location:(inputs[0]?.value||'').trim(), speed:(inputs[1]?.value||'').trim()};
+  }).filter(r=>r.location||r.speed);
+}
+function clWindTestSummaryText(){
+  return clCollectWindTestRows().map(r=>`${r.location||'-'}: ${r.speed||'-'}m/s`).join(', ');
+}
+// 페이지 로드/새 점검표 작성 시 풍속 측정을 항상 "미실시"로 되돌린다 — HTML 초기 상태와 맞춰줌
+function clResetWindTestDefault(){
+  const group=document.getElementById('clWindTest');
+  if(!group) return;
+  group.dataset.value='미실시';
+  const btns=group.querySelectorAll('.checklist-toggle-btn');
+  btns.forEach(b=>b.classList.remove('on-ok','on-bad','on-sel'));
+  if(btns[0]) btns[0].classList.add('on-sel');
+  const detail=document.getElementById('clWindTestDetail');
+  if(detail) detail.style.display='none';
+  const rowsWrap=document.getElementById('clWindTestRows');
+  if(rowsWrap) rowsWrap.innerHTML='';
+}
+const CL_USAGE_RATE_IDS=['clBagRate','clHepaRate','clMotorRate'];
+// LED/LCD 제품 표시 방식 선택 — 헷갈리지 않도록 선택된 쪽의 점검 항목만 보여주고 다른 쪽은 숨김.
+// LCD 모뎀 통신상태, 소모품 사용률(%)은 전부 LCD 화면에서 확인하는 값이라 LED 제품엔 애초에
+// 표시/입력할 방법이 없음 — 그래서 LCD 선택 시에만 노출·입력 가능하게 함
+function clSelectDisplayType(type,btnEl){
+  clSetToggle('clDisplayType',type,btnEl,'on-sel');
+  const ledSection=document.getElementById('clLedSection');
+  const lcdSection=document.getElementById('clLcdSection');
+  const commSection=document.getElementById('clCommSection');
+  if(ledSection) ledSection.style.display=type==='LED'?'block':'none';
+  if(lcdSection) lcdSection.style.display=type==='LCD'?'block':'none';
+  if(commSection) commSection.style.display=type==='LCD'?'block':'none';
+  CL_USAGE_RATE_IDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.disabled=type!=='LCD';
+    if(type!=='LCD') el.value='';
+  });
+  clUpdateInputDoneAvailability();
+}
+// 포집량 측정(저울로 무게 재는 것)은 LED/LCD와 무관하게 언제든 가능하므로 "소모품 교체"만 누르면
+// 입력 가능 — 다만 "집진기에 입력 완료"는 LCD 화면에 실제로 입력하는 행위라 LCD 제품일 때만 가능
+let clReplaceActive=false;
+function clUpdateInputDoneAvailability(){
+  const inputDone=document.getElementById('clInputDone');
+  if(!inputDone) return;
+  const displayType=document.getElementById('clDisplayType')?.dataset.value||'';
+  const enable=clReplaceActive&&displayType==='LCD';
+  inputDone.disabled=!enable;
+  if(!enable) inputDone.checked=false;
+}
+function clToggleConsumableReplace(){
+  clReplaceActive=!clReplaceActive;
+  const btn=document.getElementById('clReplaceToggleBtn');
+  const weightEl=document.getElementById('clBagWeight');
+  if(weightEl){
+    weightEl.disabled=!clReplaceActive;
+    if(!clReplaceActive) weightEl.value='';
+  }
+  clUpdateInputDoneAvailability();
+  if(btn){
+    btn.classList.toggle('on-sel',clReplaceActive);
+    btn.textContent=clReplaceActive?'소모품 교체 (진행 중 — 다시 누르면 취소)':'소모품 교체';
+  }
+}
+function collectChecklistData(){
+  const val=id=>(document.getElementById(id)?.value||'').trim();
+  const tog=id=>document.getElementById(id)?.dataset.value||'';
+  return{
+    savedAt:new Date().toISOString(),
+    location:val('clLocation'), date:val('clDate'), inspector:val('clInspector'), type:tog('clType'),
+    ballResult:tog('clBallResult'), ballIssue:val('clBallIssue'),
+    matResult:tog('clMatResult'), matIssue:val('clMatIssue'),
+    springResult:tog('clSpringResult'), springIssue:val('clSpringIssue'),
+    windTest:tog('clWindTest'), windTestDetail:clWindTestSummaryText(),
+    hoseResult:tog('clHoseResult'), hoseIssue:val('clHoseIssue'),
+    powerResult:tog('clPowerResult'), powerIssue:val('clPowerIssue'),
+    sensorResult:tog('clSensorResult'), sensorIssue:val('clSensorIssue'),
+    displayType:tog('clDisplayType'),
+    ledResult:tog('clLedResult'), ledIssue:val('clLedIssue'),
+    lcdResult:tog('clLcdResult'), lcdIssue:val('clLcdIssue'),
+    commResult:tog('clCommResult'), commIssue:val('clCommIssue'),
+    airSensorResult:tog('clAirSensorResult'), airSensorIssue:val('clAirSensorIssue'),
+    bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'),
+    bagWeight:val('clBagWeight'), inputDone:document.getElementById('clInputDone')?.checked||false,
+    remark:val('clRemark')
+  };
+}
+// 체크(정상/이상, OK/NO 등)가 안 된 점검 항목을 찾아 라벨 목록으로 반환 — 빈 배열이면 전부 체크된 것
+function getChecklistMissingItems(){
+  const tog=id=>document.getElementById(id)?.dataset.value||'';
+  const val=id=>(document.getElementById(id)?.value||'').trim();
+  const missing=[];
+  if(!val('clLocation')) missing.push('점검 장소');
+  if(!val('clDate')) missing.push('점검 일자');
+  if(!tog('clType')) missing.push('점검 구분 (정기/수시/긴급)');
+  if(!tog('clBallResult')) missing.push('매트 ① 볼 상태 점검');
+  if(!tog('clMatResult')) missing.push('매트 ② 상판/경사면');
+  if(!tog('clSpringResult')) missing.push('매트 ③ 스프링 상태 점검');
+  if(!tog('clHoseResult')) missing.push('매트 ⑤ 호스 상태 점검');
+  if(!tog('clPowerResult')) missing.push('집진기 ① 전원 및 동작상태');
+  if(!tog('clSensorResult')) missing.push('집진기 ② 센서 상태');
+  const displayType=tog('clDisplayType');
+  if(!displayType) missing.push('집진기 표시 방식 선택 (LED/LCD)');
+  else if(displayType==='LED'&&!tog('clLedResult')) missing.push('집진기 ③ LED 표시상태');
+  else if(displayType==='LCD'){
+    if(!tog('clLcdResult')) missing.push('집진기 ③ LCD 표시상태');
+    if(!tog('clCommResult')) missing.push('집진기 ④ 통신상태');
+    if(!tog('clAirSensorResult')) missing.push('집진기 ④ 공기질 센서 상태');
+  }
+  return missing;
+}
+// 소모품 교체를 진행하고 포집량까지 측정해놓고 "집진기 입력 완료"를 안 누르면, 포집량을
+// 안 입력한 것으로 간주한다 — 절대 누락되면 안 되는 항목이라 일반 누락 목록과 별개로 전용 안내를 띄움.
+// "집진기 입력 완료"는 LCD 제품에서만 가능한 항목이라(LED는 체크박스 자체가 비활성화됨), LCD일 때만 검사
+function checklistHasUncheckedBagWeight(){
+  const weight=(document.getElementById('clBagWeight')?.value||'').trim();
+  const inputDone=document.getElementById('clInputDone')?.checked;
+  const displayType=document.getElementById('clDisplayType')?.dataset.value||'';
+  return clReplaceActive&&displayType==='LCD'&&!!weight&&!inputDone;
+}
+// 빈 값(입력 안 한 필드)은 전송 데이터에서 빼서 전송량을 줄인다 — GAS 쪽은 없는 키를 그대로 빈 값으로
+// 취급하므로(data.xxx || '') 동작에는 차이가 없음
+function compactChecklistData(data){
+  const out={};
+  Object.keys(data).forEach(k=>{
+    const v=data[k];
+    if(v===''||v==null||v===false) return;
+    out[k]=v;
+  });
+  return out;
+}
+function setChecklistFormLocked(locked){
+  const form=document.getElementById('checklistForm');
+  if(form) form.classList.toggle('checklist-form-locked',locked);
+}
+// 제출 1건당 하나로 고정되는 ID — 자동 재시도뿐 아니라 사용자가 실패 후 "제출하기"를 다시 눌러도
+// 같은 값을 재사용한다(새 점검표 작성 시에만 초기화됨). 서버가 이 ID로 중복 저장을 걸러내므로,
+// 응답을 못 받아 오류가 떠도 재시도/재클릭이 실제로는 절대 중복 행을 만들지 않는다
+let clCurrentSubmissionId=null;
+function clGetOrCreateSubmissionId(){
+  if(!clCurrentSubmissionId) clCurrentSubmissionId='cl'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  return clCurrentSubmissionId;
+}
+// 요청이 응답 없이 무한정 걸리는 걸 막기 위한 타임아웃 래퍼
+async function clFetchWithTimeout(url,opts,timeoutMs){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{ return await fetch(url,{...opts,signal:controller.signal}); }
+  finally{ clearTimeout(timer); }
+}
+// 모바일 환경 특성상 응답이 유실되는 경우가 있어, 같은 요청을 최대 attempts번까지 자동 재시도한다.
+// clientSubmissionId가 매 시도 동일하므로 서버 쪽에서 중복 저장 없이 안전하게 재시도할 수 있다
+async function clPostChecklist(payload,attempts){
+  let lastErr;
+  for(let i=1;i<=attempts;i++){
+    try{
+      const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+        body:JSON.stringify(payload)},15000);
+      const text=await res.text();
+      return JSON.parse(text); // GAS가 HTML(로그인/권한 오류 페이지 등)을 반환하면 여기서 실패 → 재시도
+    }catch(e){
+      lastErr=e;
+      if(i<attempts) await new Promise(r=>setTimeout(r,900*i));
+    }
+  }
+  throw lastErr;
+}
+async function submitChecklist(){
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  if(checklistHasUncheckedBagWeight()){
+    alert('해당 항목은 특이 케이스로 집진기에 포집량 입력 완료 체크가 되어있지 않습니다.\n반드시 집진기에 포집량 입력을 진행해주시기 바랍니다.');
+    return;
+  }
+  const missing=getChecklistMissingItems();
+  if(missing.length){
+    alert('다음 항목이 누락되었습니다:\n\n'+missing.map(m=>'· '+m).join('\n'));
+    return;
+  }
+  const data=compactChecklistData(collectChecklistData());
+  const btn=document.getElementById('clSubmitBtn');
+  btn.disabled=true; btn.textContent='제출 중…';
+  setChecklistFormLocked(true); // 제출 중엔 다른 항목 수정 못 하게 폼 전체 잠금
+  try{
+    const clientSubmissionId=clGetOrCreateSubmissionId();
+    const json=await clPostChecklist({action:'submitChecklist',clientSubmissionId,...data},3);
+    if(json.success){
+      if(data.inspector) lsSet(LS_CL_INSPECTOR,data.inspector); // 이 기기의 다음 점검표 작성 시 자동으로 채워지도록 기억
+      document.getElementById('checklistForm').style.display='none';
+      document.getElementById('checklistSuccess').style.display='block';
+      openChecklistPhotoModal();
+    } else {
+      alert('제출 실패: '+(json.error||'오류'));
+      btn.disabled=false; btn.textContent='제출하기';
+      setChecklistFormLocked(false);
+    }
+  }catch(e){
+    alert('네트워크가 불안정해 서버 응답을 받지 못했습니다 (3회 재시도함).\n이미 저장됐을 수 있으니, "제출하기"를 다시 눌러도 중복 저장되지 않습니다 — 안심하고 다시 눌러주세요.');
+    btn.disabled=false; btn.textContent='제출하기';
+    setChecklistFormLocked(false);
+  }
+}
+function resetChecklistForm(){
+  document.getElementById('checklistSuccess').style.display='none';
+  clCurrentSubmissionId=null; // 새 점검표는 새로운 제출 ID를 쓰도록 초기화
+  const form=document.getElementById('checklistForm');
+  form.style.display='block';
+  setChecklistFormLocked(false); // 이전 제출 성공 시 잠긴 채로 숨겨졌을 수 있어 새 작성 시작 전에 반드시 풀어줌
+  form.querySelectorAll('input[type=text],input[type=number],input[type=date],textarea').forEach(el=>el.value='');
+  const inputDone=document.getElementById('clInputDone');
+  if(inputDone) inputDone.checked=false;
+  form.querySelectorAll('.checklist-toggle-group').forEach(g=>delete g.dataset.value);
+  form.querySelectorAll('.checklist-toggle-btn').forEach(b=>b.classList.remove('on-ok','on-bad','on-sel'));
+  form.querySelectorAll('.cl-issue-field').forEach(el=>{ el.style.display='none'; }); // "이상" 눌렀을 때만 보이던 입력란 다시 숨김
+  const ledSection=document.getElementById('clLedSection');
+  const lcdSection=document.getElementById('clLcdSection');
+  const commSection=document.getElementById('clCommSection');
+  if(ledSection) ledSection.style.display='none';
+  if(lcdSection) lcdSection.style.display='none';
+  if(commSection) commSection.style.display='none';
+  clReplaceActive=false;
+  const weightEl=document.getElementById('clBagWeight');
+  if(weightEl){ weightEl.disabled=true; weightEl.value=''; }
+  CL_USAGE_RATE_IDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){ el.disabled=true; el.value=''; }
+  });
+  clUpdateInputDoneAvailability();
+  const replaceBtn=document.getElementById('clReplaceToggleBtn');
+  if(replaceBtn) replaceBtn.textContent='소모품 교체';
+  const btn=document.getElementById('clSubmitBtn');
+  btn.disabled=false; btn.textContent='제출하기';
+  initChecklistDate();
+}
+// 제출 완료 직후 — 현장 사진(LCD/먼지봉투 포집량)을 예시와 같은 형식으로 찍어 점검 단톡방에
+// 공유해달라고 안내하는 팝업
+function openChecklistPhotoModal(){
+  document.getElementById('checklistPhotoModal').style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function closeChecklistPhotoModal(){
+  document.getElementById('checklistPhotoModal').style.display='none';
+  document.body.style.overflow='';
+}
+function checklistPhotoModalOverlayClick(e){
+  if(e.target===document.getElementById('checklistPhotoModal')) closeChecklistPhotoModal();
+}
+
+/* ===== 점검 히스토리 ===== */
+function loadHistoryMonths(forceReload){
+  const sel=document.getElementById('historyMonthSel');
+  if(!historyMonths.length){
+    sel.innerHTML='<option value="">(월 데이터 없음)</option>';
+    document.getElementById('historyEmptyMsg').style.display='block';
+    document.getElementById('historyEmptyMsg').textContent='표시할 데이터가 없습니다. 월을 선택하거나 시트 데이터를 새로고침 해주세요.';
+    document.getElementById('historyGridScroll').style.display='none';
+    return;
+  }
+  const ordered=[...historyMonths].reverse(); // 최신 월 먼저
+  const prevVal=sel.value;
+  sel.innerHTML=ordered.map(m=>`<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+  const target=ordered.includes(prevVal)?prevVal:ordered[0];
+  sel.value=target;
+  if(forceReload || historyLoadedMonth!==target) loadHistoryGrid(target);
+}
+
+async function loadHistoryGrid(sheetName){
+  if(!sheetName) return;
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  const scrollEl=document.getElementById('historyGridScroll');
+  const emptyEl=document.getElementById('historyEmptyMsg');
+  scrollEl.style.display='none'; emptyEl.style.display='block'; emptyEl.textContent='불러오는 중…';
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'getMonthGrid', sheetName})});
+    const json=await res.json();
+    if(!json.success){ emptyEl.textContent='불러오기 실패: '+(json.error||'오류'); return; }
+    historyGridData=json;
+    historyLoadedMonth=sheetName;
+    historyFilterQ='';
+    historyDayFilterIdx=-1;
+    document.getElementById('historySearchInput').value='';
+    populateHistoryDaySelect();
+    renderHistoryGrid();
+  }catch(e){
+    emptyEl.textContent='오류: '+e.message;
+  }
+}
+
+// "07.13(월)" 형식의 시트 원본 헤더를 "07/13(월)" 표기로 변환
+function formatHistHeader(raw){
+  return String(raw==null?'':raw).replace(/^(\d{1,2})\.(\d{1,2})/, '$1/$2');
+}
+
+function populateHistoryDaySelect(){
+  const sel=document.getElementById('historyDaySel');
+  if(!sel) return;
+  const dates=historyGridData?historyGridData.dates:[];
+  sel.innerHTML='<option value="">전체 일자</option>'+
+    dates.map((d,i)=>`<option value="${i}">${escHtml(formatHistHeader(d))}</option>`).join('');
+  sel.value='';
+}
+
+function filterHistoryDay(val){
+  historyDayFilterIdx=(val===''||val==null)?-1:parseInt(val,10);
+  renderHistoryGrid();
+}
+
+function historyCellInfo(raw){
+  const v=String(raw==null?'':raw).trim();
+  if(!v) return {cls:'hist-blank', label:''};
+  const up=v.toUpperCase();
+  if(up==='OK') return {cls:'hist-ok', label:'OK'};
+  if(up==='NO') return {cls:'hist-no', label:'NO'};
+  if(up==='EM') return {cls:'hist-em', label:'EM'};
+  if(up==='PM') return {cls:'hist-pm', label:'PM'};
+  return {cls:'hist-excl', label:v}; // 유지보수X / 설치X 등 제외 사유
+}
+
+// 일자별 OK/NO/EM/PM/제외 개수 통계 — 현재 검색/일자 필터가 적용된 행·열 기준으로 집계
+const HIST_STAT_ROWS=[
+  {key:'ok',   label:'정상(OK)',  cls:'ok'},
+  {key:'no',   label:'통신오류(NO)', cls:'no'},
+  {key:'em',   label:'센서오류(EM)', cls:'em'},
+  {key:'pm',   label:'먼지오류(PM)', cls:'pm'},
+  {key:'excl', label:'제외',      cls:'excl'},
+  {key:'problem', label:'문제 합(NO+EM+PM)', cls:'problem'}
+];
+const HIST_STAT_ROW_H=28; // px — 아래 통계 행 top 오프셋 계산과 CSS의 고정 높이가 반드시 일치해야 함
+
+function computeHistoryStats(rows, colIdxs){
+  return colIdxs.map(colIdx=>{
+    const c={ok:0,no:0,em:0,pm:0,excl:0};
+    rows.forEach(r=>{
+      const info=historyCellInfo(r.values[colIdx]);
+      if(info.cls==='hist-ok') c.ok++;
+      else if(info.cls==='hist-no') c.no++;
+      else if(info.cls==='hist-em') c.em++;
+      else if(info.cls==='hist-pm') c.pm++;
+      else if(info.cls==='hist-excl') c.excl++;
+    });
+    c.problem=c.no+c.em+c.pm;
+    return c;
+  });
+}
+
+function renderHistoryGrid(){
+  const scrollEl=document.getElementById('historyGridScroll');
+  const emptyEl=document.getElementById('historyEmptyMsg');
+  const table=document.getElementById('historyGridTable');
+  if(!historyGridData){ scrollEl.style.display='none'; emptyEl.style.display='block'; return; }
+  const q=historyFilterQ.trim().toLowerCase();
+  const rows=historyGridData.rows.filter(r=>{
+    if(!q) return true;
+    const zone=(sheetZones.find(z=>z.ids.includes(r.id))||{}).name||'';
+    const loc=productLocations[r.id]||'';
+    return r.id.toLowerCase().includes(q)||zone.toLowerCase().includes(q)||loc.toLowerCase().includes(q);
+  }).sort((a,b)=>a.id.localeCompare(b.id));
+  if(!rows.length){
+    scrollEl.style.display='none'; emptyEl.style.display='block'; emptyEl.textContent='표시할 데이터가 없습니다.';
+    return;
+  }
+  emptyEl.style.display='none'; scrollEl.style.display='block';
+  const allDates=historyGridData.dates;
+  const colIdxs=historyDayFilterIdx>=0 && historyDayFilterIdx<allDates.length
+    ? [historyDayFilterIdx] : allDates.map((_,i)=>i);
+
+  // 통계 행(일자별 OK/NO/EM/PM/제외/문제합) — 아래 제품 그리드와 열이 정확히 같은 폭으로 시작하도록
+  // 같은 table 안에 sticky 헤더 행으로 쌓는다. 각 행이 HIST_STAT_ROW_H(px) 고정 높이이므로
+  // top 오프셋을 행 인덱스 × 높이로 직접 계산해 인라인으로 지정한다.
+  const stats=computeHistoryStats(rows, colIdxs);
+  // "문제 합" 열 중 최댓값(1건 이상)이 있는 날짜를 한눈에 짚을 수 있게 강조 — 행 높이는 그대로 유지
+  const maxProblem=Math.max(0,...stats.map(s=>s.problem));
+  const statRowsHtml=HIST_STAT_ROWS.map((sr,ri)=>{
+    const top=ri*HIST_STAT_ROW_H;
+    const cells=stats.map(s=>{
+      const isPeak=sr.key==='problem'&&maxProblem>0&&s[sr.key]===maxProblem;
+      return `<th class="hist-stat-th hist-stat-${sr.cls}${isPeak?' hist-stat-peak':''}" style="top:${top}px">${s[sr.key]}</th>`;
+    }).join('');
+    return `<tr class="hist-stat-row"><th class="hist-th-id hist-stat-label-th" style="top:${top}px">${escHtml(sr.label)}</th>${cells}</tr>`;
+  }).join('');
+  const headerTop=HIST_STAT_ROWS.length*HIST_STAT_ROW_H;
+  const dateHeaderHtml=`<tr><th class="hist-th-id" style="top:${headerTop}px">제품 ID</th>${colIdxs.map(i=>`<th style="top:${headerTop}px">${escHtml(formatHistHeader(allDates[i]))}</th>`).join('')}</tr>`;
+  const thead=`<thead>${statRowsHtml}${dateHeaderHtml}</thead>`;
+
+  const tbody='<tbody>'+rows.map(r=>{
+    const zone=(sheetZones.find(z=>z.ids.includes(r.id))||{}).name||'';
+    const loc=[zone,productLocations[r.id]||''].filter(Boolean).join(' · ');
+    const cells=colIdxs.map(i=>{
+      const info=historyCellInfo(r.values[i]);
+      return `<td class="hist-td ${info.cls}" title="${escHtml(info.label)}">${escHtml(info.label)}</td>`;
+    }).join('');
+    return `<tr><td class="hist-td-id"><div class="hist-id">${escHtml(r.id)}</div><div class="hist-loc">${escHtml(loc)||'—'}</div></td>${cells}</tr>`;
+  }).join('')+'</tbody>';
+  table.innerHTML=thead+tbody;
+}
+
+function filterHistoryGrid(q){
+  historyFilterQ=q||'';
+  renderHistoryGrid();
+}
+
+/* ===== 주간 점검 요청서 ===== */
+function populateRequesterSelect(){
+  requesterList=lsGet(LS_REQUESTERS,[]);
+  const sel=document.getElementById('wrRequesterSel');
+  const last=lsGet(LS_LAST_REQUESTER,'');
+  if(!requesterList.length){
+    sel.innerHTML='<option value="">(등록된 요청자 없음 — 아래에서 추가)</option>';
+    return;
+  }
+  sel.innerHTML=requesterList.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  sel.value=requesterList.includes(last)?last:requesterList[0];
+}
+
+function addRequester(){
+  const input=document.getElementById('wrRequesterInput');
+  const name=input.value.trim();
+  if(!name) return;
+  if(!requesterList.includes(name)) requesterList.push(name);
+  lsSet(LS_REQUESTERS, requesterList);
+  input.value='';
+  populateRequesterSelect();
+  document.getElementById('wrRequesterSel').value=name;
+}
+
+function removeSelectedRequester(){
+  const sel=document.getElementById('wrRequesterSel');
+  const name=sel.value;
+  if(!name) return;
+  if(!confirm(`'${name}' 요청자를 목록에서 삭제하시겠습니까?`)) return;
+  requesterList=requesterList.filter(n=>n!==name);
+  lsSet(LS_REQUESTERS, requesterList);
+  populateRequesterSelect();
+}
+
+async function openWeeklyReportModal(){
+  if(window.innerWidth<=768){ alert('점검 요청서 생성은 PC 환경에서만 지원됩니다.'); return; }
+  if(!adminAuthenticated){ alert('관리자 인증이 필요합니다.'); return; }
+  if(new Date().getDay()!==1){ alert('점검 요청서는 매주 월요일에만 생성할 수 있습니다.'); return; }
+  if(!GAS_URL){ alert('GAS_URL이 설정되지 않았습니다.'); return; }
+  populateRequesterSelect();
+  document.getElementById('weeklyReportModal').style.display='flex';
+  document.getElementById('wrLoading').style.display='block';
+  document.getElementById('wrContent').style.display='none';
+  weeklyDraft=null;
+  try{
+    const asOfDate=todayStr();
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'getWeeklyReportDraft', asOfDate})});
+    const json=await res.json();
+    if(!json.success){ alert('요청서 초안 조회 실패: '+(json.error||'오류')); closeWeeklyReportModal(); return; }
+    weeklyDraft=json;
+    renderWeeklyReportPreview();
+  }catch(e){
+    alert('오류: '+e.message);
+    closeWeeklyReportModal();
+  }
+}
+
+function closeWeeklyReportModal(){
+  document.getElementById('weeklyReportModal').style.display='none';
+}
+function weeklyReportOverlayClick(e){
+  if(e.target.id==='weeklyReportModal') closeWeeklyReportModal();
+}
+
+function wrLocText(it){
+  return [it.zone, it.loc].filter(Boolean).join(' · ')||'—';
+}
+
+function wrRowHtml(it, idx){
+  return `<tr class="${it.isNew?'wr-new-row':''}">
+    <td>${idx+1}</td>
+    <td>${escHtml(it.since)}</td>
+    <td>${escHtml(it.id)}</td>
+    <td>${escHtml(wrLocText(it))}</td>
+    <td class="wr-code wr-code-${it.code.toLowerCase()}">${it.code}</td>
+    <td>${it.isNew?'<span class="wr-new-badge">신규</span> ':''}
+      <input type="text" class="wr-remark-input" data-id="${escHtml(it.id)}" placeholder="비고"/></td>
+  </tr>`;
+}
+
+function renderWeeklyReportPreview(){
+  document.getElementById('wrLoading').style.display='none';
+  document.getElementById('wrContent').style.display='block';
+  const items=weeklyDraft.items||[];
+  const overdue=weeklyDraft.overdueItems||[];
+  const newCount=items.filter(i=>i.isNew).length;
+  document.getElementById('wrSummary').innerHTML=
+    `<b>${escHtml(weeklyDraft.asOfDate)}</b> 기준 · 총 <b>${items.length}</b>건 (오늘 신규 <b>${newCount}</b>건) — 30일 이상 지속 <b>${overdue.length}</b>건은 하단에 별도 표시`;
+  document.getElementById('wrTable').innerHTML=
+    `<thead><tr><th>순번</th><th>오류 발생 시점</th><th>제품 ID</th><th>설치 장소</th><th>오류 코드</th><th>비고</th></tr></thead>
+     <tbody>${items.length?items.map((it,i)=>wrRowHtml(it,i)).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text4)">현재 문제 상태인 제품이 없습니다.</td></tr>'}</tbody>`;
+  const overdueSection=document.getElementById('wrOverdueSection');
+  if(overdue.length){
+    overdueSection.style.display='block';
+    document.getElementById('wrOverdueTitle').textContent=`${weeklyDraft.asOfDate} 기준 한달 이상된 항목 리스트`;
+    document.getElementById('wrOverdueTable').innerHTML=
+      `<thead><tr><th>순번</th><th>오류 발생 시점</th><th>제품 ID</th><th>설치 장소</th><th>오류 코드</th></tr></thead>
+       <tbody>${overdue.map((it,i)=>`<tr><td>${i+1}</td><td>${escHtml(it.since)}</td><td>${escHtml(it.id)}</td><td>${escHtml(wrLocText(it))}</td><td class="wr-code wr-code-${it.code.toLowerCase()}">${it.code}</td></tr>`).join('')}</tbody>`;
+  } else {
+    overdueSection.style.display='none';
+  }
+}
+
+// ex.xlsx 샘플 서식(글꼴/테두리/열너비/행높이/병합)을 최대한 그대로 재현
+async function exportWeeklyReportXlsx(){
+  if(!weeklyDraft) return;
+  const requester=document.getElementById('wrRequesterSel').value;
+  if(!requester){ alert('요청자를 선택하거나 추가해주세요.'); return; }
+  if(typeof ExcelJS==='undefined'){ alert('ExcelJS 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.'); return; }
+  lsSet(LS_LAST_REQUESTER, requester);
+
+  const remarkMap={};
+  document.querySelectorAll('.wr-remark-input').forEach(inp=>{ remarkMap[inp.dataset.id]=inp.value.trim(); });
+  const items=(weeklyDraft.items||[]).map(it=>({...it, remark: remarkMap[it.id]||''}));
+  const overdue=(weeklyDraft.overdueItems||[]).map(it=>({...it, remark: remarkMap[it.id]||''}));
+  const CODE_COLOR={EM:'FF0070C0', PM:'FFFF0000'};
+  const HILITE={type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFFCC'}};
+  const FONT='함초롬돋움';
+  const center={horizontal:'center',vertical:'middle'};
+  const border=(cell,t,b,l,r)=>{ cell.border={
+    top:t?{style:t}:undefined, bottom:b?{style:b}:undefined,
+    left:l?{style:l}:undefined, right:r?{style:r}:undefined
+  };};
+  const dataRow=(ws,vals,isLastInBox)=>{
+    const row=ws.addRow(vals);
+    const bStyle=isLastInBox?'medium':'thin';
+    const cB=row.getCell('B'); cB.font={name:FONT,bold:true,size:12}; cB.alignment=center;
+    border(cB,'thin',bStyle,'medium','thin');
+    const cC=row.getCell('C'); cC.font={name:FONT,size:11}; cC.alignment=center;
+    border(cC,'thin',bStyle,'thin','thin');
+    const cD=row.getCell('D'); cD.font={name:FONT,size:12}; cD.alignment=center;
+    border(cD,'thin',bStyle,'thin','thin');
+    const cE=row.getCell('E'); cE.font={name:FONT,size:12}; cE.alignment=center;
+    border(cE,'thin',bStyle,'thin','thin');
+    const cF=row.getCell('F');
+    const codeFont={name:FONT,bold:true,size:12};
+    if(CODE_COLOR[vals[5]]) codeFont.color={argb:CODE_COLOR[vals[5]]};
+    cF.font=codeFont; cF.alignment=center;
+    border(cF,'thin',bStyle,'thin','thin');
+    const cG=row.getCell('G'); cG.font={name:FONT,size:12}; cG.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    border(cG,'thin',bStyle,'thin','medium');
+    row.height=30;
+    return row;
+  };
+
+  const btn=document.getElementById('wrExportBtn');
+  btn.disabled=true; btn.textContent='생성 중…';
+  try{
+    const wb=new ExcelJS.Workbook();
+    const ws=wb.addWorksheet('점검 요청서');
+    ws.columns=[{width:1.6},{width:5.6},{width:15.6},{width:8.6},{width:45.6},{width:10.6},{width:25.6}];
+
+    const r0=ws.addRow([]); r0.height=10; // 최상단 여백
+
+    const r1=ws.addRow(['','집진기 점검 요청서']);
+    r1.getCell('B').font={name:FONT,bold:true,size:24};
+    r1.getCell('B').alignment=center;
+    r1.height=20;
+    const r1b=ws.addRow([]); r1b.height=40;
+    ws.mergeCells(`B${r1.number}:G${r1b.number}`);
+
+    const r2=ws.addRow(['', `요청일 : ${weeklyDraft.asOfDate}\n요청자 : ${requester}`]);
+    ws.mergeCells(`B${r2.number}:D${r2.number}`);
+    const infoCell=r2.getCell('B');
+    infoCell.font={name:FONT,bold:true,size:12};
+    infoCell.alignment={horizontal:'left',vertical:'middle',wrapText:true};
+    const legendCell=r2.getCell('E');
+    legendCell.value='NO - 통신 오류 or 전원 꺼짐\nEM - 먼지 센서 오류\nPM - 먼지 농도 오류';
+    legendCell.font={name:FONT,bold:true,size:11};
+    legendCell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    legendCell.fill=HILITE;
+    border(legendCell,'thin','thin','thin','thin');
+    r2.height=50;
+
+    const r3=ws.addRow(['', '점검   제품   목록', '', '', '', '점검 제품 합', items.length]);
+    ws.mergeCells(`B${r3.number}:E${r3.number}`);
+    const labelCell=r3.getCell('B');
+    labelCell.font={name:FONT,bold:true,size:14}; labelCell.alignment=center;
+    border(labelCell,'medium','thin','medium','thin');
+    const sumLabelCell=r3.getCell('F');
+    sumLabelCell.font={name:FONT,bold:true,size:10}; sumLabelCell.alignment=center;
+    border(sumLabelCell,'medium','thin','thin','thin');
+    const sumValCell=r3.getCell('G');
+    sumValCell.font={name:FONT,bold:true,size:12}; sumValCell.alignment=center;
+    border(sumValCell,'medium','thin','thin','medium');
+    r3.height=30;
+
+    const r4=ws.addRow(['', '순번','오류 발생 시점','제품 ID','설치 장소','오류 코드','비고']);
+    ['B','C','D','E','F','G'].forEach(col=>{
+      const c=r4.getCell(col);
+      c.font={name:FONT,bold:true,size:12}; c.alignment=center;
+      border(c,null,'thin', col==='B'?'medium':'thin', col==='G'?'medium':'thin');
+    });
+    r4.height=25;
+
+    if(items.length){
+      items.forEach((it,idx)=>{
+        const row=dataRow(ws, ['', idx+1, it.since, it.id, wrLocText(it), it.code, (it.isNew?'[신규] ':'')+it.remark], idx===items.length-1);
+        if(it.isNew){
+          ['B','C','D','E','F','G'].forEach(col=>{ row.getCell(col).fill=HILITE; });
+        }
+      });
+    } else {
+      const row=ws.addRow(['','','','현재 문제 상태인 제품이 없습니다.']);
+      ws.mergeCells(`B${row.number}:G${row.number}`);
+      row.getCell('B').font={name:FONT,size:11}; row.getCell('B').alignment=center;
+      border(row.getCell('B'),'thin','medium','medium','medium');
+    }
+
+    if(overdue.length){
+      const spacer=ws.addRow([]); spacer.height=10;
+      const rt=ws.addRow(['', `${weeklyDraft.asOfDate} 기준 한달 이상된 항목 리스트`]);
+      ws.mergeCells(`B${rt.number}:G${rt.number}`);
+      const titleCell=rt.getCell('B');
+      titleCell.font={name:FONT,size:12}; titleCell.alignment=center;
+      border(titleCell,'medium','medium','medium','medium');
+      rt.height=30;
+
+      overdue.forEach((it,idx)=>{
+        dataRow(ws, ['', idx+1, it.since, it.id, wrLocText(it), it.code, it.remark], idx===overdue.length-1);
+      });
+
+      const rs=ws.addRow(['','','','','','한달 이상 합',overdue.length]);
+      rs.getCell('F').font={name:FONT,bold:true,size:10}; rs.getCell('F').alignment=center;
+      rs.getCell('G').font={name:FONT,bold:true,size:12}; rs.getCell('G').alignment=center;
+    }
+
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`집진기_점검요청서_${weeklyDraft.asOfDate.replace(/-/g,'.')}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+
+    const saveRes=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'saveWeeklyReport', date:weeklyDraft.asOfDate, requester, items:[...items,...overdue]})});
+    const saveJson=await saveRes.json();
+    if(saveJson.success){
+      addLog(`주간 점검 요청서 생성 및 이력 저장 완료 (${saveJson.saved}건)`,'ok');
+    } else {
+      addLog('요청서는 다운로드됐지만 이력 저장에 실패했습니다: '+(saveJson.error||'오류'),'warn');
+    }
+    closeWeeklyReportModal();
+  }catch(e){
+    alert('요청서 생성 중 오류: '+e.message);
+  }
+  btn.disabled=false; btn.innerHTML='<span class="material-icons-round ico">file_download</span>다운로드 + 저장';
+}
+
+/* ===== 초기화 ===== */
+(function init(){
+  cleanOldDustCache();
+  initDustMonthPicker();
+  document.getElementById('footerVersion').textContent=APP_VERSION;
+  document.getElementById('footerDate').textContent='Updated '+APP_DATE;
+  setGlobalLock(false);
+  const storedTheme=lsGet(LS_THEME,null);
+  const systemPrefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const savedTheme=storedTheme||(systemPrefersDark?'dark':'light');
+  document.documentElement.setAttribute('data-theme',savedTheme);
+  document.getElementById('themeIcon').textContent=savedTheme==='dark'?'light_mode':'dark_mode';
+
+  const savedAuthLevel=lsGet(LS_ADMIN_AUTH,null);
+  if(savedAuthLevel==='super'||savedAuthLevel==='admin'){
+    adminAuthenticated=true;
+    superAdminAuthenticated=(savedAuthLevel==='super');
+    _applyAdminAuthedUI(savedAuthLevel);
+  }
+
+  productLocations=lsGet(LS_PROD_LOCS,{});
+
+  // 단일 검색 기본 날짜+시간 (전일 00:00 ~ 금일 23:59)
+  document.getElementById('singleStartDate').value=yesterdayStr()+'T00:00';
+  document.getElementById('singleEndDate').value=todayStr()+'T23:59';
+
+  extraIds=lsGet(LS_EXTRA,[]);
+  dustExtraIds=lsGet(LS_DUST_EXTRA,[]);
+  excludeReasons=lsGet(LS_EXCLUDE,{});
+  renderDustExtraTags();
+  const savedDomEnd=lsGet(LS_ENDID,'');
+  if(savedDomEnd) document.getElementById('domEndId').value=savedDomEnd;
+  const savedGlobalEnd=lsGet(LS_GLOBAL_ENDID,'');
+  if(savedGlobalEnd) document.getElementById('globalEndId').value=savedGlobalEnd;
+  renderExtraTags();
+  renderExcludeTags();
+
+  compareMode=lsGet(LS_COMPARE_MODE,false);
+  applyCompareModeUI();
+
+  const savedMode=lsGet(LS_MODE,'range');
+  switchMode(savedMode);
+
+  const addRestrictedInput=(id)=>{
+    const el=document.getElementById(id);
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'){startInspection();return;}restrictIdInput(e);});
+    el.addEventListener('paste',e=>{
+      e.preventDefault();
+      const cleaned=(e.clipboardData||window.clipboardData).getData('text').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+      el.value=cleaned;
+    });
+  };
+  addRestrictedInput('domStartId');
+  addRestrictedInput('domEndId');
+  addRestrictedInput('globalStartId');
+  addRestrictedInput('globalEndId');
+
+  document.getElementById('extraIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')addExtraId();});
+  document.getElementById('dustExtraIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')addDustExtraId();});
+  document.getElementById('excludeIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')addExcludeId();});
+  document.getElementById('excludeZoneSearchInput')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.target.value='';filterExcludeZones();}});
+  document.getElementById('singleIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')startInspection();});
+  document.getElementById('dustZoneSearchInput')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.target.value='';filterDustZones();}});
+  document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')authenticateAdmin();});
+  document.getElementById('peNewId').addEventListener('keydown',e=>{if(e.key==='Enter')addProductToSheet();});
+  document.getElementById('wrRequesterInput').addEventListener('keydown',e=>{if(e.key==='Enter')addRequester();});
+  document.getElementById('historySearchInput').addEventListener('keydown',e=>{if(e.key==='Escape'){e.target.value='';filterHistoryGrid('');}});
+
+  requesterList=lsGet(LS_REQUESTERS,[]);
+
+  // 단일 검색 날짜 변경 시 dateInfo 업데이트
+  document.getElementById('singleStartDate').addEventListener('change',updateDateInfo);
+  document.getElementById('singleEndDate').addEventListener('change',updateDateInfo);
+
+  // GAS 시트에서 영역/설치장소 로드 (캐시 사용)
+  loadSheetData();
+
+  // 모바일 먼지 모달 스와이프 닫기
+  const modalBox=document.getElementById('dustModalBox');
+  let swipeStartY=-1;
+  modalBox.addEventListener('touchstart',e=>{
+    if(e.target.closest('.dust-modal-body')){swipeStartY=-1;return;}
+    swipeStartY=e.touches[0].clientY;
+  },{passive:true});
+  modalBox.addEventListener('touchmove',e=>{
+    if(swipeStartY<0) return;
+    const dy=Math.max(0,e.touches[0].clientY-swipeStartY);
+    modalBox.style.transition='none';
+    modalBox.style.transform=`translateY(${dy}px)`;
+  },{passive:true});
+  modalBox.addEventListener('touchend',e=>{
+    if(swipeStartY<0) return;
+    const dy=e.changedTouches[0].clientY-swipeStartY;
+    modalBox.style.transition='transform 0.25s cubic-bezier(0.32,0.72,0,1)';
+    if(dy>80){
+      modalBox.style.transform='translateY(100%)';
+      setTimeout(()=>{closeDustModal();modalBox.style.transform='';modalBox.style.transition='';},260);
+    } else {
+      modalBox.style.transform='';
+      setTimeout(()=>{modalBox.style.transition='';},260);
+    }
+  });
+
+  // 카드 상세 모달 스와이프 닫기
+  const cardDetailBox=document.getElementById('cardDetailModalBox');
+  let cdSwipeY=-1;
+  cardDetailBox.addEventListener('touchstart',e=>{
+    if(e.target.closest('.dust-modal-body')){cdSwipeY=-1;return;}
+    cdSwipeY=e.touches[0].clientY;
+  },{passive:true});
+  cardDetailBox.addEventListener('touchmove',e=>{
+    if(cdSwipeY<0) return;
+    const dy=Math.max(0,e.touches[0].clientY-cdSwipeY);
+    cardDetailBox.style.transition='none';
+    cardDetailBox.style.transform=`translateY(${dy}px)`;
+  },{passive:true});
+  cardDetailBox.addEventListener('touchend',e=>{
+    if(cdSwipeY<0) return;
+    const dy=e.changedTouches[0].clientY-cdSwipeY;
+    cardDetailBox.style.transition='transform 0.25s cubic-bezier(0.32,0.72,0,1)';
+    if(dy>80){
+      cardDetailBox.style.transform='translateY(100%)';
+      setTimeout(()=>{closeCardDetailModal();cardDetailBox.style.transform='';cardDetailBox.style.transition='';},260);
+    } else {
+      cardDetailBox.style.transform='';
+      setTimeout(()=>{cardDetailBox.style.transition='';},260);
+    }
+  });
+
+  // 맨 위로 FAB 스크롤 감지
+  const fab=document.getElementById('scrollTopFab');
+  window.addEventListener('scroll',()=>{
+    fab.style.display=window.scrollY>280?'flex':'none';
+  },{passive:true});
+})();
+

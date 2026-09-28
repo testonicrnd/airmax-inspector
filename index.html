@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="https://airmax.testonic.co.kr/favicon.ico" type="image/x-icon" sizes="16x16">
+<title>AIRMAX 제품 점검</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin/>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"/>
+<!-- Factory 디자인 시스템 폰트 — 라틴/숫자 "계기판" 라벨(버전, OK/NO/EM/PM 코드, 날짜 등)에만 사용.
+     한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
+<link rel="stylesheet" href="style.css?v=2.10.0"/>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-bar-wrap"><div class="loading-bar" id="loadingBar"></div></div>
+  <div class="loading-text" id="loadingText">데이터 수집 중…</div>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-top">
+      <span class="logo">AIRMAX</span>
+      <span class="subtitle">점검 대시보드</span>
+    </div>
+    <div class="date-info" id="dateInfo"></div>
+  </div>
+  <div class="page-tabs" id="pageTabs">
+    <button class="page-tab active" id="pageTabInspection" onclick="switchPage('inspection')">점검</button>
+    <button class="page-tab" id="pageTabChecklist" onclick="switchPage('checklist')">점검표</button>
+    <button class="page-tab" id="pageTabHistory" style="display:none" onclick="switchPage('history')">히스토리</button>
+  </div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+    <span class="material-icons-round theme-icon" id="themeIcon">dark_mode</span>
+  </button>
+</div>
+
+<div id="inspectionPage">
+<div class="controls">
+  <!-- API 토큰 (숨김) -->
+  <input type="hidden" id="tokenInput" value="1|WrmwJU8n5mrF0oO0cYlPiGYR40N1txioHrpUXgSM0ab1084c"/>
+
+  <!-- 관리자 비밀번호 -->
+  <div class="admin-row">
+    <label style="min-width:80px">관리자 PW</label>
+    <span class="pw-input-wrap">
+      <input type="password" class="admin-pw-input" id="adminPwInput" placeholder="관리자 비밀번호 입력"/>
+      <button type="button" class="pw-toggle-btn" id="adminPwToggleBtn" onclick="toggleAdminPwVisibility()" title="비밀번호 표시/숨김" tabindex="-1"><span class="material-icons-round ico-solo" style="font-size:15px">visibility</span></button>
+    </span>
+    <button class="btn-ghost" onclick="authenticateAdmin()">인증</button>
+    <button class="btn-ghost" id="deauthBtn" style="display:none" onclick="deauthAdmin()">해제</button>
+    <span class="admin-auth-badge" id="adminAuthBadge"></span>
+  </div>
+  <!-- 관리자 액션 버튼 (인증 후 표시) -->
+  <div class="admin-actions-row" id="adminActionsRow" style="display:none">
+    <button class="btn-admin-action" onclick="toggleProductEditor()"><span class="material-icons-round ico">inventory_2</span>제품 편집</button>
+    <button type="button" class="overdue-badge" id="overdueBadge" style="display:none" onclick="openOverdueBadgeModal()"></button>
+  </div>
+
+  <!-- 제품 편집 (관리자 전용) — 시트 연동 -->
+  <div class="product-editor-section" id="productEditorSection" style="display:none">
+    <div class="section-label" style="font-size:12px;margin-bottom:8px">제품 편집 (구글 시트 연동)</div>
+    <div class="pe-toolbar">
+      <select id="peZoneFilter" onchange="renderProductEditor()">
+        <option value="">전체 영역</option>
+      </select>
+      <input type="text" id="peSearch" placeholder="ID 또는 장소 검색…" oninput="renderProductEditor()"/>
+      <button class="pe-btn" id="peEditModeBtn" onclick="toggleEditMode()" style="white-space:nowrap"><span class="material-icons-round ico">edit</span>전체 편집</button>
+    </div>
+    <div class="pe-bulk-bar" id="peBulkBar" style="display:none">
+      <span id="peBulkStatus" style="font-size:11px;color:var(--text3)">편집 모드 — 수정 후 일괄 저장</span>
+      <button class="pe-btn save" onclick="bulkSaveProducts()"><span class="material-icons-round ico">save</span>일괄 저장</button>
+      <button class="pe-btn" onclick="exitEditMode()">취소</button>
+    </div>
+    <div class="pe-list" id="peList"></div>
+    <div class="pe-add-form">
+      <input type="text" id="peNewId" placeholder="A000" maxlength="4"
+        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"/>
+      <select id="peNewZone">
+        <option value="">영역 선택 / 직접 입력</option>
+      </select>
+      <input type="text" id="peNewZoneCustom" placeholder="영역명 직접 입력 (선택 시 무시)"
+        style="display:none"/>
+      <input type="text" id="peNewLoc" placeholder="설치 장소 (선택)"/>
+      <button class="btn-add" onclick="addProductToSheet()">+ 추가</button>
+    </div>
+    <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
+      <input type="checkbox" id="peNewZoneCustomToggle" onchange="toggleNewZoneCustom()"/>
+      <label for="peNewZoneCustomToggle" style="font-size:11px;color:var(--text3);cursor:pointer">새 영역 직접 입력</label>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <div class="section-label" style="margin-bottom:6px">제품 검색</div>
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabRange"  onclick="switchMode('range')">범위</button>
+    <button class="mode-tab"        id="tabSingle" onclick="switchMode('single')">단일</button>
+    <button class="mode-tab"        id="tabZone"   onclick="switchMode('zone')">영역 지정</button>
+    <button class="mode-tab"        id="tabDust"   onclick="switchMode('dust')">먼지 포집</button>
+  </div>
+
+  <!-- 범위 검색 -->
+  <div id="panelRange">
+    <div class="range-panel-grid">
+      <div>
+        <div class="section-label" style="margin-bottom:6px">국내 버전
+          <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — A001 형식</span>
+        </div>
+        <div class="row">
+          <label>시작 ID</label>
+          <input type="text" class="id-input" id="domStartId" placeholder="A001" maxlength="4" value="A001"/>
+          <span class="dash">—</span>
+          <label>끝 ID</label>
+          <input type="text" class="id-input" id="domEndId" placeholder="A000" maxlength="4"/>
+        </div>
+      </div>
+      <div>
+        <div class="section-label" style="margin-bottom:6px">글로벌 버전
+          <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — G001 형식</span>
+        </div>
+        <div class="row">
+          <label>시작 ID</label>
+          <input type="text" class="id-input" id="globalStartId" placeholder="G001" maxlength="4" value="G001"/>
+          <span class="dash">—</span>
+          <label>끝 ID</label>
+          <input type="text" class="id-input" id="globalEndId" placeholder="G000" maxlength="4"/>
+        </div>
+      </div>
+      <hr class="divider range-panel-divider"/>
+      <div>
+        <div class="section-label" style="margin-bottom:6px">개별 추가 ID
+          <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — Demo, Lab0 등 특수 ID</span>
+        </div>
+        <div class="extra-ids-row" id="extraTagsRow"></div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" class="extra-id-input" id="extraIdInput" placeholder="예: Demo, Lab0  (쉼표 구분 가능)"/>
+          <button class="btn-add" onclick="addExtraId()">+ 추가</button>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" style="margin:10px 0"/>
+
+    <div>
+      <div class="section-label" style="margin-bottom:6px">개별 제외 ID
+        <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — 점검은 하되 시트에 사유로 저장. 영역째로 고르거나 ID를 직접 입력</span>
+      </div>
+      <div class="extra-ids-row" id="excludeTagsRow"></div>
+
+      <div class="zone-header" style="margin-top:8px">
+        <span class="zone-search-wrap">
+          <span class="material-icons-round zone-search-icon">search</span>
+          <input type="text" class="zone-search-input" id="excludeZoneSearchInput"
+            placeholder="영역명 검색 (예: 시청역)"
+            oninput="filterExcludeZones()"/>
+        </span>
+        <select class="list-filter-sel" id="excludeReasonSel" style="flex-shrink:0" title="영역 클릭 시 적용될 제외 사유">
+          <option value="유지보수X">유지보수X</option>
+          <option value="설치X">설치X</option>
+          <option value="기타">기타</option>
+        </select>
+        <button class="btn-zone-toggle" id="excludeZoneToggleBtn" onclick="toggleExcludeZoneGrid()">
+          <span>펼치기</span>
+          <span class="zone-toggle-arrow" id="excludeZoneArrow">▼</span>
+        </button>
+        <button class="btn-zone-toggle" onclick="refreshSheetData()" title="시트에서 영역 목록 새로고침" style="padding:6px 10px"><span class="material-icons-round ico">refresh</span>영역 새로고침</button>
+        <span class="zone-select-count" id="excludeZoneSelectCount" style="margin-left:auto">제외된 영역 없음</span>
+      </div>
+      <div class="zone-grid-wrap" id="excludeZoneGridWrap">
+        <div class="zone-grid" id="excludeZoneGrid"></div>
+        <div class="zone-no-result" id="excludeZoneNoResult" style="display:none">검색 결과가 없습니다.</div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <input type="text" class="extra-id-input" id="excludeIdInput" placeholder="예: A005, A010  (쉼표 구분 가능)"/>
+        <button class="btn-add" onclick="addExcludeId()">+ ID 추가</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 단일 검색 -->
+  <div id="panelSingle" style="display:none">
+    <div class="section-label" style="margin-bottom:6px">단일 제품 ID 검색</div>
+    <div class="row">
+      <label>제품 ID</label>
+      <input type="text" class="id-input" id="singleIdInput" placeholder="A001" style="width:140px"/>
+      <label style="margin-left:8px;min-width:auto" id="singlePeriodLabel">기간</label>
+      <input type="datetime-local" id="singleStartDate" style="width:210px"/>
+      <span class="dash" style="font-size:14px">~</span>
+      <input type="datetime-local" id="singleEndDate" style="width:210px"/>
+      <button class="btn-show-all" id="singleShowAllBtn" onclick="toggleSingleShowAll()">한 페이지로 보기</button>
+      <button class="btn-show-all" id="compareModeBtn" onclick="toggleCompareMode()" title="같은 제품의 두 기간을 나란히 비교">비교 검색</button>
+    </div>
+    <div class="row" id="comparePeriod2Row" style="display:none;margin-top:8px">
+      <label style="min-width:auto">기간 2</label>
+      <input type="datetime-local" id="compareStartDate2" style="width:210px"/>
+      <span class="dash" style="font-size:14px">~</span>
+      <input type="datetime-local" id="compareEndDate2" style="width:210px"/>
+    </div>
+  </div>
+
+  <!-- 영역 지정 -->
+  <div id="panelZone" style="display:none">
+    <div class="zone-header">
+      <div class="section-label" style="margin-bottom:0">영역 선택
+        <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — 복수 선택 가능</span>
+      </div>
+      <span class="zone-search-wrap">
+        <span class="material-icons-round zone-search-icon">search</span>
+        <input type="text" class="zone-search-input" id="zoneSearchInput"
+          placeholder="영역명 검색 (예: 시청역)"
+          oninput="filterZones(this.value)"/>
+      </span>
+      <div class="zone-lang-filter" id="zoneLangFilter">
+        <button type="button" class="zone-lang-btn active" data-lang="ALL" onclick="setZoneLangFilter('ALL')">전체</button>
+        <button type="button" class="zone-lang-btn" data-lang="KO" onclick="setZoneLangFilter('KO')">한국어</button>
+        <button type="button" class="zone-lang-btn" data-lang="ZH" onclick="setZoneLangFilter('ZH')">중국어</button>
+        <button type="button" class="zone-lang-btn" data-lang="JA" onclick="setZoneLangFilter('JA')">일본어</button>
+      </div>
+      <button class="btn-zone-toggle" id="zoneToggleBtn" onclick="toggleZoneGrid()">
+        <span>펼치기</span>
+        <span class="zone-toggle-arrow" id="zoneArrow">▼</span>
+      </button>
+      <button class="btn-zone-toggle" id="zoneRefreshBtn" onclick="refreshSheetData()" title="시트에서 영역 목록 새로고침" style="padding:6px 10px"><span class="material-icons-round ico">refresh</span>영역 새로고침</button>
+    </div>
+
+    <div class="zone-grid-wrap" id="zoneGridWrap">
+      <div class="zone-grid" id="zoneGrid"></div>
+      <div class="zone-no-result" id="zoneNoResult" style="display:none">검색 결과가 없습니다.</div>
+      <button class="btn-ghost" style="font-size:11px;padding:5px 10px;margin-top:8px" onclick="clearZones()">선택 해제</button>
+    </div>
+
+    <div class="zone-select-row">
+      <span class="zone-select-count" id="zoneSelectCount">선택된 영역 없음</span>
+    </div>
+  </div>
+
+  <!-- 먼지 포집 검색 -->
+  <div id="panelDust" style="display:none">
+    <div id="dustSearchArea" style="display:none">
+      <div id="dustPeriodRow" class="row" style="margin-bottom:10px;align-items:center;gap:6px;flex-wrap:wrap">
+        <label style="font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:500;color:var(--text3)">조회 기간</label>
+        <select id="dustStartMonth" class="list-filter-sel" style="min-width:130px;" onchange="onDustStartMonthChange()"></select>
+        <span style="font-size:12px;color:var(--text3);font-weight:500">~</span>
+        <select id="dustEndMonth" class="list-filter-sel" style="min-width:130px;"></select>
+      </div>
+      <div id="dustTodayOnlyNote" style="display:none;font-size:12px;color:var(--text3);padding:0 0 10px">
+        모바일에서는 <strong>당일</strong> 데이터만 조회됩니다. 전체 기간 조회는 관리자 인증이 필요합니다.
+      </div>
+      <hr class="divider" style="margin:0 0 10px"/>
+      <div class="zone-header">
+        <div class="section-label" style="margin-bottom:0">영역 선택
+          <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — 복수 선택 가능</span>
+        </div>
+        <span class="zone-search-wrap">
+          <span class="material-icons-round zone-search-icon">search</span>
+          <input type="text" class="zone-search-input" id="dustZoneSearchInput"
+            placeholder="영역명 검색 (예: 시청역)"
+            oninput="filterDustZones()"/>
+        </span>
+        <div class="zone-lang-filter" id="dustZoneLangFilter">
+          <button type="button" class="zone-lang-btn active" data-lang="ALL" onclick="setDustZoneLangFilter('ALL')">전체</button>
+          <button type="button" class="zone-lang-btn" data-lang="KO" onclick="setDustZoneLangFilter('KO')">한국어</button>
+          <button type="button" class="zone-lang-btn" data-lang="ZH" onclick="setDustZoneLangFilter('ZH')">중국어</button>
+          <button type="button" class="zone-lang-btn" data-lang="JA" onclick="setDustZoneLangFilter('JA')">일본어</button>
+        </div>
+        <button class="btn-zone-toggle" id="dustZoneToggleBtn" onclick="toggleDustZoneGrid()">
+          <span>펼치기</span>
+          <span class="zone-toggle-arrow" id="dustZoneArrow">▼</span>
+        </button>
+        <button class="btn-zone-toggle" onclick="refreshSheetData()" title="시트에서 영역 목록 새로고침" style="padding:6px 10px"><span class="material-icons-round ico">refresh</span>영역 새로고침</button>
+      </div>
+      <div class="zone-grid-wrap" id="dustZoneGridWrap">
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="btn-sm" onclick="selectAllDustZones()">전체 선택</button>
+          <button class="btn-sm" onclick="clearAllDustZones()">전체 해제</button>
+        </div>
+        <div class="zone-grid" id="dustZonePickerGrid"></div>
+        <div class="zone-no-result" id="dustZoneNoResult" style="display:none">검색 결과가 없습니다.</div>
+      </div>
+      <div class="zone-select-row">
+        <span class="zone-select-count" id="dustZoneSelectInfo">선택된 영역 없음</span>
+      </div>
+      <hr class="divider" style="margin:10px 0"/>
+      <div class="section-label" style="margin-bottom:6px">개별 추가 ID
+        <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text4)"> — Demo, Lab0 등 특수 ID</span>
+      </div>
+      <div class="extra-ids-row" id="dustExtraTagsRow"></div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" class="extra-id-input" id="dustExtraIdInput" placeholder="예: Demo, Lab0  (쉼표 구분 가능)"/>
+        <button class="btn-add" onclick="addDustExtraId()">+ 추가</button>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <div class="row">
+    <button class="btn-primary" id="runBtn" onclick="startInspection()">점검 시작</button>
+    <button class="btn-primary" id="dustRangeBtn" style="display:none" onclick="startDustSearch()">먼지 포집 데이터 조회</button>
+    <button class="btn-sheet" id="saveSheetBtn" style="display:none" onclick="saveToSheet()">시트에 저장</button>
+    <button class="btn-ghost" id="logBtn" style="display:none" onclick="toggleLog()">로그 보기</button>
+  </div>
+  <div class="error-msg" id="errorMsg"></div>
+</div>
+
+<div class="debug-box" id="debugBox" style="display:none"></div>
+
+<!-- 단일 검색 결과 -->
+<div id="singleResultSection" style="display:none; padding:20px 32px;">
+  <div class="single-detail-header">
+    <div class="single-detail-title" id="singleDetailTitle"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="pg-info" id="singlePageInfo"></div>
+      <button class="btn-copy" id="singleCopyBtn" onclick="copySingleToClipboard()" style="display:none"><span class="material-icons-round ico">content_copy</span>전체 복사</button>
+    </div>
+  </div>
+  <!-- 차트 -->
+  <div class="single-charts-row">
+    <div class="single-chart-panel">
+      <div class="single-chart-panel-label">미세먼지 / 이산화탄소 (PM10 · PM2.5 / CO₂)</div>
+      <div class="single-chart-wrap"><canvas id="singleChartDust"></canvas></div>
+    </div>
+    <div class="single-chart-panel">
+      <div class="single-chart-panel-label">가동 횟수 / 가동 시간</div>
+      <div class="single-chart-wrap"><canvas id="singleChartMotor"></canvas></div>
+    </div>
+  </div>
+  <!-- 테이블 -->
+  <div class="single-detail-scroll">
+    <table class="single-detail-table">
+      <colgroup><col/><col/><col/><col/></colgroup>
+      <thead>
+        <tr><th>수집 시간</th><th>PM10</th><th>PM2.5</th><th>CO₂</th></tr>
+      </thead>
+      <tbody id="singleDetailBody"></tbody>
+    </table>
+  </div>
+  <!-- 페이지네이션 -->
+  <div class="single-pagination" id="singlePagination"></div>
+</div>
+
+<!-- 단일 검색 - 기간 비교 결과 -->
+<div id="compareResultSection" style="display:none; padding:20px 32px;">
+  <div class="single-detail-header">
+    <div class="single-detail-title" id="compareDetailTitle"></div>
+    <button class="btn-copy" id="compareExportBtn" onclick="exportCompareXlsx()"><span class="material-icons-round ico">file_download</span>엑셀 다운로드</button>
+  </div>
+
+  <div class="single-detail-scroll" style="margin-bottom:18px">
+    <table class="single-detail-table">
+      <thead><tr><th>항목</th><th id="compareColHead1">기간 1</th><th id="compareColHead2">기간 2</th><th>차이</th></tr></thead>
+      <tbody id="compareSummaryBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 기간 1·2 차트를 동시에 나란히 표시 (시간대 평균) -->
+  <div class="single-chart-panel-label" style="margin-bottom:6px" id="compareChartLabel1"></div>
+  <div id="compareDustMinMax1"></div>
+  <div id="compareCo2MinMax1"></div>
+  <div class="single-charts-row">
+    <div class="single-chart-panel">
+      <div class="single-chart-panel-label">미세먼지 / 이산화탄소 (PM10 · PM2.5 / CO₂)</div>
+      <div class="single-chart-wrap"><canvas id="compareChartDust1"></canvas></div>
+    </div>
+    <div class="single-chart-panel">
+      <div class="single-chart-panel-label">가동 횟수 / 가동 시간</div>
+      <div class="single-chart-wrap"><canvas id="compareChartMotor1"></canvas></div>
+    </div>
+  </div>
+
+  <div class="single-chart-panel-label" style="margin:18px 0 6px" id="compareChartLabel2"></div>
+  <div id="compareDustMinMax2"></div>
+  <div id="compareCo2MinMax2"></div>
+  <div class="single-charts-row">
+    <div class="single-chart-panel">
+      <div class="single-chart-panel-label">미세먼지 / 이산화탄소 (PM10 · PM2.5 / CO₂)</div>
+      <div class="single-chart-wrap"><canvas id="compareChartDust2"></canvas></div>
+    </div>
+    <div class="single-chart-panel">
+      <div class="single-chart-panel-label">가동 횟수 / 가동 시간</div>
+      <div class="single-chart-wrap"><canvas id="compareChartMotor2"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 원본 시간대 표는 기간을 선택해서 하나씩 확인 -->
+  <div class="section-label" style="margin:20px 0 6px">시간대별 원본 데이터</div>
+  <div class="mode-tabs" style="margin-bottom:14px">
+    <button class="mode-tab active" id="comparePeriodTab1" onclick="showComparePeriod(1)">기간 1</button>
+    <button class="mode-tab" id="comparePeriodTab2" onclick="showComparePeriod(2)">기간 2</button>
+  </div>
+  <div id="compareDetailLoading" style="text-align:center;padding:32px 0;color:var(--text3);font-size:13px"></div>
+  <div id="compareDetailWrap" style="display:none">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-align:right" id="compareDetailCount"></div>
+    <div class="single-detail-scroll">
+      <table class="single-detail-table" style="font-size:12px">
+        <colgroup>
+          <col style="width:36%"><col style="width:21.33%"><col style="width:21.33%"><col style="width:21.33%">
+        </colgroup>
+        <thead><tr><th>수집 시간</th><th>PM10<small style="display:block;font-weight:400;opacity:.7">(㎍/㎥)</small></th><th>PM2.5<small style="display:block;font-weight:400;opacity:.7">(㎍/㎥)</small></th><th>CO₂<small style="display:block;font-weight:400;opacity:.7">(ppm)</small></th></tr></thead>
+        <tbody id="compareDetailBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 먼지 포집 데이터 결과 -->
+<div id="dustResultSection" style="display:none; padding:16px 24px;">
+  <div id="dustProgressRow" style="display:none;font-size:12px;color:var(--text3);margin-bottom:10px;"></div>
+  <div class="dust-result-toolbar">
+    <input type="text" id="dustResultSearch" class="id-input" placeholder="제품 ID 또는 설치 장소 검색…" oninput="filterDustResults(this.value)" style="flex:1;max-width:240px;min-width:0"/>
+    <span id="dustResultCount" class="dzp-select-info"></span>
+  </div>
+  <div id="dustMonthCopyBar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+    <select id="dustMonthSelect" class="list-filter-sel" style="min-width:130px;max-width:180px;"></select>
+    <button id="dustMonthCopyBtn" class="pe-btn" onclick="copyDustByMonth()"><span class="material-icons-round ico">content_copy</span>월별 복사</button>
+  </div>
+  <div class="dust-cards-grid" id="dustCardsGrid"></div>
+</div>
+
+<!-- 먼지 포집 상세 모달 -->
+<div id="dustModal" class="dust-modal-overlay" style="display:none" onclick="dustModalOverlayClick(event)">
+  <div class="dust-modal-box" id="dustModalBox">
+    <div class="modal-drag-handle" id="modalDragHandle"></div>
+    <div class="dust-modal-header">
+      <span class="dust-modal-title" id="dustModalTitle"></span>
+      <button class="pe-btn" onclick="closeDustModal()"><span class="material-icons-round ico">close</span>닫기</button>
+    </div>
+    <div class="dust-modal-body">
+      <div class="dust-modal-summary" id="dustModalSummary"></div>
+      <div id="dustModalChartWrap" style="height:200px;margin:0 0 16px;">
+        <canvas id="dustModalCanvas"></canvas>
+      </div>
+      <div class="single-detail-scroll">
+        <table class="single-detail-table" style="font-size:12px">
+          <thead><tr id="dustModalHead"></tr></thead>
+          <tbody id="dustModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 30일 이상 지속오류 상세 모달 -->
+<div id="overdueBadgeModal" class="dust-modal-overlay" style="display:none" onclick="overdueBadgeOverlayClick(event)">
+  <div class="dust-modal-box" id="overdueBadgeModalBox" style="max-width:820px">
+    <div class="modal-drag-handle"></div>
+    <div class="dust-modal-header">
+      <span class="dust-modal-title">30일 이상 지속오류</span>
+      <button class="pe-btn" onclick="closeOverdueBadgeModal()"><span class="material-icons-round ico">close</span>닫기</button>
+    </div>
+    <div class="dust-modal-body">
+      <div class="single-detail-scroll">
+        <table class="single-detail-table wr-table" id="overdueBadgeTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 카드 상세 모달 -->
+<div id="cardDetailModal" class="dust-modal-overlay" style="display:none" onclick="cardDetailOverlayClick(event)">
+  <div class="dust-modal-box" id="cardDetailModalBox">
+    <div class="modal-drag-handle"></div>
+    <div class="dust-modal-header">
+      <div>
+        <div class="dust-modal-title" id="cardDetailTitle"></div>
+        <div id="cardDetailSubtitle" style="font-size:11px;color:var(--text3);margin-top:2px"></div>
+      </div>
+      <button class="pe-btn" onclick="closeCardDetailModal()"><span class="material-icons-round ico">close</span>닫기</button>
+    </div>
+    <div class="card-detail-id-tabs" id="cardDetailIdTabs"></div>
+    <div class="dust-modal-body">
+      <div class="dust-modal-summary" id="cardDetailSummary"></div>
+      <div id="cardDetailLoading" style="text-align:center;padding:32px 0;color:var(--text3);font-size:13px">데이터 불러오는 중…</div>
+      <div id="cardDetailTableWrap" style="display:none">
+        <div class="single-chart-panel" style="margin-bottom:10px">
+          <div class="single-chart-panel-label">미세먼지 / 이산화탄소 (PM10 · PM2.5 / CO₂)</div>
+          <div class="single-chart-wrap" style="min-height:180px"><canvas id="cardDetailChartDust"></canvas></div>
+        </div>
+        <div id="cardDetailDustMinMax"></div>
+        <div id="cardDetailCo2MinMax"></div>
+        <div class="single-chart-panel" style="margin:6px 0 10px">
+          <div class="single-chart-panel-label">가동 횟수 / 가동 시간</div>
+          <div class="single-chart-wrap" style="min-height:180px"><canvas id="cardDetailChartMotor"></canvas></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-align:right" id="cardDetailCount"></div>
+        <div class="single-detail-scroll">
+          <table class="single-detail-table" style="font-size:12px">
+            <colgroup>
+              <col style="width:36%"><col style="width:21.33%"><col style="width:21.33%"><col style="width:21.33%">
+            </colgroup>
+            <thead><tr><th>수집 시간</th><th>PM10<small style="display:block;font-weight:400;opacity:.7">(㎍/㎥)</small></th><th>PM2.5<small style="display:block;font-weight:400;opacity:.7">(㎍/㎥)</small></th><th>CO₂<small style="display:block;font-weight:400;opacity:.7">(ppm)</small></th></tr></thead>
+            <tbody id="cardDetailBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="summary" id="summary" style="display:none"></div>
+
+<div class="list-toolbar" id="listToolbar" style="display:none">
+  <span style="font-size:11px;color:var(--text3)">필터</span>
+  <select class="list-filter-sel" id="listFilterSel" onchange="renderList()">
+    <option value="ALL">전체</option>
+    <option value="OK">OK</option>
+    <option value="NO">NO</option>
+    <option value="EM">EM</option>
+    <option value="PM">PM</option>
+    <option value="EM_PM">EM + PM</option>
+    <option value="ERR">ERR</option>
+  </select>
+  <button class="btn-copy" onclick="copyListToClipboard()"><span class="material-icons-round ico">content_copy</span>클립보드 복사</button>
+  <span id="copyMsg" style="font-size:11px;color:var(--ok-text);display:none"><span class="material-icons-round ico-solo" style="font-size:13px;vertical-align:-2px">check</span> 복사됨</span>
+</div>
+
+<div id="preSearchHint" class="pre-search-hint">
+  <div class="psh-icon material-icons-round">sensors</div>
+  <div class="psh-title">점검을 시작하세요</div>
+  <div class="psh-desc">검색 조건을 입력한 후 점검 버튼을 눌러주세요</div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="list-view" id="listView" style="display:none">
+  <div class="list-header"><div>제품 ID</div><div>영역 / 장소</div><div>결과</div><div>수집 시간</div></div>
+  <div class="list-body" id="listBody"></div>
+</div>
+
+<!-- 모바일 고정 점검 시작 버튼 (영역 지정 모드) -->
+<div class="mobile-fixed-run" id="mobileFixedRun">
+  <div class="inner">
+    <span style="font-size:12px;color:var(--text3)" id="mobileZoneInfo">영역을 선택하세요</span>
+    <button class="btn-primary" id="mobileRunBtn" onclick="startInspection()">점검 시작</button>
+  </div>
+</div>
+</div><!-- /#inspectionPage -->
+
+<!-- ===== 점검 히스토리 페이지 (관리자 전용) ===== -->
+<div id="historyPage" style="display:none; padding:8px 24px 16px;">
+  <div class="history-toolbar">
+    <select id="historyMonthSel" class="list-filter-sel" style="min-width:130px" onchange="loadHistoryGrid(this.value)"></select>
+    <select id="historyDaySel" class="list-filter-sel" style="min-width:120px" onchange="filterHistoryDay(this.value)">
+      <option value="">전체 일자</option>
+    </select>
+    <button class="btn-ghost" id="historyRefreshBtn" onclick="loadHistoryGrid(document.getElementById('historyMonthSel').value)" title="최신 데이터로 새로고침"><span class="material-icons-round ico-solo">refresh</span></button>
+    <input type="text" id="historySearchInput" class="id-input" placeholder="제품 ID / 영역 / 설치 장소 검색…"
+      style="flex:1;max-width:260px;min-width:0" oninput="filterHistoryGrid(this.value)"/>
+    <span class="history-toolbar-spacer"></span>
+    <button class="btn-primary" id="weeklyReportBtn" onclick="openWeeklyReportModal()" title="PC 환경에서만 사용 가능합니다"><span class="material-icons-round ico">post_add</span>점검 요청서 생성</button>
+  </div>
+  <div class="history-legend">
+    <span class="hist-chip ok">OK <em>정상</em></span>
+    <span class="hist-chip no">NO <em>데이터 조회 안 됨</em></span>
+    <span class="hist-chip em">EM <em>조회 시 모든 데이터 0</em></span>
+    <span class="hist-chip pm">PM <em>먼지농도 오류(0으로 표시)</em></span>
+    <span class="hist-chip excl">제외 <em>유지보수X·설치X 등 사유 있음</em></span>
+  </div>
+  <div id="historyEmptyMsg" class="pe-empty" style="display:none">표시할 데이터가 없습니다. 월을 선택하거나 시트 데이터를 새로고침 해주세요.</div>
+  <div class="history-grid-scroll" id="historyGridScroll">
+    <table class="history-grid-table" id="historyGridTable"></table>
+  </div>
+</div>
+
+<!-- ===== 점검표 페이지 (매트/집진기/소모품 현장 점검 체크리스트) ===== -->
+<div id="checklistPage" style="display:none">
+  <div class="checklist-wrap">
+    <div id="checklistForm">
+      <div class="checklist-header">
+        <div class="checklist-title">Air Max 점검표</div>
+        <div class="checklist-desc">매트 / 집진기 / 소모품 점검 — 현장에서 작성 후 제출하면 바로 저장됩니다.</div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-q" style="padding-top:0;border-top:none">
+          <div class="checklist-q-label">점검 장소</div>
+          <input type="text" class="checklist-input" id="clLocation" placeholder="예: 시청역 3번 출구"/>
+        </div>
+        <div class="checklist-q">
+          <div class="checklist-q-label">점검 일자</div>
+          <input type="date" class="checklist-input" id="clDate"/>
+        </div>
+        <div class="checklist-q">
+          <div class="checklist-q-label">점검자</div>
+          <input type="text" class="checklist-input" id="clInspector" placeholder="이름"/>
+        </div>
+        <div class="checklist-q">
+          <div class="checklist-q-label">점검 구분</div>
+          <div class="checklist-toggle-group" id="clType">
+            <button type="button" class="checklist-toggle-btn on-sel" onclick="clSetToggle('clType','정기',this,'on-sel')">정기</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clType','수시',this,'on-sel')">수시</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clType','긴급',this,'on-sel')">긴급</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">1. 매트</div>
+        <div class="checklist-section-desc">순번 1~5 — 볼 / 매트 / 스프링 / 흡입 / 호스 상태 점검</div>
+
+        <div class="checklist-q" style="padding-top:0;border-top:none">
+          <div class="checklist-q-label">① 볼 상태 점검 (육안)</div>
+          <div class="checklist-q-hint">볼이 빠진 곳이 있는지, 상판홀 변형 확인</div>
+          <div class="checklist-toggle-group" id="clBallResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clBallResult','정상',this,null,'clBallIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clBallResult','이상',this,null,'clBallIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clBallIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">② 상판/경사면 (육안)</div>
+          <div class="checklist-q-hint">상판 및 경사면 심한 오염 및 찌그러짐, 변형, 매트 깨짐·파손 여부 확인</div>
+          <div class="checklist-toggle-group" id="clMatResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clMatResult','정상',this,null,'clMatIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clMatResult','이상',this,null,'clMatIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clMatIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">③ 스프링 상태 점검 (매트 전체를 밟아보며 확인)</div>
+          <div class="checklist-q-hint">매트를 밟았을 때 볼 복귀 여부 확인</div>
+          <div class="checklist-toggle-group" id="clSpringResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clSpringResult','정상',this,null,'clSpringIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clSpringResult','이상',this,null,'clSpringIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clSpringIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">④ 흡입력 (풍속계 사용)</div>
+          <div class="checklist-q-hint">측정을 진행했으면 "실시"를 선택하고 측정 위치와 풍속을 입력해주세요. 여러 지점을 측정했으면 "+ 측정 위치 추가"로 계속 추가할 수 있습니다. (출고 기준 풍속 32는 참고값 — 판정 기준 아님)</div>
+          <div class="checklist-toggle-group" id="clWindTest">
+            <button type="button" class="checklist-toggle-btn on-sel" onclick="clSelectWindTest('미실시',this)">미실시</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSelectWindTest('실시',this)">실시</button>
+          </div>
+          <div id="clWindTestDetail" style="display:none;margin-top:10px">
+            <div id="clWindTestRows"></div>
+            <button type="button" class="btn-add" onclick="clAddWindTestRow()">+ 측정 위치 추가</button>
+          </div>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">⑤ 호스 상태 점검 (육안)</div>
+          <div class="checklist-q-hint">집진기 연결부까지 끊어진 곳이 있는지, 바람이 새는 곳이 있는지, 브라켓에서 빠지지 않았는지 확인</div>
+          <div class="checklist-toggle-group" id="clHoseResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clHoseResult','정상',this,null,'clHoseIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clHoseResult','이상',this,null,'clHoseIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clHoseIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">2. 집진기</div>
+        <div class="checklist-section-desc">전원/동작 / 센서 / 표시상태(LED·LCD 중 선택) / 모뎀 통신 상태 점검</div>
+
+        <div class="checklist-q" style="padding-top:0;border-top:none">
+          <div class="checklist-q-label">① 전원 및 동작상태 (육안)</div>
+          <div class="checklist-q-hint">전원이 켜져 있는지, 흡입이 정상 동작하는지 확인, LED 전원이 제대로 점등되는지, LCD 화면이 제대로 켜져있는지 확인</div>
+          <div class="checklist-toggle-group" id="clPowerResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clPowerResult','정상',this,null,'clPowerIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clPowerResult','이상',this,null,'clPowerIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clPowerIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">② 센서 상태 (육안 및 시연 — 센서 통과)</div>
+          <div class="checklist-q-hint">센서 앞을 지나가거나 근접했을 때 정상적으로 감지하여 동작하는지 확인, 부착 상태 점검</div>
+          <div class="checklist-toggle-group" id="clSensorResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clSensorResult','정상',this,null,'clSensorIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clSensorResult','이상',this,null,'clSensorIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clSensorIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">표시 방식 선택</div>
+          <div class="checklist-q-hint">점검 중인 제품이 LED 표시 제품인지 LCD 표시 제품인지 선택하면, 해당하는 점검 항목만 아래에 표시됩니다.</div>
+          <div class="checklist-toggle-group" id="clDisplayType">
+            <button type="button" class="checklist-toggle-btn" onclick="clSelectDisplayType('LED',this)">LED 제품</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSelectDisplayType('LCD',this)">LCD 제품</button>
+          </div>
+        </div>
+
+        <div class="checklist-q" id="clLedSection" style="display:none">
+          <div class="checklist-q-label">③ LED 표시상태 (육안)</div>
+          <div class="checklist-q-hint">동작 시 LED바가 점멸되는지 확인, 대기 상태에 파워 LED가 점멸되는지 확인</div>
+          <div class="checklist-toggle-group" id="clLedResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clLedResult','정상',this,null,'clLedIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clLedResult','이상',this,null,'clLedIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clLedIssue" placeholder="이상 항목 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q" id="clLcdSection" style="display:none">
+          <div class="checklist-q-label">③ LCD 표시상태 (육안)</div>
+          <div class="checklist-q-hint">제품 ID, 소모품 사용량, 동작시간, 동작횟수, 센서, 모터 상태가 모두 정상 표기되는지 확인하고, 흡입 동작 시간에 따라 값이 변화하는지 확인</div>
+          <div class="checklist-toggle-group" id="clLcdResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clLcdResult','정상',this,null,'clLcdIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clLcdResult','이상',this,null,'clLcdIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clLcdIssue" placeholder="이상 항목 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+
+        <div class="checklist-q" id="clCommSection" style="display:none">
+          <div class="checklist-q-label">④ LCD 모뎀 통신상태 (점검 대시보드 확인)</div>
+          <div class="checklist-q-hint">통신이 정상적으로 연결되는지, 공기질 센서 농도가 정상 표기되는지 확인</div>
+          <div class="checklist-q-label" style="margin-top:2px">통신상태</div>
+          <div class="checklist-toggle-group" id="clCommResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clCommResult','정상',this,null,'clCommIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clCommResult','이상',this,null,'clCommIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clCommIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+          <div class="checklist-q-label" style="margin-top:10px">공기질 센서 상태</div>
+          <div class="checklist-toggle-group" id="clAirSensorResult">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clAirSensorResult','정상',this,null,'clAirSensorIssue')">정상</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clAirSensorResult','이상',this,null,'clAirSensorIssue')">이상</button>
+          </div>
+          <input type="text" class="checklist-input cl-issue-field" id="clAirSensorIssue" placeholder="이상 부분 (해당 시 입력)" style="margin-top:8px;display:none"/>
+        </div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">3. 소모품</div>
+        <div class="checklist-section-desc">사용률은 LCD 화면에서만 확인 가능해 LCD 제품 선택 시에만 입력할 수 있습니다. 포집량 측정은 실제 교체를 진행했을 때만 아래 버튼을 눌러 입력해주세요.</div>
+
+        <div class="checklist-q" style="padding-top:0;border-top:none">
+          <div class="checklist-q-label">① 소모품 사용률 기록 (LCD 제품만 해당)</div>
+          <div class="checklist-q-hint">교체 여부와 무관하게, 현재 시점의 소모품 사용률(%)을 확인하여 기록 — 기준치가 아닌 기록 목적. LCD 제품 선택 시에만 입력 가능</div>
+          <div class="checklist-row3">
+            <div><label>먼지봉투 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clBagRate" oninput="clSanitizeNumberInput(this,100)" disabled/></div>
+            <div><label>HEPA 필터 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clHepaRate" oninput="clSanitizeNumberInput(this,100)" disabled/></div>
+            <div><label>모터 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clMotorRate" oninput="clSanitizeNumberInput(this,100)" disabled/></div>
+          </div>
+        </div>
+
+        <div class="checklist-q">
+          <div class="checklist-q-label">② 먼지봉투 포집량 측정 (교체 진행 시, 저울 측정)</div>
+          <div class="checklist-q-hint">먼지봉투 교체 시 포집된 먼지 무게(g)를 측정하고, 반드시 집진기에 포집량을 입력</div>
+          <button type="button" class="checklist-toggle-btn" id="clReplaceToggleBtn" style="width:100%;margin-bottom:12px" onclick="clToggleConsumableReplace()">소모품 교체</button>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input" id="clBagWeight" placeholder="측정값 (g)" oninput="clSanitizeNumberInput(this)" disabled/>
+          <label class="checklist-check-row" for="clInputDone" style="cursor:pointer">
+            <input type="checkbox" id="clInputDone" disabled/>
+            <span>집진기에 포집량 입력 완료 (LCD 제품만 해당)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">4. 점검 완료 보고</div>
+        <div class="checklist-q" style="padding-top:0;border-top:none">
+          <div class="checklist-q-label">특이사항</div>
+          <textarea class="checklist-textarea" id="clRemark" placeholder="집진기 점검 완료 후 특이사항이 있을 경우 작성"></textarea>
+        </div>
+      </div>
+
+      <div class="checklist-submit-bar">
+        <button class="btn-primary" id="clSubmitBtn" onclick="submitChecklist()">제출하기</button>
+      </div>
+    </div>
+
+    <div id="checklistSuccess" class="checklist-success" style="display:none">
+      <span class="material-icons-round">check_circle</span>
+      <div style="font-size:17px;font-weight:600;color:var(--text)">제출 완료되었습니다</div>
+      <div style="font-size:14px;color:var(--text2);margin-top:6px">점검표가 저장되었습니다.</div>
+      <button class="btn-ghost" style="margin-top:18px" onclick="resetChecklistForm()">새 점검표 작성</button>
+    </div>
+  </div>
+</div>
+
+<!-- 점검 완료 후 사진 공유 안내 팝업 -->
+<div id="checklistPhotoModal" class="dust-modal-overlay" style="display:none" onclick="checklistPhotoModalOverlayClick(event)">
+  <div class="dust-modal-box checklist-photo-modal-box">
+    <div class="dust-modal-header">
+      <span class="dust-modal-title">사진 촬영 및 공유 안내</span>
+    </div>
+    <div class="dust-modal-body">
+      <div class="checklist-photo-modal-msg">점검 단톡방에 공유 부탁드립니다.</div>
+      <div class="checklist-photo-modal-hint">LCD 제품은 점검 완료 이후 아래 사진과 같은 형식으로 촬영해주세요.</div>
+      <div class="checklist-photo-example-grid">
+        <div class="checklist-photo-example">
+          <img src="assets/checklist/lcd-photo-example.png" alt="LCD 표시 촬영 예시(메인화면)"/>
+          <div class="checklist-photo-example-label">LCD 표시 촬영 예시(메인화면)</div>
+        </div>
+        <div class="checklist-photo-example">
+          <img src="assets/checklist/bag-weight-photo-example.png" alt="먼지봉투 포집량 측정 촬영 예시"/>
+          <div class="checklist-photo-example-label">먼지봉투 포집량 측정 예시</div>
+        </div>
+      </div>
+      <button class="btn-primary" style="width:100%;margin-top:16px" onclick="closeChecklistPhotoModal()">확인했습니다</button>
+    </div>
+  </div>
+</div>
+
+<!-- 주간 점검 요청서 생성 모달 -->
+<div id="weeklyReportModal" class="dust-modal-overlay" style="display:none" onclick="weeklyReportOverlayClick(event)">
+  <div class="dust-modal-box" id="weeklyReportModalBox">
+    <div class="modal-drag-handle"></div>
+    <div class="dust-modal-header">
+      <span class="dust-modal-title">주간 점검 요청서 생성</span>
+      <button class="pe-btn" onclick="closeWeeklyReportModal()"><span class="material-icons-round ico">close</span>닫기</button>
+    </div>
+    <div class="dust-modal-body">
+      <div class="wr-requester-row">
+        <label style="min-width:60px">요청자</label>
+        <select id="wrRequesterSel" class="list-filter-sel" style="min-width:140px"></select>
+        <input type="text" id="wrRequesterInput" class="extra-id-input" placeholder="이름 입력 후 추가" style="max-width:160px"/>
+        <button class="btn-add" onclick="addRequester()">+ 추가</button>
+        <button class="btn-ghost" onclick="removeSelectedRequester()">선택 삭제</button>
+      </div>
+      <div id="wrLoading" style="text-align:center;padding:32px 0;color:var(--text3);font-size:13px">불러오는 중…</div>
+      <div id="wrContent" style="display:none">
+        <div class="wr-summary" id="wrSummary"></div>
+        <div class="single-detail-scroll">
+          <table class="single-detail-table wr-table" id="wrTable"></table>
+        </div>
+        <div id="wrOverdueSection" style="display:none">
+          <div class="wr-section-title" id="wrOverdueTitle"></div>
+          <div class="single-detail-scroll">
+            <table class="single-detail-table wr-table" id="wrOverdueTable"></table>
+          </div>
+        </div>
+        <div class="wr-actions">
+          <button class="btn-primary" id="wrExportBtn" onclick="exportWeeklyReportXlsx()"><span class="material-icons-round ico">file_download</span>다운로드 + 저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button id="scrollTopFab" class="scroll-top-fab" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="맨 위로">
+  <span class="material-icons-round">keyboard_arrow_up</span>
+</button>
+
+<div class="footer">
+  <span class="footer-brand">AIRMAX</span>
+  <span class="footer-divider"></span>
+  <span class="footer-version" id="footerVersion"></span>
+  <span class="footer-divider"></span>
+  <span class="footer-date" id="footerDate"></span>
+</div>
+
+<script defer src="script.js?v=2.10.0"></script>
+</body>
+</html>
