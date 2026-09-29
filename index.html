@@ -13,7 +13,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.10.0"/>
+<link rel="stylesheet" href="style.css?v=2.10.1"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -38,9 +38,12 @@
     <button class="page-tab" id="pageTabChecklist" onclick="switchPage('checklist')">점검표</button>
     <button class="page-tab" id="pageTabHistory" style="display:none" onclick="switchPage('history')">히스토리</button>
   </div>
-  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
-    <span class="material-icons-round theme-icon" id="themeIcon">dark_mode</span>
-  </button>
+  <div class="header-actions">
+    <button class="theme-toggle" id="adminToggle" onclick="toggleAdminRow()">관리자</button>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <span class="material-icons-round theme-icon" id="themeIcon">dark_mode</span>
+    </button>
+  </div>
 </div>
 
 <div id="inspectionPage">
@@ -49,7 +52,7 @@
   <input type="hidden" id="tokenInput" value="1|WrmwJU8n5mrF0oO0cYlPiGYR40N1txioHrpUXgSM0ab1084c"/>
 
   <!-- 관리자 비밀번호 -->
-  <div class="admin-row">
+  <div class="admin-row" id="adminRow" hidden>
     <label style="min-width:80px">관리자 PW</label>
     <span class="pw-input-wrap">
       <input type="password" class="admin-pw-input" id="adminPwInput" placeholder="관리자 비밀번호 입력"/>
@@ -851,6 +854,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.10.0"></script>
+<script defer src="script.js?v=2.10.1"></script>
 </body>
 </html>

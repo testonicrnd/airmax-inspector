@@ -1,6 +1,6 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.10.0';
-const APP_DATE    = '2026.09.22';
+const APP_VERSION = 'v2.10.1';
+const APP_DATE    = '2026.09.29';
 
 /* ===== 설정 ===== */
 const ADMIN_PASSWORD       = 'airmax87';  /* 관리자 비밀번호 */
@@ -124,6 +124,15 @@ function toggleTheme(){
   if(dustModalOpen && dustDays.length) renderDustChart(dustDays, next==='dark', 'dustModalCanvas');
 }
 
+/* 관리자 입력줄은 기본 숨김 — 헤더의 "관리자" 버튼으로 열고 닫음 */
+function toggleAdminRow(force){
+  const row=document.getElementById('adminRow');
+  const open=typeof force==='boolean'?force:row.hidden;
+  row.hidden=!open;
+  document.getElementById('adminToggle').classList.toggle('active',open);
+  if(open && !adminAuthenticated) document.getElementById('adminPwInput').focus();
+}
+
 function toggleAdminPwVisibility(){
   const input=document.getElementById('adminPwInput');
   const icon=document.querySelector('#adminPwToggleBtn .material-icons-round');
@@ -142,11 +151,13 @@ function authenticateAdmin(){
     superAdminAuthenticated=true;
     lsSet(LS_ADMIN_AUTH,'super');
     _applyAdminAuthedUI('super');
+    setTimeout(()=>toggleAdminRow(false),1200);
   } else if(pw===ADMIN_PASSWORD){
     adminAuthenticated=true;
     superAdminAuthenticated=false;
     lsSet(LS_ADMIN_AUTH,'admin');
     _applyAdminAuthedUI('admin');
+    setTimeout(()=>toggleAdminRow(false),1200);
   } else {
     badge.textContent='✗ 비밀번호 오류'; badge.className='admin-auth-badge fail';
     setTimeout(()=>{ badge.textContent=''; badge.className='admin-auth-badge'; },2500);
@@ -365,6 +376,7 @@ function updateDateInfo(){
 
 /* ===== 모드 전환 ===== */
 function switchMode(mode){
+  if(mode==='range' && isMobile()) mode='zone'; // 모바일에서는 범위 검색 비활성 — 영역 지정으로 대체
   currentMode=mode; lsSet(LS_MODE,mode);
   ['range','single','zone','dust'].forEach(m=>{
     const cap=m.charAt(0).toUpperCase()+m.slice(1);
@@ -2795,6 +2807,7 @@ async function runInspection(allIds){
 /* ===== 메인 진입 ===== */
 async function startInspection(){
   if(isGlobalLocked) return;
+  if(currentMode==='range' && isMobile()){ switchMode('zone'); return; } // 모바일 범위 검색 차단
   const errEl=document.getElementById('errorMsg');
   errEl.textContent=''; logs=[];
   const token=document.getElementById('tokenInput').value.trim();
@@ -3723,7 +3736,6 @@ async function exportWeeklyReportXlsx(){
   const savedTheme=storedTheme||(systemPrefersDark?'dark':'light');
   document.documentElement.setAttribute('data-theme',savedTheme);
   document.getElementById('themeIcon').textContent=savedTheme==='dark'?'light_mode':'dark_mode';
-
   const savedAuthLevel=lsGet(LS_ADMIN_AUTH,null);
   if(savedAuthLevel==='super'||savedAuthLevel==='admin'){
     adminAuthenticated=true;
@@ -3753,6 +3765,8 @@ async function exportWeeklyReportXlsx(){
 
   const savedMode=lsGet(LS_MODE,'range');
   switchMode(savedMode);
+  // 창 크기가 모바일 폭으로 줄어들면 범위 검색에서 영역 지정으로 전환
+  window.addEventListener('resize',()=>{ if(currentMode==='range' && isMobile()) switchMode('zone'); });
 
   const addRestrictedInput=(id)=>{
     const el=document.getElementById(id);
