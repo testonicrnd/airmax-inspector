@@ -376,7 +376,7 @@ function getOrCreateLocationSheet(ss, loc, reformat) {
     var name = locationSheetName(loc);
     var sheet = ss.getSheetByName(name);
     if (sheet && !reformat) return sheet;
-    if (!sheet) sheet = ss.insertSheet(name);
+    if (!sheet) sheet = ss.insertSheet(name, ss.getNumSheets()); // 항상 맨 뒤에 추가 — 통계/점검표 탭 순서를 밀지 않게
     else sheet.getRange(1, 1, 1, sheet.getMaxColumns()).clearContent();
     sheet.getRange(1, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([CHECKLIST_LONG_HEADERS]);
     var lastColLetter = String.fromCharCode(64 + CHECKLIST_LONG_HEADERS.length);
@@ -455,10 +455,21 @@ var CHECKLIST_BOARD_ITEMS = [
 var STATS_COLOR = { ok: '#e6f4ea', okText: '#137333', bad: '#fce8e6', badText: '#c5221f', na: '#f1f3f4', naText: '#9aa0a6',
     header: '#434343', title: '#202124', sub: '#5f6368' };
 
+// 탭 순서를 "통계 → 점검표 → 장소-…"로 고정 — 이미 제자리면 아무것도 하지 않음
+function fixChecklistSheetOrder(ss) {
+    [CHECKLIST_STATS_SHEET, CHECKLIST_MAIN_SHEET].forEach(function(name, i) {
+        var sh = ss.getSheetByName(name);
+        if (!sh || sh.getIndex() === i + 1) return;
+        ss.setActiveSheet(sh);
+        ss.moveActiveSheet(i + 1);
+    });
+}
+
 function refreshChecklistStats(ss) {
     var subs = readChecklistSubmissions(ss);
     var sheet = ss.getSheetByName(CHECKLIST_STATS_SHEET);
-    if (!sheet) sheet = ss.insertSheet(CHECKLIST_STATS_SHEET, 1); // 점검표 바로 다음 탭
+    if (!sheet) sheet = ss.insertSheet(CHECKLIST_STATS_SHEET, 0);
+    fixChecklistSheetOrder(ss);
     sheet.getCharts().forEach(function(c) { sheet.removeChart(c); }); // clear()로는 차트가 안 지워짐
     sheet.clear();
     sheet.clearNotes();
