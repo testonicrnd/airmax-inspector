@@ -217,8 +217,14 @@ function formatChecklistSheet(sheet) {
     var widths = { '제출ID': 130, '제출시각': 140, '점검장소': 160, '점검일자': 95, '점검자': 85,
         '점검구분': 85, '구분': 75, '항목': 230, '결과': 90, '비고': 280 };
     for (var c = 1; c <= numCols; c++) sheet.setColumnWidth(c, widths[CHECKLIST_LONG_HEADERS[c - 1]] || 100);
-    var bigRange = sheet.getRange(2, 1, 2000, numCols);
+    // 새 시트는 기본 1000행이라 그보다 큰 범위를 잡으면 오류가 나므로 행을 먼저 늘려둠
+    var FORMAT_ROWS = 5000;
+    if (sheet.getMaxRows() < FORMAT_ROWS + 1) sheet.insertRowsAfter(sheet.getMaxRows(), FORMAT_ROWS + 1 - sheet.getMaxRows());
+    var bigRange = sheet.getRange(2, 1, FORMAT_ROWS, numCols);
     bigRange.clearFormat();
+    // 날짜 열에 서식이 없으면 46301.507 같은 날짜 일련번호로 보이므로 표시 형식을 명시
+    sheet.getRange(2, CHECKLIST_LONG_HEADERS.indexOf('제출시각') + 1, FORMAT_ROWS, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+    sheet.getRange(2, CHECKLIST_LONG_HEADERS.indexOf('점검일자') + 1, FORMAT_ROWS, 1).setNumberFormat('yyyy-mm-dd');
     var resultCol = CHECKLIST_LONG_HEADERS.indexOf('결과') + 1;
     var colLetter = String.fromCharCode(64 + resultCol);
     var rules = [
@@ -313,7 +319,10 @@ function handleSubmitChecklist(data) {
         lock.waitLock(20000);
         try {
             if (rows.length) {
-                sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CHECKLIST_LONG_HEADERS.length).setValues(rows);
+                var startRow = sheet.getLastRow() + 1;
+                // 시트 최대 행 수를 넘어서 쓰면 오류가 나므로 부족하면 행을 늘림
+                if (startRow + rows.length - 1 > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1000);
+                sheet.getRange(startRow, 1, rows.length, CHECKLIST_LONG_HEADERS.length).setValues(rows);
             }
             if (dedupeKey) cache.put(dedupeKey, '1', 600);
             // 장소별 시트/통계 시트 갱신 — 실패해도 원본 저장은 이미 끝났으므로 제출은 성공으로 응답
@@ -349,10 +358,14 @@ function normalizeChecklistLocation(loc) {
 function locationSheetName(loc) {
     return (CHECKLIST_LOCATION_PREFIX + loc.replace(/[\[\]\*\?\/\\:]/g, '_')).substring(0, 99);
 }
-function getOrCreateLocationSheet(ss, loc) {
+// reformat=true면 이미 있는 시트도 서식을 다시 적용 (rebuildChecklistReports에서 사용)
+function getOrCreateLocationSheet(ss, loc, reformat) {
     var name = locationSheetName(loc);
     var sheet = ss.getSheetByName(name);
-    if (sheet) return sheet;
+    if (sheet) {
+        if (reformat) formatChecklistSheet(sheet);
+        return sheet;
+    }
     sheet = ss.insertSheet(name);
     sheet.getRange(1, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([CHECKLIST_LONG_HEADERS]);
     var lastColLetter = String.fromCharCode(64 + CHECKLIST_LONG_HEADERS.length);
@@ -494,7 +507,8 @@ function refreshChecklistStats(ss) {
     sheet.getRange(row, 3).setValue('마지막 업데이트: ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss') +
         '  ·  총 점검 ' + subs.length + '건 · 장소 ' + locOrder.length + '곳').setFontColor('#666666');
     row += 2;
-    function writeBlock(title, header, rows, after) {
+    // textCols: '2026-10-06', '2026-10'처럼 시트가 날짜로 자동 변환해버리는 값을 글자 그대로 보여줄 열(1-based)
+    function writeBlock(title, header, rows, after, textCols) {
         sheet.getRange(row, 1).setValue(title).setFontWeight('bold').setFontSize(12);
         row++;
         sheet.getRange(row, 1, 1, header.length).setValues([header])
@@ -502,6 +516,7 @@ function refreshChecklistStats(ss) {
             .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center');
         var startRow = row + 1;
         if (rows.length) {
+            (textCols || []).forEach(function(c) { sheet.getRange(startRow, c, rows.length, 1).setNumberFormat('@'); });
             sheet.getRange(startRow, 1, rows.length, header.length).setValues(rows).setVerticalAlignment('middle');
             if (after) after(startRow, rows.length);
         } else {
@@ -515,12 +530,12 @@ function refreshChecklistStats(ss) {
             if (locRows[i][5] !== '없음') sheet.getRange(r + i, 1, 1, locHeader.length).setBackground('#fce8e6');
         }
         sheet.getRange(r, 6, n, 1).setWrap(true);
-    });
+    }, [3]);
     writeBlock('항목별 이상 발생 현황', itemHeader, itemRows, function(r, n) {
         sheet.getRange(r, 4, n, 1).setNumberFormat('0.0%');
         sheet.getRange(r, 5, n, 1).setWrap(true);
     });
-    writeBlock('월별 점검 현황', monthHeader, monthRows);
+    writeBlock('월별 점검 현황', monthHeader, monthRows, null, [1]);
 
     var widths = [180, 100, 100, 90, 90, 300, 100, 120, 120, 120];
     for (var c = 0; c < widths.length; c++) sheet.setColumnWidth(c + 1, widths[c]);
@@ -530,7 +545,7 @@ function refreshChecklistStats(ss) {
 function rebuildChecklistReports() {
     var ss = getOrCreateChecklistSpreadsheet();
     readChecklistSubmissions(ss).forEach(function(s) {
-        if (s.location) getOrCreateLocationSheet(ss, s.location);
+        if (s.location) getOrCreateLocationSheet(ss, s.location, true);
     });
     refreshChecklistStats(ss);
     Logger.log('완료: ' + ss.getUrl());
