@@ -446,7 +446,7 @@ function refreshChecklistStats(ss) {
         var nameCell = sheetRef
             ? '=HYPERLINK("#gid=' + sheetRef.getSheetId() + '","' + L.name.replace(/"/g, '""') + '")'
             : L.name;
-        return [nameCell, L.count, last.date, last.inspector, itemValue(last, '제품 종류'),
+        return [nameCell, L.count, last.date, last.inspector, itemValue(last, '제품 종류') || itemValue(last, '표시 방식'), // '표시 방식'은 이름 변경 전 기존 데이터
             lastBad.length ? lastBad.join(', ') : '없음', L.badTotal,
             itemValue(last, '먼지봉투 사용률(%)'), itemValue(last, 'HEPA필터 사용률(%)'), itemValue(last, '모터 사용률(%)')];
     });
