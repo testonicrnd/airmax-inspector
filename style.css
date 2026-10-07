@@ -1123,3 +1123,20 @@ body.checklist-page-active { padding-bottom:46px; }
 }
 .wr-remark-input:focus { border-color:var(--accent); }
 .wr-actions { display:flex; justify-content:flex-end; margin-top:16px; }
+
+/* 점검표 — 장소/세부구역 빠른 선택 칩 */
+.cl-optional { font-size:13px; font-weight:400; color:var(--text3); }
+.cl-chip-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.cl-chip-row:empty { display:none; }
+.cl-chip {
+  border:1.5px solid var(--border); background:var(--input-bg); color:var(--text2);
+  border-radius:999px; padding:7px 13px; font-size:14px; font-family:inherit; cursor:pointer;
+  max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  transition:all 0.15s cubic-bezier(0.4,0,0.2,1);
+}
+.cl-chip:hover { border-color:var(--text3); color:var(--text); }
+.cl-chip.on { background:var(--accent-bg); border-color:var(--accent); color:var(--accent-text); font-weight:600; }
+.cl-chip.done { background:var(--ok-bg); border-color:var(--ok-border); color:var(--ok-text); }
+.cl-chip.more { border-style:dashed; color:var(--text3); }
+.cl-chip-label { width:100%; font-size:12px; color:var(--text3); }
+.cl-continue-btn { display:block; margin:20px auto 0; padding:12px 20px; font-size:15px; }

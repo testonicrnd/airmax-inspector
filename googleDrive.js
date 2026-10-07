@@ -28,6 +28,7 @@ Google Apps Script 코드 — 아래 코드를 복사하여 GAS 프로젝트에 
         "통계"          — 점검 현황판(장소별 최근 점검 ✓/✗) / 이상 발생 항목 + 차트 / 월별 점검 현황 + 차트
         "장소-<점검장소>" — 해당 장소의 점검 기록만 모아 보기 (원본 "점검표"를 FILTER 수식으로 참조)
     기존 데이터로 처음 만들 때는 GAS 편집기에서 rebuildChecklistReports() 함수를 한 번 직접 실행하면 된다.
+    세부구역 열이 생기기 전 "장소(구역)"처럼 괄호로 적은 데이터는 splitChecklistLocationParens()로 나눌 수 있다.
 ================================================================================
 */
 // GET 요청 — 제품 리스트 시트에서 영역/설치장소 + 월별 점검 시트 목록 반환
@@ -66,6 +67,7 @@ try {
     if (action === 'getWeeklyReportDraft')return getWeeklyReportDraft(data);
     if (action === 'saveWeeklyReport')    return saveWeeklyReport(data);
     if (action === 'submitChecklist')     return handleSubmitChecklist(data);
+    if (action === 'getChecklistPlaces')  return getChecklistPlaces();
 
     // 저장 요청 시각 기준으로 KST 날짜 산출
     var savedDate = data.savedAt ? new Date(data.savedAt) : new Date();
@@ -199,7 +201,7 @@ function handleDeleteProduct(data) {
 // 열람하기 너무 불편해서, 제출 1건당 "항목 하나 = 행 하나"로 풀어서 저장한다. 제출시각/장소 등
 // 공통 정보는 각 항목 행마다 반복해서 넣어 같은 제출 건을 필터/정렬로 쉽게 묶어볼 수 있게 한다.
 // 원본 절차서 종이 양식(항목을 위→아래로 쭉 읽는 표)과 같은 느낌으로 보이는 게 목표.
-var CHECKLIST_LONG_HEADERS = ['제출ID', '제출시각', '점검장소', '점검일자', '점검자', '점검구분', '구분', '항목', '결과', '비고'];
+var CHECKLIST_LONG_HEADERS = ['제출ID', '제출시각', '점검장소', '세부구역', '점검일자', '점검자', '점검구분', '구분', '항목', '결과', '비고'];
 var CHECKLIST_SCHEMA_VERSION = 'v2-long'; // 열 구성이 바뀌면 이 값을 올릴 것 — 값이 다르면 시트를 새 구성으로 초기화함
 var CHECKLIST_SHEET_ID_PROP = 'CHECKLIST_SHEET_ID';
 var CHECKLIST_SCHEMA_VERSION_PROP = 'CHECKLIST_SCHEMA_VERSION';
@@ -214,7 +216,7 @@ function formatChecklistSheet(sheet) {
         .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center');
     sheet.setRowHeight(1, 40);
     sheet.setFrozenRows(1);
-    var widths = { '제출ID': 130, '제출시각': 140, '점검장소': 160, '점검일자': 95, '점검자': 85,
+    var widths = { '제출ID': 130, '제출시각': 140, '점검장소': 160, '세부구역': 130, '점검일자': 95, '점검자': 85,
         '점검구분': 85, '구분': 75, '항목': 230, '결과': 90, '비고': 280 };
     for (var c = 1; c <= numCols; c++) sheet.setColumnWidth(c, widths[CHECKLIST_LONG_HEADERS[c - 1]] || 100);
     // 새 시트는 기본 1000행이라 그보다 큰 범위를 잡으면 오류가 나므로 행을 먼저 늘려둠
@@ -260,6 +262,17 @@ function getOrCreateChecklistSpreadsheet() {
         sheet.getRange(1, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([CHECKLIST_LONG_HEADERS]);
         try { formatChecklistSheet(sheet); } catch (e) { /* 서식 실패는 무시하고 데이터 저장은 계속 진행 */ }
         props.setProperty(CHECKLIST_SCHEMA_VERSION_PROP, CHECKLIST_SCHEMA_VERSION);
+    }
+    // 세부구역 열이 생기기 전에 만들어진 시트 — 기존 데이터는 그대로 두고 점검장소 오른쪽에 빈 열을 끼워 넣음.
+    // 장소 시트들도 열이 하나 늘어난 구성으로 헤더/수식을 다시 씀
+    var areaCol = CHECKLIST_LONG_HEADERS.indexOf('세부구역') + 1;
+    if (sheet.getRange(1, areaCol).getValue() !== '세부구역') {
+        sheet.insertColumnBefore(areaCol);
+        sheet.getRange(1, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([CHECKLIST_LONG_HEADERS]);
+        try { formatChecklistSheet(sheet); } catch (e) { /* 서식 실패는 무시 */ }
+        readChecklistSubmissions(ss).forEach(function(s) {
+            if (s.location && ss.getSheetByName(locationSheetName(s.location))) getOrCreateLocationSheet(ss, s.location, true);
+        });
     }
     return ss;
 }
@@ -312,7 +325,7 @@ function handleSubmitChecklist(data) {
         var submittedAt = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
         var submissionId = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyyMMddHHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
         var location = normalizeChecklistLocation(data.location);
-        var base = [submissionId, submittedAt, location, data.date || '', data.inspector || '', data.type || ''];
+        var base = [submissionId, submittedAt, location, normalizeChecklistLocation(data.area), data.date || '', data.inspector || '', data.type || ''];
         var rows = buildChecklistItemRows(base, data);
         // 동시 제출 시 getLastRow() 기준으로 같은 행에 덮어쓰지 않도록 잠금
         var lock = LockService.getScriptLock();
@@ -358,21 +371,21 @@ function normalizeChecklistLocation(loc) {
 function locationSheetName(loc) {
     return (CHECKLIST_LOCATION_PREFIX + loc.replace(/[\[\]\*\?\/\\:]/g, '_')).substring(0, 99);
 }
-// reformat=true면 이미 있는 시트도 서식을 다시 적용 (rebuildChecklistReports에서 사용)
+// reformat=true면 이미 있는 시트도 헤더/수식/서식을 다시 씀 (rebuildChecklistReports, 열 구성 변경 시 사용)
 function getOrCreateLocationSheet(ss, loc, reformat) {
     var name = locationSheetName(loc);
     var sheet = ss.getSheetByName(name);
-    if (sheet) {
-        if (reformat) formatChecklistSheet(sheet);
-        return sheet;
-    }
-    sheet = ss.insertSheet(name);
+    if (sheet && !reformat) return sheet;
+    if (!sheet) sheet = ss.insertSheet(name);
+    else sheet.getRange(1, 1, 1, sheet.getMaxColumns()).clearContent();
     sheet.getRange(1, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([CHECKLIST_LONG_HEADERS]);
     var lastColLetter = String.fromCharCode(64 + CHECKLIST_LONG_HEADERS.length);
     var locColLetter = String.fromCharCode(64 + CHECKLIST_LONG_HEADERS.indexOf('점검장소') + 1);
     var src = "'" + CHECKLIST_MAIN_SHEET + "'!";
-    sheet.getRange(2, 1).setFormula('=IFERROR(FILTER(' + src + 'A2:' + lastColLetter + ', TRIM(' + src + locColLetter + '2:' + locColLetter + ')="' +
-        loc.replace(/"/g, '""') + '"), "")');
+    // 같은 장소 안에서 세부구역별로 모여 보이도록 세부구역 → 제출ID(시간순) 순으로 정렬
+    var areaColIdx = CHECKLIST_LONG_HEADERS.indexOf('세부구역') + 1;
+    sheet.getRange(2, 1).setFormula('=IFERROR(SORT(FILTER(' + src + 'A2:' + lastColLetter + ', TRIM(' + src + locColLetter + '2:' + locColLetter + ')="' +
+        loc.replace(/"/g, '""') + '"), ' + areaColIdx + ', TRUE, 1, TRUE), "")');
     try { formatChecklistSheet(sheet); } catch (e) { /* 서식 실패는 무시 */ }
     return sheet;
 }
@@ -404,6 +417,7 @@ function readChecklistSubmissions(ss) {
                     ? Utilities.formatDate(row[col('제출시각')], tz, 'yyyy-MM-dd HH:mm:ss')
                     : checklistCellText(row[col('제출시각')]),
                 location: normalizeChecklistLocation(checklistCellText(row[col('점검장소')])),
+                area: normalizeChecklistLocation(checklistCellText(row[col('세부구역')])),
                 date: checklistCellText(row[col('점검일자')], tz),
                 inspector: checklistCellText(row[col('점검자')]),
                 type: checklistCellText(row[col('점검구분')]),
@@ -462,21 +476,28 @@ function refreshChecklistStats(ss) {
     var badItemsOf = function(s) { return s.items.filter(function(it) { return isChecklistBadResult(it.result); }); };
     var num = function(v) { return v === '' || isNaN(Number(v)) ? '' : Number(v); };
 
-    // 장소별로 묶기 — subs가 날짜 오름차순이라 마지막에 남는 게 최근 점검
+    // 장소+세부구역(제품 1대) 단위로 묶기 — subs가 날짜 오름차순이라 마지막에 남는 게 최근 점검
     var locMap = {}, locOrder = [];
     subs.forEach(function(s) {
         if (!s.location) return;
-        var L = locMap[s.location];
-        if (!L) { L = locMap[s.location] = { name: s.location, count: 0, last: null }; locOrder.push(L); }
+        var key = s.location + ' // ' + s.area;
+        var L = locMap[key];
+        if (!L) { L = locMap[key] = { name: s.location, area: s.area, count: 0, last: null }; locOrder.push(L); }
         L.count++;
         L.last = s;
     });
-    // 최근 점검에 이상이 있는 장소를 위로, 그 다음 이름순
-    locOrder.forEach(function(L) { L.lastBad = badItemsOf(L.last).length; });
-    locOrder.sort(function(a, b) {
-        if ((a.lastBad > 0) !== (b.lastBad > 0)) return a.lastBad > 0 ? -1 : 1;
-        return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    // 최근 점검에 이상이 있는 구역이 하나라도 있는 장소를 위로 — 같은 장소의 구역들은 흩어지지 않게 함께 묶어서 정렬
+    var placeHasBad = {};
+    locOrder.forEach(function(L) {
+        L.lastBad = badItemsOf(L.last).length;
+        if (L.lastBad) placeHasBad[L.name] = true;
     });
+    var cmp = function(a, b) { return a < b ? -1 : a > b ? 1 : 0; };
+    locOrder.sort(function(a, b) {
+        if (!!placeHasBad[a.name] !== !!placeHasBad[b.name]) return placeHasBad[a.name] ? -1 : 1;
+        return cmp(a.name, b.name) || cmp(a.area, b.area);
+    });
+    var placeCount = Object.keys(locOrder.reduce(function(m, L) { m[L.name] = 1; return m; }, {})).length;
 
     var thisMonth = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM');
     var monthCount = subs.filter(function(s) { return s.date.substring(0, 7) === thisMonth; }).length;
@@ -489,8 +510,8 @@ function refreshChecklistStats(ss) {
     row += 2;
 
     // ── 요약 숫자 ─────────────────────────────────────────────
-    var kpis = [['총 점검', subs.length + '건'], ['점검 장소', locOrder.length + '곳'],
-        ['이번 달 점검', monthCount + '건'], ['최근 점검 이상 장소', badLocCount + '곳']];
+    var kpis = [['총 점검', subs.length + '건'], ['점검 장소', placeCount + '곳' + (locOrder.length > placeCount ? ' / ' + locOrder.length + '구역' : '')],
+        ['이번 달 점검', monthCount + '건'], ['최근 점검 이상', badLocCount + '곳']];
     // 1열을 고정해두면 고정선을 넘는 셀 병합이 안 되므로, 병합 없이 한 칸씩 사용
     kpis.forEach(function(k, i) {
         var col = 1 + i;
@@ -518,8 +539,8 @@ function refreshChecklistStats(ss) {
 
     // ── 1) 장소별 현황판 ──────────────────────────────────────
     // 장소 1곳 = 1줄. 최근 점검 결과를 항목마다 ✓/✗로 보여주고, ✗ 칸에 마우스를 올리면 이상 내용(메모)이 보임
-    writeTitle('장소별 현황 (최근 점검 기준)', '✗ 칸에 마우스를 올리면 이상 내용이 보입니다 · 장소명을 누르면 장소 시트로 이동');
-    var infoHeader = ['점검장소', '상태', '최근 점검일', '최근 점검자', '제품 종류', '누적 점검'];
+    writeTitle('장소·구역별 현황 (최근 점검 기준)', '✗ 칸에 마우스를 올리면 이상 내용이 보입니다 · 장소명을 누르면 장소 시트로 이동');
+    var infoHeader = ['점검장소 / 세부구역', '상태', '최근 점검일', '최근 점검자', '제품 종류', '누적 점검'];
     var usageHeader = ['먼지봉투\n사용률(%)', 'HEPA\n사용률(%)', '모터\n사용률(%)'];
     var boardHeader = infoHeader.concat(CHECKLIST_BOARD_ITEMS.map(function(b) { return b.header; }), usageHeader);
     writeHeader(boardHeader);
@@ -531,9 +552,10 @@ function refreshChecklistStats(ss) {
         locOrder.forEach(function(L) {
             var last = L.last;
             var sheetRef = ss.getSheetByName(locationSheetName(L.name));
+            var label = L.area ? L.name + ' / ' + L.area : L.name;
             var nameCell = sheetRef
-                ? '=HYPERLINK("#gid=' + sheetRef.getSheetId() + '","' + L.name.replace(/"/g, '""') + '")'
-                : L.name;
+                ? '=HYPERLINK("#gid=' + sheetRef.getSheetId() + '","' + label.replace(/"/g, '""') + '")'
+                : label;
             var status = L.lastBad ? '이상 ' + L.lastBad + '건' : '정상';
             var v = [nameCell, status, last.date, last.inspector,
                 itemValue(last, '제품 종류') || itemValue(last, '표시 방식'), L.count]; // '표시 방식'은 이름 변경 전 기존 데이터
@@ -656,14 +678,77 @@ function refreshChecklistStats(ss) {
     sheet.setHiddenGridlines(true);
 }
 
+// 점검표 앱의 장소/세부구역 선택 목록 — 지금까지 제출된 장소와 그 장소에서 쓰인 구역을 최근 점검순으로 반환
+function getChecklistPlaces() {
+    try {
+        var ss = getOrCreateChecklistSpreadsheet();
+        var map = {}, list = [];
+        readChecklistSubmissions(ss).forEach(function(s) {
+            if (!s.location) return;
+            var p = map[s.location];
+            if (!p) { p = map[s.location] = { name: s.location, areas: [], last: '' }; list.push(p); }
+            if (s.area && p.areas.indexOf(s.area) === -1) p.areas.push(s.area);
+            if (s.submittedAt > p.last) p.last = s.submittedAt;
+        });
+        list.sort(function(a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : 0; });
+        list.forEach(function(p) { p.areas.sort(); });
+        return buildJson({ success: true, places: list });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
+}
+
 // GAS 편집기에서 직접 실행 — 기존 점검표 데이터로 장소별 시트와 통계 시트를 한꺼번에 (재)생성
+// 장소명이 바뀌어(괄호 분리 등) 더 이상 해당 데이터가 없는 "장소-" 시트는 삭제함 — 장소 시트는 원본을 수식으로
+// 보여주기만 하므로 지워도 데이터 손실은 없음
 function rebuildChecklistReports() {
     var ss = getOrCreateChecklistSpreadsheet();
+    var keep = {};
     readChecklistSubmissions(ss).forEach(function(s) {
-        if (s.location) getOrCreateLocationSheet(ss, s.location, true);
+        if (!s.location) return;
+        var name = locationSheetName(s.location);
+        if (!keep[name]) getOrCreateLocationSheet(ss, s.location, true);
+        keep[name] = true;
+    });
+    ss.getSheets().forEach(function(sh) {
+        var name = sh.getName();
+        if (name.indexOf(CHECKLIST_LOCATION_PREFIX) === 0 && !keep[name]) {
+            ss.deleteSheet(sh);
+            Logger.log('사용하지 않는 장소 시트 삭제: ' + name);
+        }
     });
     refreshChecklistStats(ss);
     Logger.log('완료: ' + ss.getUrl());
+}
+
+// GAS 편집기에서 한 번 직접 실행 — 세부구역 칸이 생기기 전에 "용산아이파크몰(H&M입구)"처럼 괄호로 적은
+// 기존 데이터를 점검장소 "용산아이파크몰" + 세부구역 "H&M입구"로 나눈 뒤 장소 시트/통계를 다시 만듦.
+// 세부구역이 이미 채워진 행은 건드리지 않으므로 여러 번 실행해도 안전함
+function splitChecklistLocationParens() {
+    var ss = getOrCreateChecklistSpreadsheet();
+    var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) { Logger.log('데이터 없음'); return; }
+    var locCol = CHECKLIST_LONG_HEADERS.indexOf('점검장소') + 1;
+    var areaCol = CHECKLIST_LONG_HEADERS.indexOf('세부구역') + 1; // 점검장소 바로 오른쪽 열
+    var range = sheet.getRange(2, locCol, lastRow - 1, 2);
+    var values = range.getValues();
+    var changed = {}, count = 0;
+    values.forEach(function(row) {
+        var loc = normalizeChecklistLocation(row[0]);
+        if (String(row[1]).trim() !== '') return;
+        var m = loc.match(/^(.+?)\s*\((.+)\)$/);
+        if (!m) return;
+        row[0] = normalizeChecklistLocation(m[1]);
+        row[1] = normalizeChecklistLocation(m[2]);
+        changed[loc] = row[0] + ' / ' + row[1];
+        count++;
+    });
+    if (!count) { Logger.log('변환할 괄호 장소 없음'); return; }
+    range.setValues(values);
+    Object.keys(changed).forEach(function(k) { Logger.log('변환: ' + k + '  →  ' + changed[k]); });
+    Logger.log(count + '개 행 변환함');
+    rebuildChecklistReports();
 }
 
 /* ===================================================================

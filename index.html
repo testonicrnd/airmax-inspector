@@ -585,7 +585,17 @@
       <div class="checklist-section">
         <div class="checklist-q" style="padding-top:0;border-top:none">
           <div class="checklist-q-label">점검 장소</div>
-          <input type="text" class="checklist-input" id="clLocation" placeholder="예: 시청역 3번 출구"/>
+          <div class="checklist-q-hint">이전에 점검한 장소는 아래에서 눌러 선택하세요. 입력하면 목록이 좁혀집니다.</div>
+          <input type="text" class="checklist-input" id="clLocation" list="clLocationList" autocomplete="off" placeholder="예: ○○초등학교" oninput="clRenderPlaceChips()"/>
+          <datalist id="clLocationList"></datalist>
+          <div class="cl-chip-row" id="clLocationChips"></div>
+        </div>
+        <div class="checklist-q">
+          <div class="checklist-q-label">세부 구역 <span class="cl-optional">(선택)</span></div>
+          <div class="checklist-q-hint">한 장소에 제품이 여러 대 있을 때 구분용 — 예: 정문 출입구, 후문 출입구</div>
+          <input type="text" class="checklist-input" id="clArea" list="clAreaList" autocomplete="off" placeholder="예: 정문 출입구" oninput="clRenderAreaChips()"/>
+          <datalist id="clAreaList"></datalist>
+          <div class="cl-chip-row" id="clAreaChips"></div>
         </div>
         <div class="checklist-q">
           <div class="checklist-q-label">점검 일자</div>
@@ -786,8 +796,9 @@
     <div id="checklistSuccess" class="checklist-success" style="display:none">
       <span class="material-icons-round">check_circle</span>
       <div style="font-size:17px;font-weight:600;color:var(--text)">제출 완료되었습니다</div>
-      <div style="font-size:14px;color:var(--text2);margin-top:6px">점검표가 저장되었습니다.</div>
-      <button class="btn-ghost" style="margin-top:18px" onclick="resetChecklistForm()">새 점검표 작성</button>
+      <div style="font-size:14px;color:var(--text2);margin-top:6px" id="clSuccessPlace">점검표가 저장되었습니다.</div>
+      <button class="btn-primary cl-continue-btn" onclick="clContinueSameLocation()">같은 장소에서 다음 구역 점검</button>
+      <button class="btn-ghost" style="margin-top:10px" onclick="resetChecklistForm()">새 점검표 작성 (다른 장소)</button>
     </div>
   </div>
 </div>

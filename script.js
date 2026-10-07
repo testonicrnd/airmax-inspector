@@ -37,6 +37,7 @@ let peOriginals = {};
 /* ===== 히스토리 / 주간 점검 요청서 ===== */
 const LS_REQUESTERS = 'airmax_requesters';
 const LS_LAST_REQUESTER = 'airmax_last_requester';
+const LS_CL_PLACES = 'airmax_checklist_places'; // 점검표 - 장소/세부구역 선택 목록 캐시(서버에서 받은 목록 + 이 기기에서 제출한 장소)
 const LS_CL_INSPECTOR = 'airmax_checklist_inspector'; // 점검표 - 마지막으로 입력한 점검자 이름(기기별로 유지, 각자 개인 폰으로 점검하므로 자동 채움에 적합)
 let currentPage = 'inspection'; // 'inspection' | 'history'
 let historyMonths = [];         // ["26년 7월", ...] — GAS에서 로드
@@ -2982,6 +2983,8 @@ function initChecklistDate(){
   // 점검 구분도 마찬가지로 기본값 "정기"를 세팅 — 대부분의 점검이 정기 점검이라 매번 누르지 않게 함
   const typeGroup=document.getElementById('clType');
   if(typeGroup && !typeGroup.dataset.value) clResetTypeDefault();
+  clRenderPlaceChips();
+  clLoadPlaces(false);
 }
 function clResetTypeDefault(){
   const group=document.getElementById('clType');
@@ -2990,6 +2993,112 @@ function clResetTypeDefault(){
   const btns=group.querySelectorAll('.checklist-toggle-btn');
   btns.forEach(b=>b.classList.remove('on-ok','on-bad','on-sel'));
   if(btns[0]) btns[0].classList.add('on-sel');
+}
+/* ----- 점검 장소 / 세부 구역 빠른 선택 -----
+   지금까지 제출된 장소·구역 목록을 GAS에서 받아와 칩 버튼으로 보여줘서 매번 타이핑하지 않게 한다.
+   전파가 약한 현장에서도 쓸 수 있도록 마지막으로 받은 목록을 기기에 캐시하고, 이 기기에서 제출한 장소는
+   서버 응답을 기다리지 않고 바로 목록 맨 앞에 추가한다 */
+const CL_PLACE_CHIP_LIMIT=6; // 접힌 상태에서 보여줄 최근 장소 수 — 나머지는 "더보기"로 펼침
+let clPlaces=lsGet(LS_CL_PLACES,[]);
+let clPlacesExpanded=false;
+let clPlacesFetchedAt=0;
+const clDoneToday=new Set(); // 이번에 제출 완료한 "일자|장소|구역" — 다음 구역 고를 때 완료 표시(✓)용
+// 서버(normalizeChecklistLocation)와 같은 규칙 — 띄어쓰기 차이로 같은 장소가 따로 잡히지 않게
+function clNormPlace(s){ return String(s||'').replace(/ +/g,' ').trim(); }
+async function clLoadPlaces(force){
+  if(!GAS_URL) return;
+  if(!force && Date.now()-clPlacesFetchedAt<5*60*1000) return; // 탭을 오갈 때마다 다시 받지 않도록 5분 간격
+  clPlacesFetchedAt=Date.now();
+  try{
+    const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'getChecklistPlaces'})},15000);
+    const json=JSON.parse(await res.text());
+    if(json.success&&Array.isArray(json.places)){
+      clPlaces=json.places;
+      lsSet(LS_CL_PLACES,clPlaces);
+      clRenderPlaceChips();
+    }
+  }catch(e){ clPlacesFetchedAt=0; } // 실패하면 캐시된 목록으로 계속 사용하고, 다음 진입 때 다시 시도
+}
+function clRememberPlace(loc,area){
+  loc=clNormPlace(loc); area=clNormPlace(area);
+  if(!loc) return;
+  let p=clPlaces.find(x=>x.name===loc);
+  if(p) clPlaces=clPlaces.filter(x=>x!==p);
+  else p={name:loc,areas:[]};
+  if(area&&!p.areas.includes(area)){ p.areas.push(area); p.areas.sort(); }
+  clPlaces.unshift(p);
+  lsSet(LS_CL_PLACES,clPlaces);
+}
+function clRenderPlaceChips(){
+  const input=document.getElementById('clLocation');
+  const wrap=document.getElementById('clLocationChips');
+  if(!input||!wrap) return;
+  const dl=document.getElementById('clLocationList');
+  if(dl) dl.innerHTML=clPlaces.map(p=>`<option value="${escHtml(p.name)}">`).join('');
+  const q=clNormPlace(input.value);
+  // 장소 이름 일부만 입력한 상태면 그 글자가 들어간 장소로 좁혀서 검색처럼 동작. 목록의 장소와 정확히
+  // 일치하면(칩으로 고른 경우) 좁히지 않고 그 칩만 강조 — 다른 장소로 바로 바꿔 누를 수 있게
+  const searching=!!q&&!clPlaces.some(p=>p.name===q);
+  let list=searching?clPlaces.filter(p=>p.name.includes(q)):clPlaces;
+  const total=list.length;
+  if(!searching&&!clPlacesExpanded) list=list.slice(0,CL_PLACE_CHIP_LIMIT);
+  let html=list.map(p=>`<button type="button" class="cl-chip${p.name===q?' on':''}" data-name="${escHtml(p.name)}" onclick="clPickPlace(this.dataset.name)">${escHtml(p.name)}</button>`).join('');
+  if(!searching&&total>CL_PLACE_CHIP_LIMIT){
+    html+=`<button type="button" class="cl-chip more" onclick="clTogglePlacesExpanded()">${clPlacesExpanded?'접기':'더보기 +'+(total-CL_PLACE_CHIP_LIMIT)}</button>`;
+  }
+  wrap.innerHTML=html;
+  clRenderAreaChips();
+}
+function clTogglePlacesExpanded(){
+  clPlacesExpanded=!clPlacesExpanded;
+  clRenderPlaceChips();
+}
+function clPickPlace(name){
+  const input=document.getElementById('clLocation');
+  const area=document.getElementById('clArea');
+  if(area&&clNormPlace(input.value)!==name) area.value=''; // 장소가 바뀌면 이전 장소의 구역은 의미가 없으므로 비움
+  input.value=name;
+  clPlacesExpanded=false;
+  clRenderPlaceChips();
+}
+// 선택된 장소에서 지금까지 쓰인 구역만 칩으로 보여줌 — 이번에 이미 점검을 마친 구역은 ✓로 표시
+function clRenderAreaChips(){
+  const wrap=document.getElementById('clAreaChips');
+  if(!wrap) return;
+  const loc=clNormPlace(document.getElementById('clLocation')?.value);
+  const cur=clNormPlace(document.getElementById('clArea')?.value);
+  const date=document.getElementById('clDate')?.value||'';
+  const p=clPlaces.find(x=>x.name===loc);
+  const areas=p?p.areas:[];
+  const dl=document.getElementById('clAreaList');
+  if(dl) dl.innerHTML=areas.map(a=>`<option value="${escHtml(a)}">`).join('');
+  wrap.innerHTML=areas.map(a=>{
+    const done=clDoneToday.has(date+'|'+loc+'|'+a);
+    const cls=a===cur?' on':(done?' done':'');
+    return `<button type="button" class="cl-chip${cls}" data-name="${escHtml(a)}" onclick="clPickArea(this.dataset.name)">${done?'✓ ':''}${escHtml(a)}</button>`;
+  }).join('');
+}
+function clPickArea(name){
+  document.getElementById('clArea').value=name;
+  clRenderAreaChips();
+}
+// 제출 완료 후 "같은 장소에서 다음 구역 점검" — 장소/일자/점검자/점검 구분은 그대로 두고 점검 항목만 비움.
+// 학교처럼 한 장소에 여러 대가 있는 현장에서 장소를 매번 다시 입력하지 않도록 함
+function clContinueSameLocation(){
+  const get=id=>document.getElementById(id)?.value||'';
+  const keep={loc:get('clLocation'), date:get('clDate'), inspector:get('clInspector'),
+    type:document.getElementById('clType')?.dataset.value||''};
+  resetChecklistForm();
+  document.getElementById('clLocation').value=keep.loc;
+  if(keep.date) document.getElementById('clDate').value=keep.date;
+  if(keep.inspector) document.getElementById('clInspector').value=keep.inspector;
+  if(keep.type){
+    const btn=[...document.querySelectorAll('#clType .checklist-toggle-btn')].find(b=>b.textContent.trim()===keep.type);
+    if(btn) clSetToggle('clType',keep.type,btn,'on-sel');
+  }
+  clRenderPlaceChips();
+  document.getElementById('checklistForm')?.scrollIntoView({block:'start'});
 }
 // 사용률/포집량/풍속 입력란 — type=number만으로는 일부 모바일 브라우저(한글 IME 등)에서 숫자 아닌
 // 문자가 섞여 들어가는 경우가 있어(예: "222ㅇ"), text+inputmode로 바꾸고 입력할 때마다 숫자 아닌
@@ -3155,7 +3264,7 @@ function collectChecklistData(){
   const tog=id=>document.getElementById(id)?.dataset.value||'';
   return{
     savedAt:new Date().toISOString(),
-    location:val('clLocation'), date:val('clDate'), inspector:val('clInspector'), type:tog('clType'),
+    location:val('clLocation'), area:val('clArea'), date:val('clDate'), inspector:val('clInspector'), type:tog('clType'),
     ballResult:tog('clBallResult'), ballIssue:val('clBallIssue'),
     matResult:tog('clMatResult'), matIssue:val('clMatIssue'),
     springResult:tog('clSpringResult'), springIssue:val('clSpringIssue'),
@@ -3278,6 +3387,10 @@ async function submitChecklist(){
     const json=await clPostChecklist({action:'submitChecklist',clientSubmissionId,...data},3);
     if(json.success){
       if(data.inspector) lsSet(LS_CL_INSPECTOR,data.inspector); // 이 기기의 다음 점검표 작성 시 자동으로 채워지도록 기억
+      clRememberPlace(data.location,data.area);
+      clDoneToday.add((data.date||'')+'|'+clNormPlace(data.location)+'|'+clNormPlace(data.area));
+      const placeLabel=clNormPlace(data.location)+(data.area?' / '+clNormPlace(data.area):'');
+      document.getElementById('clSuccessPlace').textContent=placeLabel+' 점검표가 저장되었습니다.';
       document.getElementById('checklistForm').style.display='none';
       document.getElementById('checklistSuccess').style.display='block';
       openChecklistPhotoModal();
