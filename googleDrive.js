@@ -535,6 +535,29 @@ function refreshChecklistStats(ss) {
     sheet.setRowHeight(row + 1, 42);
     row += 3;
 
+    // ── 점검자별 마지막 점검 일시 — 처음 제출한 순서대로 오른쪽으로 한 칸씩 늘어남 ──
+    var inspMap = {}, inspOrder = [];
+    subs.forEach(function(s) {
+        if (!s.inspector) return;
+        if (!inspMap[s.inspector]) { inspMap[s.inspector] = { name: s.inspector, last: '' }; inspOrder.push(inspMap[s.inspector]); }
+        if (s.submittedAt > inspMap[s.inspector].last) inspMap[s.inspector].last = s.submittedAt;
+    });
+    sheet.getRange(row, 1, 2, 1).setValues([['점검자'], ['마지막 점검']])
+        .setFontWeight('bold').setFontColor(STATS_COLOR.sub).setBackground('#f8f9fa').setVerticalAlignment('middle');
+    if (inspOrder.length) {
+        var inspRange = sheet.getRange(row, 2, 2, inspOrder.length);
+        inspRange.setNumberFormat('@') // 일시가 날짜로 자동 변환되지 않게
+            .setValues([
+                inspOrder.map(function(p) { return p.name; }),
+                inspOrder.map(function(p) { return p.last.replace(' ', '\n'); }) // 좁은 열에서도 보이게 날짜/시간 두 줄로
+            ])
+            .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true).setBackground('#f8f9fa')
+            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+        sheet.getRange(row, 2, 1, inspOrder.length).setFontWeight('bold');
+    }
+    sheet.setRowHeight(row + 1, 36);
+    row += 3;
+
     function writeTitle(text, sub) {
         sheet.getRange(row, 1).setValue(text).setFontSize(12).setFontWeight('bold').setFontColor(STATS_COLOR.title);
         if (sub) sheet.getRange(row, 3).setValue(sub).setFontColor(STATS_COLOR.sub);
