@@ -268,7 +268,7 @@ function buildChecklistItemRows(base, data) {
     add('매트', '⑤ 호스 상태 점검', data.hoseResult, data.hoseIssue);
     add('집진기', '① 전원 및 동작상태', data.powerResult, data.powerIssue);
     add('집진기', '② 센서 상태', data.sensorResult, data.sensorIssue);
-    add('집진기', '표시 방식', data.displayType, '');
+    add('집진기', '제품 종류', data.displayType, '');
     if (data.displayType === 'LED') {
         add('집진기', '③ LED 표시상태', data.ledResult, data.ledIssue);
     } else if (data.displayType === 'LCD') {

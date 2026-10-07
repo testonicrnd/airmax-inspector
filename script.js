@@ -3092,7 +3092,8 @@ function clResetWindTestDefault(){
   if(rowsWrap) rowsWrap.innerHTML='';
 }
 const CL_USAGE_RATE_IDS=['clBagRate','clHepaRate','clMotorRate'];
-// LED/LCD 제품 표시 방식 선택 — 헷갈리지 않도록 선택된 쪽의 점검 항목만 보여주고 다른 쪽은 숨김.
+// LED/LCD/Air Crew 제품 종류 선택 — 헷갈리지 않도록 선택된 쪽의 점검 항목만 보여주고 다른 쪽은 숨김.
+// Air Crew는 LED·LCD 표시가 없어 ③④ 항목 없이 LED 제품처럼 LCD 전용 항목도 비활성화됨.
 // LCD 모뎀 통신상태, 소모품 사용률(%)은 전부 LCD 화면에서 확인하는 값이라 LED 제품엔 애초에
 // 표시/입력할 방법이 없음 — 그래서 LCD 선택 시에만 노출·입력 가능하게 함
 function clSelectDisplayType(type,btnEl){
@@ -3174,7 +3175,7 @@ function getChecklistMissingItems(){
   if(!tog('clPowerResult')) missing.push('집진기 ① 전원 및 동작상태');
   if(!tog('clSensorResult')) missing.push('집진기 ② 센서 상태');
   const displayType=tog('clDisplayType');
-  if(!displayType) missing.push('집진기 표시 방식 선택 (LED/LCD)');
+  if(!displayType) missing.push('집진기 제품 종류 선택 (LED/LCD/Air Crew)');
   else if(displayType==='LED'&&!tog('clLedResult')) missing.push('집진기 ③ LED 표시상태');
   else if(displayType==='LCD'){
     if(!tog('clLcdResult')) missing.push('집진기 ③ LCD 표시상태');
