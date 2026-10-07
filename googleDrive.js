@@ -25,7 +25,7 @@ Google Apps Script 코드 — 아래 코드를 복사하여 GAS 프로젝트에 
     이 스프레드시트는 스크립트가 "실행 계정"으로 배포된 계정의 내 드라이브에 생성되므로, 필요하면
     직접 찾아서(제출 성공 응답에 포함되는 링크 참고) 다른 사람과 공유해줘야 한다.
     같은 스프레드시트에 제출 시마다 자동으로 아래 시트도 만들어지고 갱신된다:
-        "통계"          — 장소별 현황 / 항목별 이상 발생 현황 / 월별 점검 현황
+        "통계"          — 점검 현황판(장소별 최근 점검 ✓/✗) / 이상 발생 항목 + 차트 / 월별 점검 현황 + 차트
         "장소-<점검장소>" — 해당 장소의 점검 기록만 모아 보기 (원본 "점검표"를 FILTER 수식으로 참조)
     기존 데이터로 처음 만들 때는 GAS 편집기에서 rebuildChecklistReports() 함수를 한 번 직접 실행하면 된다.
 ================================================================================
@@ -425,120 +425,235 @@ function readChecklistSubmissions(ss) {
     return order;
 }
 
+// 통계 시트 "현황판"의 점검 항목 열 — 장소마다 최근 점검 결과를 ✓/✗로 한 줄에 보여줌.
+// items에 여러 개를 넣으면 그 중 있는 결과를 사용(LED/LCD 표시상태처럼 제품별로 이름만 다른 항목)
+var CHECKLIST_BOARD_ITEMS = [
+    { header: '매트\n볼',         section: '매트',   items: ['① 볼 상태 점검'] },
+    { header: '매트\n상판/경사면', section: '매트',   items: ['② 상판/경사면'] },
+    { header: '매트\n스프링',      section: '매트',   items: ['③ 스프링 상태 점검'] },
+    { header: '매트\n호스',        section: '매트',   items: ['⑤ 호스 상태 점검'] },
+    { header: '집진기\n전원/동작', section: '집진기', items: ['① 전원 및 동작상태'] },
+    { header: '집진기\n센서',      section: '집진기', items: ['② 센서 상태'] },
+    { header: '집진기\n표시상태',  section: '집진기', items: ['③ LED 표시상태', '③ LCD 표시상태'] },
+    { header: '집진기\n통신',      section: '집진기', items: ['④ 통신상태'] },
+    { header: '집진기\n공기질센서', section: '집진기', items: ['④ 공기질 센서 상태'] }
+];
+var STATS_COLOR = { ok: '#e6f4ea', okText: '#137333', bad: '#fce8e6', badText: '#c5221f', na: '#f1f3f4', naText: '#9aa0a6',
+    header: '#434343', title: '#202124', sub: '#5f6368' };
+
 function refreshChecklistStats(ss) {
     var subs = readChecklistSubmissions(ss);
     var sheet = ss.getSheetByName(CHECKLIST_STATS_SHEET);
-    if (!sheet) {
-        sheet = ss.insertSheet(CHECKLIST_STATS_SHEET, 1); // 점검표 바로 다음 탭
-    }
+    if (!sheet) sheet = ss.insertSheet(CHECKLIST_STATS_SHEET, 1); // 점검표 바로 다음 탭
+    sheet.getCharts().forEach(function(c) { sheet.removeChart(c); }); // clear()로는 차트가 안 지워짐
     sheet.clear();
+    sheet.clearNotes();
     sheet.setConditionalFormatRules([]);
+    sheet.setRowHeights(1, sheet.getMaxRows(), 21); // 이전 갱신 때 늘려둔 헤더 행 높이 초기화
 
-    var itemValue = function(s, name) {
-        for (var i = 0; i < s.items.length; i++) if (s.items[i].item === name) return s.items[i].result;
-        return '';
+    var findItem = function(s, section, names) {
+        for (var i = 0; i < s.items.length; i++) {
+            var it = s.items[i];
+            if ((!section || it.section === section) && names.indexOf(it.item) !== -1) return it;
+        }
+        return null;
     };
-    var itemKey = function(it) { return it.section + ' ' + it.item; };
+    var itemValue = function(s, name) { var it = findItem(s, null, [name]); return it ? it.result : ''; };
+    var badItemsOf = function(s) { return s.items.filter(function(it) { return isChecklistBadResult(it.result); }); };
+    var num = function(v) { return v === '' || isNaN(Number(v)) ? '' : Number(v); };
 
-    // 1) 장소별 요약 — 마지막 점검 기준 현황 + 누적 이상 건수
+    // 장소별로 묶기 — subs가 날짜 오름차순이라 마지막에 남는 게 최근 점검
     var locMap = {}, locOrder = [];
     subs.forEach(function(s) {
         if (!s.location) return;
         var L = locMap[s.location];
-        if (!L) { L = locMap[s.location] = { name: s.location, count: 0, badTotal: 0, last: null }; locOrder.push(L); }
+        if (!L) { L = locMap[s.location] = { name: s.location, count: 0, last: null }; locOrder.push(L); }
         L.count++;
-        s.items.forEach(function(it) { if (isChecklistBadResult(it.result)) L.badTotal++; });
-        L.last = s; // subs가 날짜 오름차순이라 마지막에 남는 게 최근 점검
+        L.last = s;
     });
-    locOrder.sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
-    var locRows = locOrder.map(function(L) {
-        var last = L.last;
-        var lastBad = last.items.filter(function(it) { return isChecklistBadResult(it.result); })
-            .map(function(it) { return itemKey(it) + (it.note ? '(' + it.note + ')' : ''); });
-        var sheetRef = ss.getSheetByName(locationSheetName(L.name));
-        var nameCell = sheetRef
-            ? '=HYPERLINK("#gid=' + sheetRef.getSheetId() + '","' + L.name.replace(/"/g, '""') + '")'
-            : L.name;
-        return [nameCell, L.count, last.date, last.inspector, itemValue(last, '제품 종류') || itemValue(last, '표시 방식'), // '표시 방식'은 이름 변경 전 기존 데이터
-            lastBad.length ? lastBad.join(', ') : '없음', L.badTotal,
-            itemValue(last, '먼지봉투 사용률(%)'), itemValue(last, 'HEPA필터 사용률(%)'), itemValue(last, '모터 사용률(%)')];
+    // 최근 점검에 이상이 있는 장소를 위로, 그 다음 이름순
+    locOrder.forEach(function(L) { L.lastBad = badItemsOf(L.last).length; });
+    locOrder.sort(function(a, b) {
+        if ((a.lastBad > 0) !== (b.lastBad > 0)) return a.lastBad > 0 ? -1 : 1;
+        return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
-    var locHeader = ['점검장소', '누적 점검 횟수', '최근 점검일', '최근 점검자', '제품 종류',
-        '최근 점검 이상 항목', '누적 이상 항목 수', '최근 먼지봉투 사용률(%)', '최근 HEPA 사용률(%)', '최근 모터 사용률(%)'];
 
-    // 2) 항목별 이상 발생 현황 — 결과가 정상/이상, OK/NO로 판정되는 항목만
-    var itemMap = {}, itemOrder = [];
+    var thisMonth = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM');
+    var monthCount = subs.filter(function(s) { return s.date.substring(0, 7) === thisMonth; }).length;
+    var badLocCount = locOrder.filter(function(L) { return L.lastBad > 0; }).length;
+
+    var row = 1;
+    sheet.getRange(row, 1).setValue('점검 현황판').setFontSize(16).setFontWeight('bold').setFontColor(STATS_COLOR.title);
+    sheet.getRange(row, 3).setValue('마지막 업데이트 ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'))
+        .setFontColor(STATS_COLOR.sub);
+    row += 2;
+
+    // ── 요약 숫자 ─────────────────────────────────────────────
+    var kpis = [['총 점검', subs.length + '건'], ['점검 장소', locOrder.length + '곳'],
+        ['이번 달 점검', monthCount + '건'], ['최근 점검 이상 장소', badLocCount + '곳']];
+    // 1열을 고정해두면 고정선을 넘는 셀 병합이 안 되므로, 병합 없이 한 칸씩 사용
+    kpis.forEach(function(k, i) {
+        var col = 1 + i;
+        sheet.getRange(row, col).setValue(k[0]).setFontColor(STATS_COLOR.sub).setHorizontalAlignment('center')
+            .setBackground('#f8f9fa').setWrap(true);
+        sheet.getRange(row + 1, col).setValue(k[1]).setFontSize(20).setFontWeight('bold')
+            .setHorizontalAlignment('center').setBackground('#f8f9fa')
+            .setFontColor(i === 3 && badLocCount > 0 ? STATS_COLOR.badText : STATS_COLOR.title);
+    });
+    sheet.setRowHeight(row + 1, 42);
+    row += 3;
+
+    function writeTitle(text, sub) {
+        sheet.getRange(row, 1).setValue(text).setFontSize(12).setFontWeight('bold').setFontColor(STATS_COLOR.title);
+        if (sub) sheet.getRange(row, 3).setValue(sub).setFontColor(STATS_COLOR.sub);
+        row++;
+    }
+    function writeHeader(header) {
+        sheet.getRange(row, 1, 1, header.length).setValues([header])
+            .setFontWeight('bold').setBackground(STATS_COLOR.header).setFontColor('#ffffff')
+            .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center');
+        sheet.setRowHeight(row, 40);
+        row++;
+    }
+
+    // ── 1) 장소별 현황판 ──────────────────────────────────────
+    // 장소 1곳 = 1줄. 최근 점검 결과를 항목마다 ✓/✗로 보여주고, ✗ 칸에 마우스를 올리면 이상 내용(메모)이 보임
+    writeTitle('장소별 현황 (최근 점검 기준)', '✗ 칸에 마우스를 올리면 이상 내용이 보입니다 · 장소명을 누르면 장소 시트로 이동');
+    var infoHeader = ['점검장소', '상태', '최근 점검일', '최근 점검자', '제품 종류', '누적 점검'];
+    var usageHeader = ['먼지봉투\n사용률(%)', 'HEPA\n사용률(%)', '모터\n사용률(%)'];
+    var boardHeader = infoHeader.concat(CHECKLIST_BOARD_ITEMS.map(function(b) { return b.header; }), usageHeader);
+    writeHeader(boardHeader);
+    var boardStart = row;
+    var itemCol0 = infoHeader.length + 1;
+    var usageCol0 = itemCol0 + CHECKLIST_BOARD_ITEMS.length;
+    if (locOrder.length) {
+        var values = [], bgs = [], fcs = [], notes = [];
+        locOrder.forEach(function(L) {
+            var last = L.last;
+            var sheetRef = ss.getSheetByName(locationSheetName(L.name));
+            var nameCell = sheetRef
+                ? '=HYPERLINK("#gid=' + sheetRef.getSheetId() + '","' + L.name.replace(/"/g, '""') + '")'
+                : L.name;
+            var status = L.lastBad ? '이상 ' + L.lastBad + '건' : '정상';
+            var v = [nameCell, status, last.date, last.inspector,
+                itemValue(last, '제품 종류') || itemValue(last, '표시 방식'), L.count]; // '표시 방식'은 이름 변경 전 기존 데이터
+            var bg = ['#ffffff', L.lastBad ? STATS_COLOR.bad : STATS_COLOR.ok, '#ffffff', '#ffffff', '#ffffff', '#ffffff'];
+            var fc = ['#1a73e8', L.lastBad ? STATS_COLOR.badText : STATS_COLOR.okText, '#202124', '#202124', '#202124', '#202124'];
+            var nt = ['', L.lastBad ? badItemsOf(last).map(function(it) {
+                return it.section + ' ' + it.item + (it.note ? ' — ' + it.note : '');
+            }).join('\n') : '', '', '', '', ''];
+            CHECKLIST_BOARD_ITEMS.forEach(function(b) {
+                var it = findItem(last, b.section, b.items);
+                if (!it || !it.result) { v.push('-'); bg.push(STATS_COLOR.na); fc.push(STATS_COLOR.naText); nt.push(''); }
+                else if (isChecklistBadResult(it.result)) { v.push('✗'); bg.push(STATS_COLOR.bad); fc.push(STATS_COLOR.badText); nt.push(it.note || ''); }
+                else { v.push('✓'); bg.push(STATS_COLOR.ok); fc.push(STATS_COLOR.okText); nt.push(''); }
+            });
+            ['먼지봉투 사용률(%)', 'HEPA필터 사용률(%)', '모터 사용률(%)'].forEach(function(name) {
+                v.push(num(itemValue(last, name))); bg.push('#ffffff'); fc.push('#202124'); nt.push('');
+            });
+            values.push(v); bgs.push(bg); fcs.push(fc); notes.push(nt);
+        });
+        var n = values.length;
+        sheet.getRange(boardStart, 3, n, 1).setNumberFormat('@'); // 최근 점검일이 날짜로 자동 변환되지 않게
+        var boardRange = sheet.getRange(boardStart, 1, n, boardHeader.length);
+        boardRange.setValues(values).setBackgrounds(bgs).setFontColors(fcs).setNotes(notes)
+            .setVerticalAlignment('middle').setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+        sheet.getRange(boardStart, 2, n, boardHeader.length - 1).setHorizontalAlignment('center');
+        sheet.getRange(boardStart, itemCol0, n, CHECKLIST_BOARD_ITEMS.length).setFontWeight('bold').setFontSize(12);
+        sheet.getRange(boardStart, 2, n, 1).setFontWeight('bold');
+        // 소모품 사용률은 초록(낮음) → 빨강(높음) 색 단계로 교체 시기를 한눈에
+        sheet.setConditionalFormatRules([
+            SpreadsheetApp.newConditionalFormatRule()
+                .setGradientMinpointWithValue('#e6f4ea', SpreadsheetApp.InterpolationType.NUMBER, '0')
+                .setGradientMidpointWithValue('#fef7e0', SpreadsheetApp.InterpolationType.NUMBER, '60')
+                .setGradientMaxpointWithValue('#f4c7c3', SpreadsheetApp.InterpolationType.NUMBER, '100')
+                .setRanges([sheet.getRange(boardStart, usageCol0, n, usageHeader.length)]).build()
+        ]);
+        row += n;
+    } else {
+        sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
+        row++;
+    }
+    row += 2;
+
+    var CHART_ROWS = 16; // 차트(높이 300px)가 다음 표를 가리지 않도록 확보하는 행 수
+    var CHART_COL = 5;
+
+    // ── 2) 이상 발생 항목 (누적) — 이상이 한 번이라도 나온 항목만 ────────────
+    var badMap = {}, badOrder = [];
     subs.forEach(function(s) {
-        s.items.forEach(function(it) {
-            if (['정상', '이상', 'OK', 'NO'].indexOf(it.result) === -1) return;
-            var k = itemKey(it);
-            var m = itemMap[k];
-            if (!m) { m = itemMap[k] = { key: k, total: 0, bad: 0, locs: {} }; itemOrder.push(m); }
-            m.total++;
-            if (isChecklistBadResult(it.result)) { m.bad++; m.locs[s.location] = true; }
+        badItemsOf(s).forEach(function(it) {
+            var k = it.section + ' ' + it.item;
+            var m = badMap[k];
+            if (!m) { m = badMap[k] = { key: k, count: 0, locs: {} }; badOrder.push(m); }
+            m.count++;
+            m.locs[s.location] = true;
         });
     });
-    var itemRows = itemOrder.map(function(m) {
-        return [m.key, m.total, m.bad, m.total ? m.bad / m.total : 0, Object.keys(m.locs).join(', ')];
-    });
-    var itemHeader = ['항목', '점검 수', '이상 수', '이상률', '이상 발생 장소'];
+    badOrder.sort(function(a, b) { return b.count - a.count; });
+    writeTitle('이상 발생 항목 (누적)');
+    var badHeader = ['항목', '이상 건수', '발생 장소 수'];
+    var blockStart = row;
+    writeHeader(badHeader);
+    if (badOrder.length) {
+        var badRows = badOrder.map(function(m) { return [m.key, m.count, Object.keys(m.locs).length]; });
+        sheet.getRange(row, 1, badRows.length, badHeader.length).setValues(badRows)
+            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+        sheet.getRange(row, 2, badRows.length, 2).setHorizontalAlignment('center');
+        sheet.insertChart(sheet.newChart().setChartType(Charts.ChartType.BAR)
+            .addRange(sheet.getRange(row - 1, 1, badRows.length + 1, 2))
+            .setNumHeaders(1)
+            .setPosition(blockStart, CHART_COL, 0, 0)
+            .setOption('title', '항목별 이상 건수')
+            .setOption('legend', { position: 'none' })
+            .setOption('colors', ['#d93025'])
+            .setOption('width', 560).setOption('height', 300)
+            .build());
+        row += Math.max(badRows.length, CHART_ROWS - 1);
+    } else {
+        sheet.getRange(row, 1).setValue('이상 항목 없음').setFontColor(STATS_COLOR.okText);
+        row++;
+    }
+    row += 2;
 
-    // 3) 월별 점검 현황 (점검일자 기준)
+    // ── 3) 월별 점검 현황 ────────────────────────────────────
     var monthMap = {}, monthOrder = [];
     subs.forEach(function(s) {
         var ym = s.date.substring(0, 7);
         var m = monthMap[ym];
-        if (!m) { m = monthMap[ym] = { ym: ym, count: 0, withBad: 0, badItems: 0, locs: {} }; monthOrder.push(m); }
+        if (!m) { m = monthMap[ym] = { ym: ym, count: 0, withBad: 0 }; monthOrder.push(m); }
         m.count++;
-        m.locs[s.location] = true;
-        var bad = s.items.filter(function(it) { return isChecklistBadResult(it.result); }).length;
-        m.badItems += bad;
-        if (bad) m.withBad++;
+        if (badItemsOf(s).length) m.withBad++;
     });
-    var monthRows = monthOrder.map(function(m) {
-        return [m.ym, m.count, Object.keys(m.locs).length, m.withBad, m.badItems];
-    });
-    var monthHeader = ['월', '점검 건수', '점검 장소 수', '이상 발견 점검 건수', '이상 항목 수'];
-
-    // 시트에 블록 단위로 출력
-    var row = 1;
-    sheet.getRange(row, 1).setValue('점검표 통계')
-        .setFontSize(14).setFontWeight('bold');
-    sheet.getRange(row, 3).setValue('마지막 업데이트: ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss') +
-        '  ·  총 점검 ' + subs.length + '건 · 장소 ' + locOrder.length + '곳').setFontColor('#666666');
-    row += 2;
-    // textCols: '2026-10-06', '2026-10'처럼 시트가 날짜로 자동 변환해버리는 값을 글자 그대로 보여줄 열(1-based)
-    function writeBlock(title, header, rows, after, textCols) {
-        sheet.getRange(row, 1).setValue(title).setFontWeight('bold').setFontSize(12);
-        row++;
-        sheet.getRange(row, 1, 1, header.length).setValues([header])
-            .setFontWeight('bold').setBackground('#434343').setFontColor('#ffffff')
-            .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center');
-        var startRow = row + 1;
-        if (rows.length) {
-            (textCols || []).forEach(function(c) { sheet.getRange(startRow, c, rows.length, 1).setNumberFormat('@'); });
-            sheet.getRange(startRow, 1, rows.length, header.length).setValues(rows).setVerticalAlignment('middle');
-            if (after) after(startRow, rows.length);
-        } else {
-            sheet.getRange(startRow, 1).setValue('데이터 없음').setFontColor('#999999');
-        }
-        row = startRow + Math.max(rows.length, 1) + 2;
+    writeTitle('월별 점검 현황');
+    var monthHeader = ['월', '점검 건수', '이상 발견 건수'];
+    blockStart = row;
+    writeHeader(monthHeader);
+    if (monthOrder.length) {
+        var monthRows = monthOrder.map(function(m) { return [m.ym, m.count, m.withBad]; });
+        sheet.getRange(row, 1, monthRows.length, 1).setNumberFormat('@'); // '2026-10'이 날짜로 자동 변환되지 않게
+        sheet.getRange(row, 1, monthRows.length, monthHeader.length).setValues(monthRows)
+            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+        sheet.getRange(row, 1, monthRows.length, monthHeader.length).setHorizontalAlignment('center');
+        sheet.insertChart(sheet.newChart().setChartType(Charts.ChartType.COLUMN)
+            .addRange(sheet.getRange(row - 1, 1, monthRows.length + 1, monthHeader.length))
+            .setNumHeaders(1)
+            .setPosition(blockStart, CHART_COL, 0, 0)
+            .setOption('title', '월별 점검 / 이상 발견 건수')
+            .setOption('legend', { position: 'bottom' })
+            .setOption('colors', ['#1a73e8', '#d93025'])
+            .setOption('width', 560).setOption('height', 300)
+            .build());
+        row += Math.max(monthRows.length, CHART_ROWS - 1);
+    } else {
+        sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
     }
-    writeBlock('장소별 현황', locHeader, locRows, function(r, n) {
-        // 최근 점검에 이상 항목이 있는 장소는 빨갛게
-        for (var i = 0; i < n; i++) {
-            if (locRows[i][5] !== '없음') sheet.getRange(r + i, 1, 1, locHeader.length).setBackground('#fce8e6');
-        }
-        sheet.getRange(r, 6, n, 1).setWrap(true);
-    }, [3]);
-    writeBlock('항목별 이상 발생 현황', itemHeader, itemRows, function(r, n) {
-        sheet.getRange(r, 4, n, 1).setNumberFormat('0.0%');
-        sheet.getRange(r, 5, n, 1).setWrap(true);
-    });
-    writeBlock('월별 점검 현황', monthHeader, monthRows, null, [1]);
 
-    var widths = [180, 100, 100, 90, 90, 300, 100, 120, 120, 120];
-    for (var c = 0; c < widths.length; c++) sheet.setColumnWidth(c + 1, widths[c]);
+    sheet.setColumnWidth(1, 200);
+    for (var c = 2; c <= boardHeader.length; c++) sheet.setColumnWidth(c, c < itemCol0 ? 95 : 78);
+    sheet.setColumnWidth(5, 85);
+    sheet.setFrozenColumns(1);
+    sheet.setHiddenGridlines(true);
 }
 
 // GAS 편집기에서 직접 실행 — 기존 점검표 데이터로 장소별 시트와 통계 시트를 한꺼번에 (재)생성
