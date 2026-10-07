@@ -3308,6 +3308,10 @@ function getChecklistMissingItems(){
       if(!tog('clCommResult')) missing.push('집진기 ④ 통신상태');
       if(!tog('clAirSensorResult')) missing.push('집진기 ④ 공기질 센서 상태');
     }
+    // LCD 제품은 화면에서 사용률을 확인할 수 있으므로 소모품 교체 여부와 상관없이 세 항목 모두 필수
+    if(!val('clBagRate')) missing.push('소모품 ① 먼지봉투 사용률 (LCD 제품 필수)');
+    if(!val('clHepaRate')) missing.push('소모품 ① HEPA 필터 사용률 (LCD 제품 필수)');
+    if(!val('clMotorRate')) missing.push('소모품 ① 모터 사용률 (LCD 제품 필수)');
   }
   return missing;
 }
