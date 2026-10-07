@@ -698,6 +698,7 @@ function refreshChecklistStats(ss) {
 
     sheet.setColumnWidth(1, 200);
     for (var c = 2; c <= boardHeader.length; c++) sheet.setColumnWidth(c, c < itemCol0 ? 95 : 78);
+    sheet.setColumnWidth(2, 200); // B4 요약 숫자 "N곳 / N구역"이 큰 글씨라 잘리지 않게 넓게 유지
     sheet.setColumnWidth(5, 85);
     sheet.setFrozenColumns(1);
     sheet.setHiddenGridlines(true);
