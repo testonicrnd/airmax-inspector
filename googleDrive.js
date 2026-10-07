@@ -24,6 +24,10 @@ Google Apps Script 코드 — 아래 코드를 복사하여 GAS 프로젝트에 
     스프레드시트의 ID는 스크립트 속성(PropertiesService)에 저장해 이후 제출부터 재사용한다.
     이 스프레드시트는 스크립트가 "실행 계정"으로 배포된 계정의 내 드라이브에 생성되므로, 필요하면
     직접 찾아서(제출 성공 응답에 포함되는 링크 참고) 다른 사람과 공유해줘야 한다.
+    같은 스프레드시트에 제출 시마다 자동으로 아래 시트도 만들어지고 갱신된다:
+        "통계"          — 장소별 현황 / 항목별 이상 발생 현황 / 월별 점검 현황
+        "장소-<점검장소>" — 해당 장소의 점검 기록만 모아 보기 (원본 "점검표"를 FILTER 수식으로 참조)
+    기존 데이터로 처음 만들 때는 GAS 편집기에서 rebuildChecklistReports() 함수를 한 번 직접 실행하면 된다.
 ================================================================================
 */
 // GET 요청 — 제품 리스트 시트에서 영역/설치장소 + 월별 점검 시트 목록 반환
@@ -298,16 +302,235 @@ function handleSubmitChecklist(data) {
         var savedDate = data.savedAt ? new Date(data.savedAt) : new Date();
         var submittedAt = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
         var submissionId = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyyMMddHHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
-        var base = [submissionId, submittedAt, data.location || '', data.date || '', data.inspector || '', data.type || ''];
+        var location = normalizeChecklistLocation(data.location);
+        var base = [submissionId, submittedAt, location, data.date || '', data.inspector || '', data.type || ''];
         var rows = buildChecklistItemRows(base, data);
-        if (rows.length) {
-            sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CHECKLIST_LONG_HEADERS.length).setValues(rows);
+        // 동시 제출 시 getLastRow() 기준으로 같은 행에 덮어쓰지 않도록 잠금
+        var lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        try {
+            if (rows.length) {
+                sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CHECKLIST_LONG_HEADERS.length).setValues(rows);
+            }
+            if (dedupeKey) cache.put(dedupeKey, '1', 600);
+            // 장소별 시트/통계 시트 갱신 — 실패해도 원본 저장은 이미 끝났으므로 제출은 성공으로 응답
+            try {
+                if (location) getOrCreateLocationSheet(ss, location);
+                refreshChecklistStats(ss);
+            } catch (e) { /* 통계 갱신 실패는 무시 — rebuildChecklistReports()로 언제든 재생성 가능 */ }
+        } finally {
+            lock.releaseLock();
         }
-        if (dedupeKey) cache.put(dedupeKey, '1', 600);
         return buildJson({ success: true });
     } catch(err) {
         return buildJson({ success: false, error: err.message });
     }
+}
+
+/* ===================================================================
+   점검표 장소별 시트 / 통계 시트
+   - "장소-<점검장소>" 시트: 원본 "점검표" 시트를 FILTER 수식으로 보여주므로 원본이 바뀌면 자동 반영됨.
+     새 장소로 제출이 들어오면 그때 시트가 생성됨.
+   - "통계" 시트: 제출될 때마다 원본 전체를 다시 읽어 장소별 요약 / 항목별 이상률 / 월별 점검 현황을 새로 씀.
+   - 기존에 쌓인 데이터로 처음 만들거나 꼬였을 때는 GAS 편집기에서 rebuildChecklistReports()를 직접 실행.
+   =================================================================== */
+var CHECKLIST_MAIN_SHEET = '점검표';
+var CHECKLIST_STATS_SHEET = '통계';
+var CHECKLIST_LOCATION_PREFIX = '장소-';
+
+// 같은 장소가 띄어쓰기 차이로 다른 장소로 갈라지지 않도록 공백을 정리 — 시트의 TRIM()과 같은 규칙
+function normalizeChecklistLocation(loc) {
+    return String(loc || '').replace(/ +/g, ' ').trim();
+}
+// 시트 이름에 쓸 수 없는 문자([ ] * ? / \ :)는 _로 바꾸고, 길이 제한(100자) 안으로 자름
+function locationSheetName(loc) {
+    return (CHECKLIST_LOCATION_PREFIX + loc.replace(/[\[\]\*\?\/\\:]/g, '_')).substring(0, 99);
+}
+function getOrCreateLocationSheet(ss, loc) {
+    var name = locationSheetName(loc);
+    var sheet = ss.getSheetByName(name);
+    if (sheet) return sheet;
+    sheet = ss.insertSheet(name);
+    sheet.getRange(1, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([CHECKLIST_LONG_HEADERS]);
+    var lastColLetter = String.fromCharCode(64 + CHECKLIST_LONG_HEADERS.length);
+    var locColLetter = String.fromCharCode(64 + CHECKLIST_LONG_HEADERS.indexOf('점검장소') + 1);
+    var src = "'" + CHECKLIST_MAIN_SHEET + "'!";
+    sheet.getRange(2, 1).setFormula('=IFERROR(FILTER(' + src + 'A2:' + lastColLetter + ', TRIM(' + src + locColLetter + '2:' + locColLetter + ')="' +
+        loc.replace(/"/g, '""') + '"), "")');
+    try { formatChecklistSheet(sheet); } catch (e) { /* 서식 실패는 무시 */ }
+    return sheet;
+}
+
+function isChecklistBadResult(r) { return r === '이상' || r === 'NO'; }
+// 시트가 '2026-10-07' 같은 값을 날짜로 자동 변환해 Date로 읽히므로 스프레드시트 시간대 기준으로 다시 문자열화
+function checklistCellText(v, tz) {
+    if (v instanceof Date) return Utilities.formatDate(v, tz || 'Asia/Seoul', 'yyyy-MM-dd');
+    return String(v == null ? '' : v).trim();
+}
+
+// 원본 "점검표" 시트(항목 1개 = 행 1개)를 제출 건 단위로 묶어서 반환 — 점검일자/제출시각 오름차순
+function readChecklistSubmissions(ss) {
+    var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
+    if (!sheet || sheet.getLastRow() < 2) return [];
+    var H = CHECKLIST_LONG_HEADERS;
+    var col = function(name) { return H.indexOf(name); };
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, H.length).getValues();
+    var tz = ss.getSpreadsheetTimeZone();
+    var byId = {}, order = [];
+    values.forEach(function(row) {
+        var id = checklistCellText(row[col('제출ID')]);
+        if (!id) return;
+        var s = byId[id];
+        if (!s) {
+            s = byId[id] = {
+                id: id,
+                submittedAt: row[col('제출시각')] instanceof Date
+                    ? Utilities.formatDate(row[col('제출시각')], tz, 'yyyy-MM-dd HH:mm:ss')
+                    : checklistCellText(row[col('제출시각')]),
+                location: normalizeChecklistLocation(checklistCellText(row[col('점검장소')])),
+                date: checklistCellText(row[col('점검일자')], tz),
+                inspector: checklistCellText(row[col('점검자')]),
+                type: checklistCellText(row[col('점검구분')]),
+                items: []
+            };
+            order.push(s);
+        }
+        s.items.push({
+            section: checklistCellText(row[col('구분')]),
+            item: checklistCellText(row[col('항목')]),
+            result: checklistCellText(row[col('결과')]),
+            note: checklistCellText(row[col('비고')])
+        });
+    });
+    order.forEach(function(s) { if (!s.date) s.date = s.submittedAt.substring(0, 10); });
+    order.sort(function(a, b) {
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.submittedAt < b.submittedAt ? -1 : a.submittedAt > b.submittedAt ? 1 : 0);
+    });
+    return order;
+}
+
+function refreshChecklistStats(ss) {
+    var subs = readChecklistSubmissions(ss);
+    var sheet = ss.getSheetByName(CHECKLIST_STATS_SHEET);
+    if (!sheet) {
+        sheet = ss.insertSheet(CHECKLIST_STATS_SHEET, 1); // 점검표 바로 다음 탭
+    }
+    sheet.clear();
+    sheet.setConditionalFormatRules([]);
+
+    var itemValue = function(s, name) {
+        for (var i = 0; i < s.items.length; i++) if (s.items[i].item === name) return s.items[i].result;
+        return '';
+    };
+    var itemKey = function(it) { return it.section + ' ' + it.item; };
+
+    // 1) 장소별 요약 — 마지막 점검 기준 현황 + 누적 이상 건수
+    var locMap = {}, locOrder = [];
+    subs.forEach(function(s) {
+        if (!s.location) return;
+        var L = locMap[s.location];
+        if (!L) { L = locMap[s.location] = { name: s.location, count: 0, badTotal: 0, last: null }; locOrder.push(L); }
+        L.count++;
+        s.items.forEach(function(it) { if (isChecklistBadResult(it.result)) L.badTotal++; });
+        L.last = s; // subs가 날짜 오름차순이라 마지막에 남는 게 최근 점검
+    });
+    locOrder.sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+    var locRows = locOrder.map(function(L) {
+        var last = L.last;
+        var lastBad = last.items.filter(function(it) { return isChecklistBadResult(it.result); })
+            .map(function(it) { return itemKey(it) + (it.note ? '(' + it.note + ')' : ''); });
+        var sheetRef = ss.getSheetByName(locationSheetName(L.name));
+        var nameCell = sheetRef
+            ? '=HYPERLINK("#gid=' + sheetRef.getSheetId() + '","' + L.name.replace(/"/g, '""') + '")'
+            : L.name;
+        return [nameCell, L.count, last.date, last.inspector, itemValue(last, '제품 종류'),
+            lastBad.length ? lastBad.join(', ') : '없음', L.badTotal,
+            itemValue(last, '먼지봉투 사용률(%)'), itemValue(last, 'HEPA필터 사용률(%)'), itemValue(last, '모터 사용률(%)')];
+    });
+    var locHeader = ['점검장소', '누적 점검 횟수', '최근 점검일', '최근 점검자', '제품 종류',
+        '최근 점검 이상 항목', '누적 이상 항목 수', '최근 먼지봉투 사용률(%)', '최근 HEPA 사용률(%)', '최근 모터 사용률(%)'];
+
+    // 2) 항목별 이상 발생 현황 — 결과가 정상/이상, OK/NO로 판정되는 항목만
+    var itemMap = {}, itemOrder = [];
+    subs.forEach(function(s) {
+        s.items.forEach(function(it) {
+            if (['정상', '이상', 'OK', 'NO'].indexOf(it.result) === -1) return;
+            var k = itemKey(it);
+            var m = itemMap[k];
+            if (!m) { m = itemMap[k] = { key: k, total: 0, bad: 0, locs: {} }; itemOrder.push(m); }
+            m.total++;
+            if (isChecklistBadResult(it.result)) { m.bad++; m.locs[s.location] = true; }
+        });
+    });
+    var itemRows = itemOrder.map(function(m) {
+        return [m.key, m.total, m.bad, m.total ? m.bad / m.total : 0, Object.keys(m.locs).join(', ')];
+    });
+    var itemHeader = ['항목', '점검 수', '이상 수', '이상률', '이상 발생 장소'];
+
+    // 3) 월별 점검 현황 (점검일자 기준)
+    var monthMap = {}, monthOrder = [];
+    subs.forEach(function(s) {
+        var ym = s.date.substring(0, 7);
+        var m = monthMap[ym];
+        if (!m) { m = monthMap[ym] = { ym: ym, count: 0, withBad: 0, badItems: 0, locs: {} }; monthOrder.push(m); }
+        m.count++;
+        m.locs[s.location] = true;
+        var bad = s.items.filter(function(it) { return isChecklistBadResult(it.result); }).length;
+        m.badItems += bad;
+        if (bad) m.withBad++;
+    });
+    var monthRows = monthOrder.map(function(m) {
+        return [m.ym, m.count, Object.keys(m.locs).length, m.withBad, m.badItems];
+    });
+    var monthHeader = ['월', '점검 건수', '점검 장소 수', '이상 발견 점검 건수', '이상 항목 수'];
+
+    // 시트에 블록 단위로 출력
+    var row = 1;
+    sheet.getRange(row, 1).setValue('점검표 통계')
+        .setFontSize(14).setFontWeight('bold');
+    sheet.getRange(row, 3).setValue('마지막 업데이트: ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss') +
+        '  ·  총 점검 ' + subs.length + '건 · 장소 ' + locOrder.length + '곳').setFontColor('#666666');
+    row += 2;
+    function writeBlock(title, header, rows, after) {
+        sheet.getRange(row, 1).setValue(title).setFontWeight('bold').setFontSize(12);
+        row++;
+        sheet.getRange(row, 1, 1, header.length).setValues([header])
+            .setFontWeight('bold').setBackground('#434343').setFontColor('#ffffff')
+            .setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center');
+        var startRow = row + 1;
+        if (rows.length) {
+            sheet.getRange(startRow, 1, rows.length, header.length).setValues(rows).setVerticalAlignment('middle');
+            if (after) after(startRow, rows.length);
+        } else {
+            sheet.getRange(startRow, 1).setValue('데이터 없음').setFontColor('#999999');
+        }
+        row = startRow + Math.max(rows.length, 1) + 2;
+    }
+    writeBlock('장소별 현황', locHeader, locRows, function(r, n) {
+        // 최근 점검에 이상 항목이 있는 장소는 빨갛게
+        for (var i = 0; i < n; i++) {
+            if (locRows[i][5] !== '없음') sheet.getRange(r + i, 1, 1, locHeader.length).setBackground('#fce8e6');
+        }
+        sheet.getRange(r, 6, n, 1).setWrap(true);
+    });
+    writeBlock('항목별 이상 발생 현황', itemHeader, itemRows, function(r, n) {
+        sheet.getRange(r, 4, n, 1).setNumberFormat('0.0%');
+        sheet.getRange(r, 5, n, 1).setWrap(true);
+    });
+    writeBlock('월별 점검 현황', monthHeader, monthRows);
+
+    var widths = [180, 100, 100, 90, 90, 300, 100, 120, 120, 120];
+    for (var c = 0; c < widths.length; c++) sheet.setColumnWidth(c + 1, widths[c]);
+}
+
+// GAS 편집기에서 직접 실행 — 기존 점검표 데이터로 장소별 시트와 통계 시트를 한꺼번에 (재)생성
+function rebuildChecklistReports() {
+    var ss = getOrCreateChecklistSpreadsheet();
+    readChecklistSubmissions(ss).forEach(function(s) {
+        if (s.location) getOrCreateLocationSheet(ss, s.location);
+    });
+    refreshChecklistStats(ss);
+    Logger.log('완료: ' + ss.getUrl());
 }
 
 /* ===================================================================
