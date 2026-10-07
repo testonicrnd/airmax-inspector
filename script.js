@@ -3100,10 +3100,11 @@ function clSelectDisplayType(type,btnEl){
   clSetToggle('clDisplayType',type,btnEl,'on-sel');
   const ledSection=document.getElementById('clLedSection');
   const lcdSection=document.getElementById('clLcdSection');
-  const commSection=document.getElementById('clCommSection');
+  const modemSection=document.getElementById('clModemSection');
   if(ledSection) ledSection.style.display=type==='LED'?'block':'none';
   if(lcdSection) lcdSection.style.display=type==='LCD'?'block':'none';
-  if(commSection) commSection.style.display=type==='LCD'?'block':'none';
+  if(modemSection) modemSection.style.display=type==='LCD'?'block':'none';
+  clUpdateCommSectionVisibility();
   CL_USAGE_RATE_IDS.forEach(id=>{
     const el=document.getElementById(id);
     if(!el) return;
@@ -3111,6 +3112,18 @@ function clSelectDisplayType(type,btnEl){
     if(type!=='LCD') el.value='';
   });
   clUpdateInputDoneAvailability();
+}
+// LCD 제품이라도 모뎀이 없는 현장이 있어, 모뎀 설치 O일 때만 모뎀 통신상태 항목을 보여줌
+function clSelectModemInstalled(value,btnEl){
+  clSetToggle('clModemInstalled',value,btnEl,'on-sel');
+  clUpdateCommSectionVisibility();
+}
+function clUpdateCommSectionVisibility(){
+  const commSection=document.getElementById('clCommSection');
+  if(!commSection) return;
+  const displayType=document.getElementById('clDisplayType')?.dataset.value||'';
+  const modem=document.getElementById('clModemInstalled')?.dataset.value||'';
+  commSection.style.display=(displayType==='LCD'&&modem==='O')?'block':'none';
 }
 // 포집량 측정(저울로 무게 재는 것)은 LED/LCD와 무관하게 언제든 가능하므로 "소모품 교체"만 누르면
 // 입력 가능 — 다만 "집진기에 입력 완료"는 LCD 화면에 실제로 입력하는 행위라 LCD 제품일 때만 가능
@@ -3153,6 +3166,7 @@ function collectChecklistData(){
     displayType:tog('clDisplayType'),
     ledResult:tog('clLedResult'), ledIssue:val('clLedIssue'),
     lcdResult:tog('clLcdResult'), lcdIssue:val('clLcdIssue'),
+    modemInstalled:tog('clModemInstalled'),
     commResult:tog('clCommResult'), commIssue:val('clCommIssue'),
     airSensorResult:tog('clAirSensorResult'), airSensorIssue:val('clAirSensorIssue'),
     bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'),
@@ -3179,8 +3193,12 @@ function getChecklistMissingItems(){
   else if(displayType==='LED'&&!tog('clLedResult')) missing.push('집진기 ③ LED 표시상태');
   else if(displayType==='LCD'){
     if(!tog('clLcdResult')) missing.push('집진기 ③ LCD 표시상태');
-    if(!tog('clCommResult')) missing.push('집진기 ④ 통신상태');
-    if(!tog('clAirSensorResult')) missing.push('집진기 ④ 공기질 센서 상태');
+    const modem=tog('clModemInstalled');
+    if(!modem) missing.push('집진기 모뎀 설치 여부');
+    else if(modem==='O'){
+      if(!tog('clCommResult')) missing.push('집진기 ④ 통신상태');
+      if(!tog('clAirSensorResult')) missing.push('집진기 ④ 공기질 센서 상태');
+    }
   }
   return missing;
 }
@@ -3288,9 +3306,11 @@ function resetChecklistForm(){
   form.querySelectorAll('.cl-issue-field').forEach(el=>{ el.style.display='none'; }); // "이상" 눌렀을 때만 보이던 입력란 다시 숨김
   const ledSection=document.getElementById('clLedSection');
   const lcdSection=document.getElementById('clLcdSection');
+  const modemSection=document.getElementById('clModemSection');
   const commSection=document.getElementById('clCommSection');
   if(ledSection) ledSection.style.display='none';
   if(lcdSection) lcdSection.style.display='none';
+  if(modemSection) modemSection.style.display='none';
   if(commSection) commSection.style.display='none';
   clReplaceActive=false;
   const weightEl=document.getElementById('clBagWeight');

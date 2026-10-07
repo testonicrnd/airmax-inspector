@@ -277,8 +277,11 @@ function buildChecklistItemRows(base, data) {
         add('집진기', '③ LED 표시상태', data.ledResult, data.ledIssue);
     } else if (data.displayType === 'LCD') {
         add('집진기', '③ LCD 표시상태', data.lcdResult, data.lcdIssue);
-        add('집진기', '④ 통신상태', data.commResult, data.commIssue);
-        add('집진기', '④ 공기질 센서 상태', data.airSensorResult, data.airSensorIssue);
+        add('집진기', '모뎀 설치 여부', data.modemInstalled, '');
+        if (data.modemInstalled === 'O') {
+            add('집진기', '④ 통신상태', data.commResult, data.commIssue);
+            add('집진기', '④ 공기질 센서 상태', data.airSensorResult, data.airSensorIssue);
+        }
     }
     add('소모품', '먼지봉투 사용률(%)', data.bagRate, '');
     add('소모품', 'HEPA필터 사용률(%)', data.hepaRate, '');

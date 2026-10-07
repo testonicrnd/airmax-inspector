@@ -717,6 +717,15 @@
           <input type="text" class="checklist-input cl-issue-field" id="clLcdIssue" placeholder="이상 항목 (해당 시 입력)" style="margin-top:8px;display:none"/>
         </div>
 
+        <div class="checklist-q" id="clModemSection" style="display:none">
+          <div class="checklist-q-label">모뎀 설치 여부</div>
+          <div class="checklist-q-hint">LCD 제품에 통신 모뎀이 설치되어 있는지 확인 — 설치 O를 선택하면 모뎀 통신상태 항목이 아래에 표시됩니다.</div>
+          <div class="checklist-toggle-group" id="clModemInstalled">
+            <button type="button" class="checklist-toggle-btn" onclick="clSelectModemInstalled('O',this)">설치 O</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSelectModemInstalled('X',this)">설치 X</button>
+          </div>
+        </div>
+
         <div class="checklist-q" id="clCommSection" style="display:none">
           <div class="checklist-q-label">④ LCD 모뎀 통신상태 (점검 대시보드 확인)</div>
           <div class="checklist-q-hint">통신이 정상적으로 연결되는지, 공기질 센서 농도가 정상 표기되는지 확인</div>
