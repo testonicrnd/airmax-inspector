@@ -1140,3 +1140,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .cl-chip.more { border-style:dashed; color:var(--text3); }
 .cl-chip-label { width:100%; font-size:12px; color:var(--text3); }
 .cl-continue-btn { display:block; margin:20px auto 0; padding:12px 20px; font-size:15px; }
+
+/* 점검표 — LCD 버전(로고) 선택 버튼 */
+.cl-logo-btn { display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px 10px; }
+.cl-logo-btn img { display:block; width:100%; max-width:180px; height:38px; object-fit:contain; background:#fff; border-radius:4px; padding:4px; box-sizing:border-box; }
+.cl-logo-btn span { font-size:14px; }

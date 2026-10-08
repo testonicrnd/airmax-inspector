@@ -717,6 +717,19 @@
           <input type="text" class="checklist-input cl-issue-field" id="clLedIssue" placeholder="이상 항목 (해당 시 입력)" style="margin-top:8px;display:none"/>
         </div>
 
+        <div class="checklist-q" id="clLcdVersionSection" style="display:none">
+          <div class="checklist-q-label">LCD 제품 버전 선택</div>
+          <div class="checklist-q-hint">제품에 표시된 로고를 보고 구형 / 신형 중 해당하는 버전을 선택해주세요.</div>
+          <div class="checklist-toggle-group" id="clLcdVersion">
+            <button type="button" class="checklist-toggle-btn cl-logo-btn" onclick="clSetToggle('clLcdVersion','구형',this,'on-sel')">
+              <img src="assets/checklist/logo-old.png" alt="구형 로고"/><span>구형 로고</span>
+            </button>
+            <button type="button" class="checklist-toggle-btn cl-logo-btn" onclick="clSetToggle('clLcdVersion','신형',this,'on-sel')">
+              <img src="assets/checklist/logo-new.jpg" alt="신형 로고"/><span>신형 로고</span>
+            </button>
+          </div>
+        </div>
+
         <div class="checklist-q" id="clLcdSection" style="display:none">
           <div class="checklist-q-label">③ LCD 표시상태 (육안)</div>
           <div class="checklist-q-hint">제품 ID, 소모품 사용량, 동작시간, 동작횟수, 센서, 모터 상태가 모두 정상 표기되는지 확인하고, 흡입 동작 시간에 따라 값이 변화하는지 확인</div>

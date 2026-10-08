@@ -295,6 +295,7 @@ function buildChecklistItemRows(base, data) {
     if (data.displayType === 'LED') {
         add('집진기', '③ LED 표시상태', data.ledResult, data.ledIssue);
     } else if (data.displayType === 'LCD') {
+        add('집진기', 'LCD 버전', data.lcdVersion ? data.lcdVersion + ' 로고' : '', '');
         add('집진기', '③ LCD 표시상태', data.lcdResult, data.lcdIssue);
         add('집진기', '모뎀 설치 여부', data.modemInstalled, '');
         if (data.modemInstalled === 'O') {
@@ -485,6 +486,12 @@ function refreshChecklistStats(ss) {
     };
     var itemValue = function(s, name) { var it = findItem(s, null, [name]); return it ? it.result : ''; };
     var badItemsOf = function(s) { return s.items.filter(function(it) { return isChecklistBadResult(it.result); }); };
+    // 제품 종류 칸 — LCD는 버전까지 "LCD (신형)"처럼 표시. '표시 방식'은 이름 변경 전 기존 데이터
+    var productTypeLabel = function(s) {
+        var type = itemValue(s, '제품 종류') || itemValue(s, '표시 방식');
+        var ver = itemValue(s, 'LCD 버전');
+        return type === 'LCD' && ver ? 'LCD (' + ver.replace(' 로고', '') + ')' : type;
+    };
     var num = function(v) { return v === '' || isNaN(Number(v)) ? '' : Number(v); };
 
     // 장소+세부구역(제품 1대) 단위로 묶기 — subs가 날짜 오름차순이라 마지막에 남는 게 최근 점검
@@ -592,7 +599,7 @@ function refreshChecklistStats(ss) {
                 : label;
             var status = L.lastBad ? '이상 ' + L.lastBad + '건' : '정상';
             var v = [nameCell, status, last.date, last.inspector,
-                itemValue(last, '제품 종류') || itemValue(last, '표시 방식'), L.count]; // '표시 방식'은 이름 변경 전 기존 데이터
+                productTypeLabel(last), L.count];
             var bg = ['#ffffff', L.lastBad ? STATS_COLOR.bad : STATS_COLOR.ok, '#ffffff', '#ffffff', '#ffffff', '#ffffff'];
             var fc = ['#1a73e8', L.lastBad ? STATS_COLOR.badText : STATS_COLOR.okText, '#202124', '#202124', '#202124', '#202124'];
             var nt = ['', L.lastBad ? badItemsOf(last).map(function(it) {

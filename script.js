@@ -3210,6 +3210,8 @@ function clSelectDisplayType(type,btnEl){
   const ledSection=document.getElementById('clLedSection');
   const lcdSection=document.getElementById('clLcdSection');
   const modemSection=document.getElementById('clModemSection');
+  const lcdVersionSection=document.getElementById('clLcdVersionSection');
+  if(lcdVersionSection) lcdVersionSection.style.display=type==='LCD'?'block':'none';
   if(ledSection) ledSection.style.display=type==='LED'?'block':'none';
   if(lcdSection) lcdSection.style.display=type==='LCD'?'block':'none';
   if(modemSection) modemSection.style.display=type==='LCD'?'block':'none';
@@ -3275,7 +3277,7 @@ function collectChecklistData(){
     displayType:tog('clDisplayType'),
     ledResult:tog('clLedResult'), ledIssue:val('clLedIssue'),
     lcdResult:tog('clLcdResult'), lcdIssue:val('clLcdIssue'),
-    modemInstalled:tog('clModemInstalled'),
+    lcdVersion:tog('clLcdVersion'), modemInstalled:tog('clModemInstalled'),
     commResult:tog('clCommResult'), commIssue:val('clCommIssue'),
     airSensorResult:tog('clAirSensorResult'), airSensorIssue:val('clAirSensorIssue'),
     bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'),
@@ -3301,6 +3303,7 @@ function getChecklistMissingItems(){
   if(!displayType) missing.push('집진기 제품 종류 선택 (LED/LCD/Air Crew)');
   else if(displayType==='LED'&&!tog('clLedResult')) missing.push('집진기 ③ LED 표시상태');
   else if(displayType==='LCD'){
+    if(!tog('clLcdVersion')) missing.push('집진기 LCD 제품 버전 (구형/신형 로고)');
     if(!tog('clLcdResult')) missing.push('집진기 ③ LCD 표시상태');
     const modem=tog('clModemInstalled');
     if(!modem) missing.push('집진기 모뎀 설치 여부');
@@ -3425,6 +3428,8 @@ function resetChecklistForm(){
   const lcdSection=document.getElementById('clLcdSection');
   const modemSection=document.getElementById('clModemSection');
   const commSection=document.getElementById('clCommSection');
+  const lcdVersionSection=document.getElementById('clLcdVersionSection');
+  if(lcdVersionSection) lcdVersionSection.style.display='none';
   if(ledSection) ledSection.style.display='none';
   if(lcdSection) lcdSection.style.display='none';
   if(modemSection) modemSection.style.display='none';
