@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.11.0';
+const APP_VERSION = 'v2.11.1';
 const APP_DATE    = '2026.09.29';
 
 /* ===== 설정 ===== */
@@ -62,6 +62,7 @@ let lastDateRange=null, cardDetailModalOpen=false;
 let collectStartMs=null;   // 데이터 수집 시작 시각 — 남은 시간 추정/소요 시간 표시용(참고용, 정확한 계측 아님)
 let lastRunElapsedText='';  // 직전 점검 완료까지 걸린 시간(요약 영역 표시용) — 새 점검 시작 시 초기화
 let singleAllItems=[], singlePage=0, singleShowAll=false;
+let singleMotorDiffs=[]; // singleAllItems와 같은 순서 — 각 수집 시점의 직전 수집 대비 가동 횟수/시간 증가분
 let compareMode=false; // 단일 검색 - 비교 검색(두 기간) 토글 상태
 const chartRegistry=new Map(); // canvasId -> Chart 인스턴스. 단일 검색/기간 비교 차트가 공용으로 사용
 function destroyChart(canvasId){
@@ -2293,6 +2294,7 @@ function cardDetailOverlayClick(e){
 function renderSingleDetail(id, items){
   singleAllItems=[...items].sort((a,b)=>
     new Date(b.format_created_time)-new Date(a.format_created_time));
+  singleMotorDiffs=calcSingleMotorDiffs(singleAllItems);
   singlePage=0; singleShowAll=false;
   const showAllBtn=document.getElementById('singleShowAllBtn');
   if(showAllBtn) showAllBtn.classList.remove('active');
@@ -2301,7 +2303,7 @@ function renderSingleDetail(id, items){
   const copyBtn=document.getElementById('singleCopyBtn');
   if(!items.length){
     document.getElementById('singleDetailBody').innerHTML=
-      `<tr><td colspan="4" class="single-detail-empty" style="text-align:center">조회된 데이터가 없습니다</td></tr>`;
+      `<tr><td colspan="6" class="single-detail-empty" style="text-align:center">조회된 데이터가 없습니다</td></tr>`;
     document.getElementById('singlePagination').innerHTML='';
     document.getElementById('singlePageInfo').textContent='';
     copyBtn.style.display='none';
@@ -2322,12 +2324,17 @@ function renderSinglePage(){
     ? `전체 ${total}건`
     : `${start+1}–${Math.min(start+SINGLE_PAGE_SIZE,total)} / ${total}건`;
 
-  document.getElementById('singleDetailBody').innerHTML=pageItems.map(item=>`<tr>
+  const offset=singleShowAll?0:start;
+  document.getElementById('singleDetailBody').innerHTML=pageItems.map((item,i)=>{
+    const m=singleMotorDiffs[offset+i]||{};
+    return `<tr>
     <td>${escHtml(fmtTime(item.format_created_time))}</td>
     <td>${item.pm_10!==undefined?item.pm_10:'—'}</td>
     <td>${item.pm_2_5!==undefined?item.pm_2_5:'—'}</td>
     <td>${item.co2!==undefined?item.co2:'—'}</td>
-  </tr>`).join('');
+    <td>${m.count!=null?m.count.toLocaleString()+'회':'—'}</td>
+    <td>${m.timeSec!=null?secToHms(m.timeSec):'—'}</td>
+  </tr>`;}).join('');
 
   renderSingleChart([...pageItems].reverse());
 
@@ -2375,15 +2382,41 @@ function toggleCompareMode(){
   document.getElementById('compareResultSection').style.display='none';
 }
 
+// 가동 횟수/시간은 누적값이라 차트와 같은 규칙(직전 수집 대비 증가분, 횟수는 랩어라운드 보정)으로 계산.
+// itemsDesc는 최신순이므로 각 행의 "직전 수집"은 바로 다음 인덱스(더 과거) 항목 — 가장 오래된 행은 비교 대상이 없어 null
+function calcSingleMotorDiffs(itemsDesc){
+  return itemsDesc.map((d,i)=>{
+    const prv=itemsDesc[i+1];
+    if(!prv) return{count:null,timeSec:null};
+    const cur=d.report_data?.motorRunningCount, prvCount=prv.report_data?.motorRunningCount;
+    let count=null;
+    if(cur!=null&&prvCount!=null){
+      count=Number(cur)-Number(prvCount);
+      if(count<0) count+=MOTOR_COUNT_MODULUS; // motorRunningCount 랩어라운드 보정 — calcMotorTotal과 동일한 규칙
+    }
+    const curSec=hmsToSec(d.report_data?.motorRunningTime), prvSec=hmsToSec(prv.report_data?.motorRunningTime);
+    const timeSec=(curSec!=null&&prvSec!=null&&curSec-prvSec>=0)?curSec-prvSec:null;
+    return{count,timeSec};
+  });
+}
+// 엑셀에 붙여넣었을 때 시간 값으로 인식되도록 가동 시간은 H:MM:SS 형식으로 복사
+function secToClock(s){
+  if(s==null||isNaN(s)) return '';
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
 function copySingleToClipboard(){
   if(!singleAllItems.length) return;
-  const header='수집 시간\tPM10\tPM2.5\tCO₂';
-  const rows=singleAllItems.map(d=>
-    [fmtTime(d.format_created_time),
+  const header='수집 시간\tPM10\tPM2.5\tCO₂\t가동 횟수(회)\t가동 시간';
+  const rows=singleAllItems.map((d,i)=>{
+    const m=singleMotorDiffs[i]||{};
+    return [fmtTime(d.format_created_time),
      d.pm_10!==undefined?d.pm_10:'',
      d.pm_2_5!==undefined?d.pm_2_5:'',
-     d.co2!==undefined?d.co2:''].join('\t')
-  );
+     d.co2!==undefined?d.co2:'',
+     m.count!=null?m.count:'',
+     secToClock(m.timeSec)].join('\t');
+  });
   const text=[header,...rows].join('\n');
   navigator.clipboard.writeText(text).then(()=>{
     const btn=document.getElementById('singleCopyBtn');
