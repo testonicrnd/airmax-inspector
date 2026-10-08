@@ -3252,6 +3252,11 @@ function clSelectDisplayType(type,btnEl){
   });
   clUpdateInputDoneAvailability();
   clUpdateUsageMode();
+  // LCD 제품은 대부분 신형이라 버전을 아직 안 골랐으면 신형을 기본 선택 — 구형이면 점검자가 바꿔 누름
+  if(type==='LCD'&&!document.getElementById('clLcdVersion')?.dataset.value){
+    const newBtn=[...document.querySelectorAll('#clLcdVersion .checklist-toggle-btn')].find(b=>b.textContent.includes('신형'));
+    if(newBtn) clSelectLcdVersion('신형',newBtn);
+  }
 }
 // 구형 로고 LCD 제품은 모뎀이 없으므로 모뎀 설치 여부/통신상태 질문 자체를 띄우지 않음 — 신형을 골랐을 때만 표시
 function clModemQuestionApplies(){
