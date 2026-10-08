@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="https://airmax.testonic.co.kr/favicon.ico" type="image/x-icon" sizes="16x16">
+<title>점검표 QR 만들기</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
+<link rel="stylesheet" href="style.css?v=2.11.0"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body { background:var(--bg); color:var(--text); font-family:var(--font-sans); margin:0; }
+  .qr-wrap { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
+  .qr-title { font-size:22px; font-weight:700; margin:0 0 4px; }
+  .qr-desc { font-size:14px; color:var(--text2); line-height:1.6; margin:0 0 20px; }
+  .qr-panel { background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius-lg); padding:18px; margin-bottom:20px; }
+  .qr-label { font-size:15px; font-weight:600; margin:0 0 8px; }
+  .qr-hint { font-size:13px; color:var(--text3); margin:6px 0 0; }
+  .qr-areas { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+  .qr-area { display:flex; align-items:center; gap:6px; border:1.5px solid var(--border); border-radius:999px; padding:6px 12px; font-size:14px; cursor:pointer; background:var(--input-bg); }
+  .qr-area input { accent-color:var(--accent); width:16px; height:16px; margin:0; }
+  .qr-add { display:flex; gap:8px; margin-top:10px; }
+  .qr-add .checklist-input { flex:1; min-width:0; }
+  .qr-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .qr-btn { display:inline-flex; align-items:center; gap:6px; padding:10px 16px; border-radius:var(--radius); font-size:14px; font-family:inherit; cursor:pointer; border:1.5px solid var(--border); background:var(--input-bg); color:var(--text); }
+  .qr-btn.primary { background:var(--btn-bg); color:var(--btn-text); border-color:var(--btn-bg); }
+  .qr-btn .material-icons-round { font-size:18px; }
+  .qr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+  .qr-card { background:#fff; color:#111; border:1.5px solid #ddd; border-radius:10px; padding:16px 14px 12px; text-align:center; break-inside:avoid; }
+  .qr-card-head { font-size:12px; color:#666; letter-spacing:0.02em; margin-bottom:10px; }
+  .qr-card-code { display:flex; justify-content:center; }
+  .qr-card-code img, .qr-card-code canvas { width:170px; height:170px; }
+  .qr-card-loc { font-size:17px; font-weight:700; margin-top:10px; word-break:keep-all; }
+  .qr-card-area { font-size:15px; color:#333; margin-top:2px; word-break:keep-all; }
+  .qr-card-save { margin-top:10px; font-size:12px; padding:6px 10px; }
+  .qr-empty { color:var(--text3); font-size:14px; padding:20px 0; text-align:center; }
+  @media print {
+    body { background:#fff; }
+    .qr-wrap { padding:0; max-width:none; }
+    .qr-no-print { display:none !important; }
+    .qr-grid { grid-template-columns:repeat(3,1fr); gap:10px; }
+    .qr-card { border:1px dashed #999; }
+  }
+</style>
+</head>
+<body>
+<div class="qr-wrap">
+  <div class="qr-no-print">
+    <h1 class="qr-title">점검표 QR 만들기</h1>
+    <p class="qr-desc">현장에 붙일 QR 코드를 만듭니다. QR을 찍으면 Air Max 점검표가 열리고 점검 장소와 세부 구역이 미리 채워집니다. 점검자 이름은 각자 휴대폰에 저장된 값이 그대로 들어갑니다.</p>
+
+    <div class="qr-panel">
+      <div class="qr-label">점검 장소</div>
+      <input type="text" class="checklist-input" id="qrLoc" list="qrLocList" autocomplete="off" placeholder="예: ○○초등학교" oninput="renderAreas()"/>
+      <datalist id="qrLocList"></datalist>
+      <div class="qr-hint" id="qrLoadState">이전에 점검한 장소 목록을 불러오는 중…</div>
+
+      <div class="qr-label" style="margin-top:18px">세부 구역</div>
+      <div class="qr-areas" id="qrAreas"></div>
+      <div class="qr-add">
+        <input type="text" class="checklist-input" id="qrNewArea" placeholder="구역 추가 (예: 정문 출입구)" onkeydown="if(event.key==='Enter'){addArea();}"/>
+        <button type="button" class="qr-btn" onclick="addArea()"><span class="material-icons-round">add</span>추가</button>
+      </div>
+      <div class="qr-hint">체크한 구역마다 QR이 하나씩 만들어집니다. "구역 없이 장소만"은 세부 구역 칸을 비워둔 QR입니다.</div>
+
+      <div class="qr-actions">
+        <button type="button" class="qr-btn primary" onclick="generate()"><span class="material-icons-round">qr_code_2</span>QR 만들기</button>
+        <button type="button" class="qr-btn" onclick="window.print()"><span class="material-icons-round">print</span>인쇄</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="qr-grid" id="qrGrid"></div>
+  <div class="qr-empty qr-no-print" id="qrEmpty">장소를 입력하고 "QR 만들기"를 누르세요.</div>
+</div>
+
+<script>
+// script.js의 GAS_URL과 같은 값 — 웹앱을 새로 배포해 URL이 바뀌면 여기도 함께 바꿀 것
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbw61auB8x8HFf_lk-rxEnpjAY1e9AoIxs7yRkkttZG_wqoSHKxpy4w0YkFzjSoMc8nyNw/exec';
+const NO_AREA = '';
+let places = [];
+let extraAreas = {}; // 장소별로 이 화면에서 직접 추가한 구역
+let unchecked = new Set(); // 체크 해제한 "장소|구역"
+
+try {
+  const theme = localStorage.getItem('airmax_theme');
+  if (theme) document.documentElement.dataset.theme = JSON.parse(theme);
+} catch (e) {}
+try { places = JSON.parse(localStorage.getItem('airmax_checklist_places') || '[]'); } catch (e) {}
+
+function norm(s) { return String(s || '').replace(/ +/g, ' ').trim(); }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+async function loadPlaces() {
+  const state = document.getElementById('qrLoadState');
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'getChecklistPlaces' }) });
+    const json = JSON.parse(await res.text());
+    if (json.success) places = json.places || [];
+    state.textContent = '이전에 점검한 장소 ' + places.length + '곳 — 입력란을 누르면 목록에서 고를 수 있습니다.';
+  } catch (e) {
+    state.textContent = places.length ? '서버 목록을 불러오지 못해 이 기기에 저장된 목록을 사용합니다.' : '장소 목록을 불러오지 못했습니다. 직접 입력해도 됩니다.';
+  }
+  document.getElementById('qrLocList').innerHTML = places.map(p => `<option value="${esc(p.name)}">`).join('');
+  renderAreas();
+}
+
+function areasFor(loc) {
+  const p = places.find(x => x.name === loc);
+  const list = [NO_AREA].concat(p ? p.areas : [], extraAreas[loc] || []);
+  return list.filter((a, i) => list.indexOf(a) === i);
+}
+
+function renderAreas() {
+  const loc = norm(document.getElementById('qrLoc').value);
+  const wrap = document.getElementById('qrAreas');
+  if (!loc) { wrap.innerHTML = '<span class="qr-hint" style="margin:0">장소를 먼저 입력하세요.</span>'; return; }
+  wrap.innerHTML = areasFor(loc).map(a => {
+    const key = loc + '|' + a;
+    return `<label class="qr-area"><input type="checkbox" data-area="${esc(a)}" ${unchecked.has(key) ? '' : 'checked'} onchange="toggleArea(this)"/>${a ? esc(a) : '구역 없이 장소만'}</label>`;
+  }).join('');
+}
+
+function toggleArea(el) {
+  const key = norm(document.getElementById('qrLoc').value) + '|' + el.dataset.area;
+  if (el.checked) unchecked.delete(key); else unchecked.add(key);
+}
+
+function addArea() {
+  const loc = norm(document.getElementById('qrLoc').value);
+  const input = document.getElementById('qrNewArea');
+  const area = norm(input.value);
+  if (!loc) { alert('장소를 먼저 입력하세요.'); return; }
+  if (!area) return;
+  extraAreas[loc] = (extraAreas[loc] || []).concat(area);
+  input.value = '';
+  renderAreas();
+}
+
+// QR 주소 — 이 페이지와 같은 위치의 index.html에 장소/구역을 붙임
+function qrUrl(loc, area) {
+  const url = new URL('./', location.href);
+  url.searchParams.set('loc', loc);
+  if (area) url.searchParams.set('area', area);
+  return url.toString();
+}
+
+function generate() {
+  const loc = norm(document.getElementById('qrLoc').value);
+  if (!loc) { alert('점검 장소를 입력하세요.'); return; }
+  const areas = areasFor(loc).filter(a => !unchecked.has(loc + '|' + a));
+  if (!areas.length) { alert('QR을 만들 구역을 하나 이상 체크하세요.'); return; }
+  const grid = document.getElementById('qrGrid');
+  grid.innerHTML = '';
+  areas.forEach(area => {
+    const card = document.createElement('div');
+    card.className = 'qr-card';
+    card.innerHTML = `<div class="qr-card-head">Air Max 점검표</div><div class="qr-card-code"></div>
+      <div class="qr-card-loc">${esc(loc)}</div>${area ? `<div class="qr-card-area">${esc(area)}</div>` : ''}
+      <button type="button" class="qr-btn qr-card-save qr-no-print">PNG 저장</button>`;
+    grid.appendChild(card);
+    new QRCode(card.querySelector('.qr-card-code'), { text: qrUrl(loc, area), width: 340, height: 340, correctLevel: QRCode.CorrectLevel.M });
+    card.querySelector('.qr-card-save').onclick = () => savePng(card, loc, area);
+  });
+  document.getElementById('qrEmpty').style.display = 'none';
+}
+
+// 장소/구역 글자까지 포함한 라벨 이미지로 저장 — 출력해서 바로 붙일 수 있게
+function savePng(card, loc, area) {
+  const qr = card.querySelector('.qr-card-code canvas');
+  const W = 480, pad = 40, qrSize = 400;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = pad + 28 + qrSize + (area ? 110 : 76);
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#666'; g.font = '20px Pretendard, sans-serif'; g.textAlign = 'center';
+  g.fillText('Air Max 점검표', W / 2, pad);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(qr, (W - qrSize) / 2, pad + 20, qrSize, qrSize);
+  g.fillStyle = '#111'; g.font = 'bold 30px Pretendard, sans-serif';
+  g.fillText(loc, W / 2, pad + 20 + qrSize + 46, W - 40);
+  if (area) { g.fillStyle = '#333'; g.font = '26px Pretendard, sans-serif'; g.fillText(area, W / 2, pad + 20 + qrSize + 86, W - 40); }
+  const a = document.createElement('a');
+  a.href = c.toDataURL('image/png');
+  a.download = 'QR_' + (loc + (area ? '_' + area : '')).replace(/[\\/:*?"<>|\s]+/g, '_') + '.png';
+  a.click();
+}
+
+renderAreas();
+loadPlaces();
+</script>
+</body>
+</html>

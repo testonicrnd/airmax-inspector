@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.10.1';
+const APP_VERSION = 'v2.11.0';
 const APP_DATE    = '2026.09.29';
 
 /* ===== 설정 ===== */
@@ -3041,6 +3041,8 @@ function clRenderPlaceChips(){
   // 일치하면(칩으로 고른 경우) 좁히지 않고 그 칩만 강조 — 다른 장소로 바로 바꿔 누를 수 있게
   const searching=!!q&&!clPlaces.some(p=>p.name===q);
   let list=searching?clPlaces.filter(p=>p.name.includes(q)):clPlaces;
+  // 선택된 장소(QR 진입 등)가 접힌 목록 밖에 있어도 보이도록 맨 앞으로
+  if(!searching&&q) list=[...list.filter(p=>p.name===q),...list.filter(p=>p.name!==q)];
   const total=list.length;
   if(!searching&&!clPlacesExpanded) list=list.slice(0,CL_PLACE_CHIP_LIMIT);
   let html=list.map(p=>`<button type="button" class="cl-chip${p.name===q?' on':''}" data-name="${escHtml(p.name)}" onclick="clPickPlace(this.dataset.name)">${escHtml(p.name)}</button>`).join('');
@@ -3082,6 +3084,19 @@ function clRenderAreaChips(){
 function clPickArea(name){
   document.getElementById('clArea').value=name;
   clRenderAreaChips();
+}
+// 현장 QR 코드로 진입 — 주소가 ?loc=장소&area=구역 이면 점검표 탭을 열고 장소/세부 구역을 미리 채움.
+// 점검자/일자는 평소처럼 initChecklistDate가 이 기기에 저장된 값으로 채움. QR은 qr.html에서 만듦
+function clApplyQrParams(){
+  const params=new URLSearchParams(location.search);
+  const loc=clNormPlace(params.get('loc'));
+  if(!loc) return;
+  switchPage('checklist');
+  document.getElementById('clLocation').value=loc;
+  document.getElementById('clArea').value=clNormPlace(params.get('area'));
+  clRenderPlaceChips();
+  // 주소에서 QR 값을 지워둠 — 새로고침이나 "새 점검표 작성" 이후에 QR 장소가 다시 덮어쓰지 않게
+  history.replaceState(null,'',location.pathname+location.hash);
 }
 // 제출 완료 후 "같은 장소에서 다음 구역 점검" — 장소/일자/점검자/점검 구분은 그대로 두고 점검 항목만 비움.
 // 학교처럼 한 장소에 여러 대가 있는 현장에서 장소를 매번 다시 입력하지 않도록 함
@@ -4064,5 +4079,7 @@ async function exportWeeklyReportXlsx(){
   window.addEventListener('scroll',()=>{
     fab.style.display=window.scrollY>280?'flex':'none';
   },{passive:true});
+
+  clApplyQrParams();
 })();
 
