@@ -297,8 +297,9 @@ function buildChecklistItemRows(base, data) {
     } else if (data.displayType === 'LCD') {
         add('집진기', 'LCD 버전', data.lcdVersion ? data.lcdVersion + ' 로고' : '', '');
         add('집진기', '③ LCD 표시상태', data.lcdResult, data.lcdIssue);
-        add('집진기', '모뎀 설치 여부', data.modemInstalled, '');
-        if (data.modemInstalled === 'O') {
+        // 구형 로고 제품은 모뎀이 없어 모뎀/통신 항목을 기록하지 않음
+        if (data.lcdVersion !== '구형') add('집진기', '모뎀 설치 여부', data.modemInstalled, '');
+        if (data.lcdVersion !== '구형' && data.modemInstalled === 'O') {
             add('집진기', '④ 통신상태', data.commResult, data.commIssue);
             add('집진기', '④ 공기질 센서 상태', data.airSensorResult, data.airSensorIssue);
         }

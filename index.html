@@ -719,12 +719,12 @@
 
         <div class="checklist-q" id="clLcdVersionSection" style="display:none">
           <div class="checklist-q-label">LCD 제품 버전 선택</div>
-          <div class="checklist-q-hint">제품에 표시된 로고를 보고 구형 / 신형 중 해당하는 버전을 선택해주세요.</div>
+          <div class="checklist-q-hint">제품에 표시된 로고를 보고 구형 / 신형 중 해당하는 버전을 선택해주세요. 구형은 모뎀이 없어 모뎀·통신 항목이 표시되지 않습니다.</div>
           <div class="checklist-toggle-group" id="clLcdVersion">
-            <button type="button" class="checklist-toggle-btn cl-logo-btn" onclick="clSetToggle('clLcdVersion','구형',this,'on-sel')">
+            <button type="button" class="checklist-toggle-btn cl-logo-btn" onclick="clSelectLcdVersion('구형',this)">
               <img src="assets/checklist/logo-old.png" alt="구형 로고"/><span>구형 로고</span>
             </button>
-            <button type="button" class="checklist-toggle-btn cl-logo-btn" onclick="clSetToggle('clLcdVersion','신형',this,'on-sel')">
+            <button type="button" class="checklist-toggle-btn cl-logo-btn" onclick="clSelectLcdVersion('신형',this)">
               <img src="assets/checklist/logo-new.jpg" alt="신형 로고"/><span>신형 로고</span>
             </button>
           </div>

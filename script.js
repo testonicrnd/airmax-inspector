@@ -3214,7 +3214,7 @@ function clSelectDisplayType(type,btnEl){
   if(lcdVersionSection) lcdVersionSection.style.display=type==='LCD'?'block':'none';
   if(ledSection) ledSection.style.display=type==='LED'?'block':'none';
   if(lcdSection) lcdSection.style.display=type==='LCD'?'block':'none';
-  if(modemSection) modemSection.style.display=type==='LCD'?'block':'none';
+  if(modemSection) modemSection.style.display=clModemQuestionApplies()?'block':'none';
   clUpdateCommSectionVisibility();
   CL_USAGE_RATE_IDS.forEach(id=>{
     const el=document.getElementById(id);
@@ -3224,6 +3224,31 @@ function clSelectDisplayType(type,btnEl){
   });
   clUpdateInputDoneAvailability();
 }
+// 구형 로고 LCD 제품은 모뎀이 없으므로 모뎀 설치 여부/통신상태 질문 자체를 띄우지 않음 — 신형을 골랐을 때만 표시
+function clModemQuestionApplies(){
+  const displayType=document.getElementById('clDisplayType')?.dataset.value||'';
+  const ver=document.getElementById('clLcdVersion')?.dataset.value||'';
+  return displayType==='LCD'&&ver==='신형';
+}
+function clSelectLcdVersion(value,btnEl){
+  clSetToggle('clLcdVersion',value,btnEl,'on-sel');
+  if(value==='구형'){
+    // 신형을 골랐다가 구형으로 바꾼 경우 이미 눌러둔 모뎀/통신 선택값이 같이 제출되지 않도록 비움
+    ['clModemInstalled','clCommResult','clAirSensorResult'].forEach(id=>{
+      const g=document.getElementById(id);
+      if(!g) return;
+      delete g.dataset.value;
+      g.querySelectorAll('.checklist-toggle-btn').forEach(b=>b.classList.remove('on-ok','on-bad','on-sel'));
+    });
+    ['clCommIssue','clAirSensorIssue'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){ el.value=''; el.style.display='none'; }
+    });
+  }
+  const modemSection=document.getElementById('clModemSection');
+  if(modemSection) modemSection.style.display=clModemQuestionApplies()?'block':'none';
+  clUpdateCommSectionVisibility();
+}
 // LCD 제품이라도 모뎀이 없는 현장이 있어, 모뎀 설치 O일 때만 모뎀 통신상태 항목을 보여줌
 function clSelectModemInstalled(value,btnEl){
   clSetToggle('clModemInstalled',value,btnEl,'on-sel');
@@ -3232,9 +3257,8 @@ function clSelectModemInstalled(value,btnEl){
 function clUpdateCommSectionVisibility(){
   const commSection=document.getElementById('clCommSection');
   if(!commSection) return;
-  const displayType=document.getElementById('clDisplayType')?.dataset.value||'';
   const modem=document.getElementById('clModemInstalled')?.dataset.value||'';
-  commSection.style.display=(displayType==='LCD'&&modem==='O')?'block':'none';
+  commSection.style.display=(clModemQuestionApplies()&&modem==='O')?'block':'none';
 }
 // 포집량 측정(저울로 무게 재는 것)은 LED/LCD와 무관하게 언제든 가능하므로 "소모품 교체"만 누르면
 // 입력 가능 — 다만 "집진기에 입력 완료"는 LCD 화면에 실제로 입력하는 행위라 LCD 제품일 때만 가능
@@ -3306,7 +3330,8 @@ function getChecklistMissingItems(){
     if(!tog('clLcdVersion')) missing.push('집진기 LCD 제품 버전 (구형/신형 로고)');
     if(!tog('clLcdResult')) missing.push('집진기 ③ LCD 표시상태');
     const modem=tog('clModemInstalled');
-    if(!modem) missing.push('집진기 모뎀 설치 여부');
+    if(tog('clLcdVersion')!=='신형'){ /* 구형은 모뎀이 없어 모뎀/통신 항목 검사 안 함 (버전 미선택은 위에서 안내) */ }
+    else if(!modem) missing.push('집진기 모뎀 설치 여부');
     else if(modem==='O'){
       if(!tog('clCommResult')) missing.push('집진기 ④ 통신상태');
       if(!tog('clAirSensorResult')) missing.push('집진기 ④ 공기질 센서 상태');
