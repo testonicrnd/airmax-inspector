@@ -3201,6 +3201,34 @@ function clResetWindTestDefault(){
   if(rowsWrap) rowsWrap.innerHTML='';
 }
 const CL_USAGE_RATE_IDS=['clBagRate','clHepaRate','clMotorRate'];
+const CL_USAGE_NAMES={clBagRate:'먼지봉투',clHepaRate:'HEPA 필터',clMotorRate:'모터'};
+// 구형 로고 LCD 제품은 화면에 소모품 사용률(%) 대신 사용시간(Hr)만 표시되므로 입력 단위가 다름
+function clUsageIsHours(){
+  return (document.getElementById('clDisplayType')?.dataset.value||'')==='LCD'
+    &&(document.getElementById('clLcdVersion')?.dataset.value||'')==='구형';
+}
+// %는 0~100 정수로 제한, 시간(Hr)은 상한 없이 소수점까지 허용
+function clSanitizeUsageInput(el){
+  if(clUsageIsHours()) clSanitizeNumberInput(el,null,true);
+  else clSanitizeNumberInput(el,100);
+}
+let clUsageMode='%';
+function clUpdateUsageMode(){
+  const mode=clUsageIsHours()?'Hr':'%';
+  const changed=mode!==clUsageMode;
+  clUsageMode=mode;
+  const title=document.getElementById('clUsageTitle');
+  if(title) title.textContent=mode==='Hr'?'① 소모품 사용시간 기록 (LCD 제품 필수)':'① 소모품 사용률 기록 (LCD 제품 필수)';
+  CL_USAGE_RATE_IDS.forEach(id=>{
+    const label=document.getElementById(id+'Label');
+    if(label) label.textContent=CL_USAGE_NAMES[id]+(mode==='Hr'?' 사용시간 (Hr)':' 사용률 (%)');
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.inputMode=mode==='Hr'?'decimal':'numeric';
+    el.pattern=mode==='Hr'?'[0-9.]*':'[0-9]*';
+    if(changed) el.value=''; // 단위가 바뀌면 이전에 넣은 값은 의미가 달라지므로 비움
+  });
+}
 // LED/LCD/Air Crew 제품 종류 선택 — 헷갈리지 않도록 선택된 쪽의 점검 항목만 보여주고 다른 쪽은 숨김.
 // Air Crew는 LED·LCD 표시가 없어 ③④ 항목 없이 LED 제품처럼 LCD 전용 항목도 비활성화됨.
 // LCD 모뎀 통신상태, 소모품 사용률(%)은 전부 LCD 화면에서 확인하는 값이라 LED 제품엔 애초에
@@ -3223,6 +3251,7 @@ function clSelectDisplayType(type,btnEl){
     if(type!=='LCD') el.value='';
   });
   clUpdateInputDoneAvailability();
+  clUpdateUsageMode();
 }
 // 구형 로고 LCD 제품은 모뎀이 없으므로 모뎀 설치 여부/통신상태 질문 자체를 띄우지 않음 — 신형을 골랐을 때만 표시
 function clModemQuestionApplies(){
@@ -3248,6 +3277,7 @@ function clSelectLcdVersion(value,btnEl){
   const modemSection=document.getElementById('clModemSection');
   if(modemSection) modemSection.style.display=clModemQuestionApplies()?'block':'none';
   clUpdateCommSectionVisibility();
+  clUpdateUsageMode();
 }
 // LCD 제품이라도 모뎀이 없는 현장이 있어, 모뎀 설치 O일 때만 모뎀 통신상태 항목을 보여줌
 function clSelectModemInstalled(value,btnEl){
@@ -3304,7 +3334,7 @@ function collectChecklistData(){
     lcdVersion:tog('clLcdVersion'), modemInstalled:tog('clModemInstalled'),
     commResult:tog('clCommResult'), commIssue:val('clCommIssue'),
     airSensorResult:tog('clAirSensorResult'), airSensorIssue:val('clAirSensorIssue'),
-    bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'),
+    bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'), usageUnit:clUsageIsHours()?'Hr':'%',
     bagWeight:val('clBagWeight'), inputDone:document.getElementById('clInputDone')?.checked||false,
     remark:val('clRemark')
   };
@@ -3337,9 +3367,10 @@ function getChecklistMissingItems(){
       if(!tog('clAirSensorResult')) missing.push('집진기 ④ 공기질 센서 상태');
     }
     // LCD 제품은 화면에서 사용률을 확인할 수 있으므로 소모품 교체 여부와 상관없이 세 항목 모두 필수
-    if(!val('clBagRate')) missing.push('소모품 ① 먼지봉투 사용률 (LCD 제품 필수)');
-    if(!val('clHepaRate')) missing.push('소모품 ① HEPA 필터 사용률 (LCD 제품 필수)');
-    if(!val('clMotorRate')) missing.push('소모품 ① 모터 사용률 (LCD 제품 필수)');
+    const usageWord=clUsageIsHours()?'사용시간':'사용률';
+    CL_USAGE_RATE_IDS.forEach(id=>{
+      if(!val(id)) missing.push('소모품 ① '+CL_USAGE_NAMES[id]+' '+usageWord+' (LCD 제품 필수)');
+    });
   }
   return missing;
 }
@@ -3469,6 +3500,7 @@ function resetChecklistForm(){
   clUpdateInputDoneAvailability();
   const replaceBtn=document.getElementById('clReplaceToggleBtn');
   if(replaceBtn) replaceBtn.textContent='소모품 교체';
+  clUpdateUsageMode(); // 단위 표시를 기본(%)으로 되돌림
   const btn=document.getElementById('clSubmitBtn');
   btn.disabled=false; btn.textContent='제출하기';
   initChecklistDate();

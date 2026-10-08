@@ -772,12 +772,12 @@
         <div class="checklist-section-desc">사용률은 LCD 화면에서만 확인 가능해 LCD 제품 선택 시에만 입력할 수 있으며, LCD 제품은 세 항목 모두 필수입니다. 포집량 측정은 실제 교체를 진행했을 때만 아래 버튼을 눌러 입력해주세요.</div>
 
         <div class="checklist-q" style="padding-top:0;border-top:none">
-          <div class="checklist-q-label">① 소모품 사용률 기록 (LCD 제품 필수)</div>
-          <div class="checklist-q-hint">교체 여부와 무관하게, 현재 시점의 소모품 사용률(%)을 확인하여 기록 — 기준치가 아닌 기록 목적. LCD 제품은 먼지봉투·HEPA·모터 세 항목을 모두 입력해야 제출됩니다</div>
+          <div class="checklist-q-label" id="clUsageTitle">① 소모품 사용률 기록 (LCD 제품 필수)</div>
+          <div class="checklist-q-hint">교체 여부와 무관하게, 현재 시점의 소모품 사용률(%)을 확인하여 기록 — 기준치가 아닌 기록 목적. LCD 제품은 먼지봉투·HEPA·모터 세 항목을 모두 입력해야 제출됩니다. 구형 로고 제품은 %가 아닌 사용시간(Hr)으로 입력합니다</div>
           <div class="checklist-row3">
-            <div><label>먼지봉투 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clBagRate" oninput="clSanitizeNumberInput(this,100)" disabled/></div>
-            <div><label>HEPA 필터 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clHepaRate" oninput="clSanitizeNumberInput(this,100)" disabled/></div>
-            <div><label>모터 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clMotorRate" oninput="clSanitizeNumberInput(this,100)" disabled/></div>
+            <div><label id="clBagRateLabel">먼지봉투 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clBagRate" oninput="clSanitizeUsageInput(this)" disabled/></div>
+            <div><label id="clHepaRateLabel">HEPA 필터 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clHepaRate" oninput="clSanitizeUsageInput(this)" disabled/></div>
+            <div><label id="clMotorRateLabel">모터 사용률 (%)</label><input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input checklist-num-input" id="clMotorRate" oninput="clSanitizeUsageInput(this)" disabled/></div>
           </div>
         </div>
 

@@ -304,9 +304,11 @@ function buildChecklistItemRows(base, data) {
             add('집진기', '④ 공기질 센서 상태', data.airSensorResult, data.airSensorIssue);
         }
     }
-    add('소모품', '먼지봉투 사용률(%)', data.bagRate, '');
-    add('소모품', 'HEPA필터 사용률(%)', data.hepaRate, '');
-    add('소모품', '모터 사용률(%)', data.motorRate, '');
+    // 구형 로고 LCD 제품은 사용률(%) 대신 사용시간(Hr)을 기록함 — 항목 이름으로 단위를 구분
+    var usageSuffix = data.usageUnit === 'Hr' ? ' 사용시간(Hr)' : ' 사용률(%)';
+    add('소모품', '먼지봉투' + usageSuffix, data.bagRate, '');
+    add('소모품', 'HEPA필터' + usageSuffix, data.hepaRate, '');
+    add('소모품', '모터' + usageSuffix, data.motorRate, '');
     add('소모품', '먼지봉투 포집량 측정값(g)', data.bagWeight, '');
     add('소모품', '집진기 입력완료', data.inputDone ? '완료' : '', '');
     add('완료보고', '특이사항', '', data.remark);
@@ -583,7 +585,7 @@ function refreshChecklistStats(ss) {
     // 장소 1곳 = 1줄. 최근 점검 결과를 항목마다 ✓/✗로 보여주고, ✗ 칸에 마우스를 올리면 이상 내용(메모)이 보임
     writeTitle('장소·구역별 현황 (최근 점검 기준)', '✗ 칸에 마우스를 올리면 이상 내용이 보입니다 · 장소명을 누르면 장소 시트로 이동');
     var infoHeader = ['점검장소 / 세부구역', '상태', '최근 점검일', '최근 점검자', '제품 종류', '누적 점검'];
-    var usageHeader = ['먼지봉투\n사용률(%)', 'HEPA\n사용률(%)', '모터\n사용률(%)'];
+    var usageHeader = ['먼지봉투\n사용률/시간', 'HEPA\n사용률/시간', '모터\n사용률/시간'];
     var boardHeader = infoHeader.concat(CHECKLIST_BOARD_ITEMS.map(function(b) { return b.header; }), usageHeader);
     writeHeader(boardHeader);
     var boardStart = row;
@@ -612,8 +614,11 @@ function refreshChecklistStats(ss) {
                 else if (isChecklistBadResult(it.result)) { v.push('✗'); bg.push(STATS_COLOR.bad); fc.push(STATS_COLOR.badText); nt.push(it.note || ''); }
                 else { v.push('✓'); bg.push(STATS_COLOR.ok); fc.push(STATS_COLOR.okText); nt.push(''); }
             });
-            ['먼지봉투 사용률(%)', 'HEPA필터 사용률(%)', '모터 사용률(%)'].forEach(function(name) {
-                v.push(num(itemValue(last, name))); bg.push('#ffffff'); fc.push('#202124'); nt.push('');
+            // %는 숫자로 넣어 색 단계가 적용되게 하고, 구형 제품의 사용시간은 "120 Hr" 글자로 넣어 색 단계에서 빠지게 함
+            ['먼지봉투', 'HEPA필터', '모터'].forEach(function(name) {
+                var pct = num(itemValue(last, name + ' 사용률(%)'));
+                var hr = itemValue(last, name + ' 사용시간(Hr)');
+                v.push(pct !== '' ? pct : (hr !== '' ? hr + ' Hr' : '')); bg.push('#ffffff'); fc.push('#202124'); nt.push('');
             });
             values.push(v); bgs.push(bg); fcs.push(fc); notes.push(nt);
         });
@@ -633,6 +638,7 @@ function refreshChecklistStats(ss) {
                 .setGradientMaxpointWithValue('#f4c7c3', SpreadsheetApp.InterpolationType.NUMBER, '100')
                 .setRanges([sheet.getRange(boardStart, usageCol0, n, usageHeader.length)]).build()
         ]);
+        sheet.getRange(boardStart, usageCol0, n, usageHeader.length).setNumberFormat('0"%"');
         row += n;
     } else {
         sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
