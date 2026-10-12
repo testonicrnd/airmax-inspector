@@ -477,6 +477,8 @@ function refreshChecklistStats(ss) {
     if (!sheet) sheet = ss.insertSheet(CHECKLIST_STATS_SHEET, 0);
     fixChecklistSheetOrder(ss);
     sheet.getCharts().forEach(function(c) { sheet.removeChart(c); }); // clear()로는 차트가 안 지워짐
+    var oldFilter = sheet.getFilter(); // 현황판 헤더 필터 — 표 크기가 매번 달라지므로 지우고 아래에서 새로 만듦
+    if (oldFilter) oldFilter.remove();
     sheet.clear();
     sheet.clearNotes();
     sheet.setConditionalFormatRules([]);
@@ -509,16 +511,11 @@ function refreshChecklistStats(ss) {
         L.count++;
         L.last = s;
     });
-    // 최근 점검에 이상이 있는 구역이 하나라도 있는 장소를 위로 — 같은 장소의 구역들은 흩어지지 않게 함께 묶어서 정렬
-    var placeHasBad = {};
-    locOrder.forEach(function(L) {
-        L.lastBad = badItemsOf(L.last).length;
-        if (L.lastBad) placeHasBad[L.name] = true;
-    });
+    // 최근에 점검한 곳이 위로 오도록 정렬 (점검일 → 제출시각 내림차순). 다른 기준은 헤더 필터로 정렬
+    locOrder.forEach(function(L) { L.lastBad = badItemsOf(L.last).length; });
     var cmp = function(a, b) { return a < b ? -1 : a > b ? 1 : 0; };
     locOrder.sort(function(a, b) {
-        if (!!placeHasBad[a.name] !== !!placeHasBad[b.name]) return placeHasBad[a.name] ? -1 : 1;
-        return cmp(a.name, b.name) || cmp(a.area, b.area);
+        return cmp(b.last.date, a.last.date) || cmp(b.last.submittedAt, a.last.submittedAt) || cmp(a.name, b.name);
     });
     var placeCount = Object.keys(locOrder.reduce(function(m, L) { m[L.name] = 1; return m; }, {})).length;
 
@@ -641,6 +638,8 @@ function refreshChecklistStats(ss) {
                 .setRanges([sheet.getRange(boardStart, usageCol0, n, usageHeader.length)]).build()
         ]);
         sheet.getRange(boardStart, usageCol0, n, usageHeader.length).setNumberFormat('0"%"');
+        // 헤더에 필터를 자동으로 걸어둠 — 다시 그릴 때마다 사라지므로 매번 새로 생성 (시트당 필터는 1개만 가능)
+        sheet.getRange(boardStart - 1, 1, n + 1, boardHeader.length).createFilter();
         row += n;
     } else {
         sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
@@ -746,10 +745,12 @@ function refreshChecklistStats(ss) {
         sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
     }
 
-    sheet.setColumnWidth(1, 200);
-    for (var c = 2; c <= boardHeader.length; c++) sheet.setColumnWidth(c, c < itemCol0 ? 95 : 78);
+    // 헤더 필터 아이콘(약 24px)이 글자를 가리지 않도록 여유 있게 잡음
+    sheet.setColumnWidth(1, 240);
+    for (var c = 3; c <= boardHeader.length; c++) {
+        sheet.setColumnWidth(c, c < itemCol0 ? 120 : (c < usageCol0 ? 100 : 115));
+    }
     sheet.setColumnWidth(2, 200); // B4 요약 숫자 "N곳 / N구역"이 큰 글씨라 잘리지 않게 넓게 유지
-    sheet.setColumnWidth(5, 85);
     sheet.setFrozenColumns(1);
     sheet.setHiddenGridlines(true);
 }
