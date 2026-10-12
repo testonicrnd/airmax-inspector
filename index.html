@@ -13,7 +13,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.11.1"/>
+<link rel="stylesheet" href="style.css?v=2.11.2"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -311,6 +311,7 @@
   <div class="row">
     <button class="btn-primary" id="runBtn" onclick="startInspection()">점검 시작</button>
     <button class="btn-primary" id="dustRangeBtn" style="display:none" onclick="startDustSearch()">먼지 포집 데이터 조회</button>
+    <button class="btn-ghost" id="dustFreshBtn" style="display:none" onclick="startDustSearchFresh()" title="이 기기에 저장된 지난 조회 결과를 지우고 API에서 처음부터 다시 받아옵니다">기존 데이터 삭제 후 조회</button>
     <button class="btn-sheet" id="saveSheetBtn" style="display:none" onclick="saveToSheet()">시트에 저장</button>
     <button class="btn-ghost" id="logBtn" style="display:none" onclick="toggleLog()">로그 보기</button>
   </div>
@@ -889,6 +890,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.11.1"></script>
+<script defer src="script.js?v=2.11.2"></script>
 </body>
 </html>

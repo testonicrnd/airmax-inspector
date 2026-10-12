@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.11.1';
+const APP_VERSION = 'v2.11.2';
 const APP_DATE    = '2026.09.29';
 
 /* ===== 설정 ===== */
@@ -258,13 +258,16 @@ function updateRunBtnText(){
   const btn=document.getElementById('runBtn');
   const mBtn=document.getElementById('mobileRunBtn');
   const dustBtn=document.getElementById('dustRangeBtn');
+  const dustFreshBtn=document.getElementById('dustFreshBtn');
   btn.style.display='';
   mBtn.style.display='';
   dustBtn.style.display='none';
+  if(dustFreshBtn) dustFreshBtn.style.display='none';
   if(currentMode==='dust'){
     btn.style.display='none';
     mBtn.style.display='none';
     dustBtn.style.display='';
+    if(dustFreshBtn) dustFreshBtn.style.display=adminAuthenticated?'':'none'; // 관리자(일반/슈퍼) 전용
     dustBtn.textContent=isDustTodayOnlyMode()?'오늘 먼지 포집 데이터 조회':'먼지 포집 데이터 조회';
     return;
   }
@@ -1722,7 +1725,28 @@ function groupIdsByZone(ids){
   return zoneGroups;
 }
 
-async function startDustSearch(){
+// 관리자 전용 — 지난 날짜 결과는 한 번 조회하면 이 기기(IndexedDB)에 영구 캐싱되어 다시 받아오지 않으므로,
+// 기기 쪽 데이터가 늦게 올라왔거나 값이 이상할 때 선택한 제품의 캐시를 지우고 처음부터 다시 조회한다
+async function startDustSearchFresh(){
+  if(isGlobalLocked||!adminAuthenticated) return;
+  if(!confirm('선택한 영역 제품의 저장된 먼지 포집 데이터를 지우고 처음부터 다시 조회합니다.\n조회 기간이 길면 시간이 오래 걸릴 수 있습니다. 진행할까요?')) return;
+  await startDustSearch({fresh:true});
+}
+// 제품별 캐시(일자별 결과 + 어디까지 확인했는지 기록)를 삭제
+async function idbClearDustFor(ids){
+  try{
+    const db=await getDustDB(); if(!db) return;
+    await new Promise(resolve=>{
+      const tx=db.transaction(['days','coverage'],'readwrite');
+      ids.forEach(id=>{
+        tx.objectStore('coverage').delete(id);
+        tx.objectStore('days').delete(IDBKeyRange.bound(`${id}_`,`${id}_\uffff`));
+      });
+      tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve();
+    });
+  }catch{}
+}
+async function startDustSearch(opts={}){
   if(isGlobalLocked) return;
   const todayOnly=isDustTodayOnlyMode(); // 모바일 + 관리자 미인증 — 당일 데이터만 조회 가능
   if(dustZoneGridOpen) toggleDustZoneGrid();
@@ -1741,6 +1765,7 @@ async function startDustSearch(){
   const startYm=todayOnly?curYm:(document.getElementById('dustStartMonth')?.value||'2026-04');
   const endYm=todayOnly?curYm:(document.getElementById('dustEndMonth')?.value||curYm);
   if(startYm>endYm){errEl.textContent='⚠ 시작 월이 종료 월보다 클 수 없습니다.';return;}
+  if(opts.fresh) await idbClearDustFor(ids);
   const resultSection=document.getElementById('dustResultSection');
   const progressEl=document.getElementById('dustProgressRow');
   const gridEl=document.getElementById('dustCardsGrid');

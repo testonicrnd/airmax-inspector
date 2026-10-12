@@ -305,7 +305,9 @@ function buildChecklistItemRows(base, data) {
         }
     }
     // 구형 로고 LCD 제품은 사용률(%) 대신 사용시간(Hr)을 기록함 — 항목 이름으로 단위를 구분
-    var usageSuffix = data.usageUnit === 'Hr' ? ' 사용시간(Hr)' : ' 사용률(%)';
+    // (구형 버전을 골랐는데 usageUnit을 보내지 않는 예전 앱 화면이 남아 있어도 시간으로 기록되도록 버전도 함께 확인)
+    var isHours = data.usageUnit === 'Hr' || (data.displayType === 'LCD' && data.lcdVersion === '구형');
+    var usageSuffix = isHours ? ' 사용시간(Hr)' : ' 사용률(%)';
     add('소모품', '먼지봉투' + usageSuffix, data.bagRate, '');
     add('소모품', 'HEPA필터' + usageSuffix, data.hepaRate, '');
     add('소모품', '모터' + usageSuffix, data.motorRate, '');
@@ -798,6 +800,43 @@ function rebuildChecklistReports() {
 // GAS 편집기에서 한 번 직접 실행 — 세부구역 칸이 생기기 전에 "용산아이파크몰(H&M입구)"처럼 괄호로 적은
 // 기존 데이터를 점검장소 "용산아이파크몰" + 세부구역 "H&M입구"로 나눈 뒤 장소 시트/통계를 다시 만듦.
 // 세부구역이 이미 채워진 행은 건드리지 않으므로 여러 번 실행해도 안전함
+// GAS 편집기에서 한 번 직접 실행 — 구형 로고 제품의 사용시간(Hr)이 "사용률(%)" 항목으로 잘못 저장된 기존 행을 바로잡음.
+// (앱은 구형일 때 시간으로 보냈지만, 서버가 그 단위 구분을 반영하기 전 버전이었던 기간에 생긴 데이터)
+// 대상: 같은 제출 건에 'LCD 버전 = 구형 로고'가 있거나, 사용률(%) 값이 100을 넘는 제출 건
+// (앱은 %를 100까지만 입력받으므로 100 초과는 시간 값이 잘못 들어간 경우뿐임). 여러 번 실행해도 안전함
+function fixOldLogoUsageRows() {
+    var ss = getOrCreateChecklistSpreadsheet();
+    var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) { Logger.log('데이터 없음'); return; }
+    var H = CHECKLIST_LONG_HEADERS;
+    var idCol = H.indexOf('제출ID'), itemCol = H.indexOf('항목'), resultCol = H.indexOf('결과');
+    var values = sheet.getRange(2, 1, lastRow - 1, H.length).getValues();
+    var PCT = ' 사용률(%)', HR = ' 사용시간(Hr)';
+    var isUsagePct = function(item) { return /^(먼지봉투|HEPA필터|모터) 사용률\(%\)$/.test(item); };
+    var targets = {}, reasons = {};
+    values.forEach(function(row) {
+        var id = String(row[idCol]).trim(), item = String(row[itemCol]).trim(), result = String(row[resultCol]).trim();
+        if (item === 'LCD 버전' && result === '구형 로고') { targets[id] = true; reasons[id] = '구형 로고'; }
+        if (isUsagePct(item) && Number(result) > 100) { targets[id] = true; reasons[id] = reasons[id] || ('100 초과 값(' + result + ')'); }
+    });
+    var count = 0;
+    var itemRange = sheet.getRange(2, itemCol + 1, lastRow - 1, 1);
+    var items = itemRange.getValues();
+    values.forEach(function(row, i) {
+        var id = String(row[idCol]).trim(), item = String(row[itemCol]).trim();
+        if (!targets[id] || !isUsagePct(item)) return;
+        items[i][0] = item.replace(PCT, HR);
+        count++;
+    });
+    if (!count) { Logger.log('바꿀 행 없음'); return; }
+    itemRange.setValues(items);
+    Object.keys(targets).forEach(function(id) { Logger.log('제출ID ' + id + ' — ' + reasons[id]); });
+    Logger.log(count + '개 행을 사용시간(Hr) 항목으로 변경함');
+    refreshChecklistStats(ss);
+    Logger.log('완료: ' + ss.getUrl());
+}
+
 function splitChecklistLocationParens() {
     var ss = getOrCreateChecklistSpreadsheet();
     var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
