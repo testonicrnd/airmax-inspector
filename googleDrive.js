@@ -748,12 +748,12 @@ function refreshChecklistStats(ss) {
     // 헤더 필터 아이콘(약 24px)이 글자를 가리지 않도록 여유 있게 잡음
     sheet.setColumnWidth(1, 240);
     for (var c = 3; c <= boardHeader.length; c++) {
-        sheet.setColumnWidth(c, c < itemCol0 ? 120 : (c < usageCol0 ? 90 : 115));
+        sheet.setColumnWidth(c, c < itemCol0 ? 120 : (c < usageCol0 ? 95 : 110));
     }
     sheet.setColumnWidth(4, 95); // 최근 점검자
     sheet.setColumnWidth(5, 80); // 제품 종류
     sheet.setColumnWidth(6, 80); // 누적 점검
-    sheet.setColumnWidth(2, 200); // B4 요약 숫자 "N곳 / N구역"이 큰 글씨라 잘리지 않게 넓게 유지
+    sheet.setColumnWidth(2, 180); // 상태 열 — B4 요약 숫자 "N곳 / N구역"(큰 글씨)도 잘리지 않는 너비
     sheet.setFrozenColumns(1);
     sheet.setHiddenGridlines(true);
 }
