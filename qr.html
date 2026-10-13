@@ -7,7 +7,7 @@
 <title>점검표 QR 만들기</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.12.1"/>
+<link rel="stylesheet" href="style.css?v=2.12.2"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   body { background:var(--bg); color:var(--text); font-family:var(--font-sans); margin:0; }
@@ -26,29 +26,20 @@
   .qr-btn { display:inline-flex; align-items:center; gap:6px; padding:10px 16px; border-radius:var(--radius); font-size:14px; font-family:inherit; cursor:pointer; border:1.5px solid var(--border); background:var(--input-bg); color:var(--text); }
   .qr-btn.primary { background:var(--btn-bg); color:var(--btn-text); border-color:var(--btn-bg); }
   .qr-btn .material-icons-round { font-size:18px; }
-  .qr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
-  .qr-card { background:#fff; color:#111; border:1.5px solid #ddd; border-radius:10px; padding:16px 14px 12px; text-align:center; break-inside:avoid; }
-  .qr-card-head { font-size:12px; color:#666; letter-spacing:0.02em; margin-bottom:10px; }
-  .qr-card-code { display:flex; justify-content:center; }
-  .qr-card-code img, .qr-card-code canvas { width:170px; height:170px; }
-  .qr-card-loc { font-size:17px; font-weight:700; margin-top:10px; word-break:keep-all; }
-  .qr-card-area { font-size:15px; color:#333; margin-top:2px; word-break:keep-all; }
-  .qr-card-save { margin-top:10px; font-size:12px; padding:6px 10px; }
+  .qr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+  .qr-card { background:var(--surface); border:1.5px solid var(--border); border-radius:10px; padding:12px; text-align:center; break-inside:avoid; }
+  .qr-card-code { display:none; } /* QR 원본(라벨 이미지를 그릴 때만 사용) */
+  .qr-card-label { display:block; width:100%; aspect-ratio:40/30; border:1px solid #ddd; background:#fff; }
+  .qr-card-name { font-size:13px; color:var(--text2); margin-top:8px; word-break:keep-all; }
+  .qr-card-save { margin-top:8px; font-size:12px; padding:6px 10px; }
   .qr-empty { color:var(--text3); font-size:14px; padding:20px 0; text-align:center; }
-  .qr-card-btns { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
-  #labelSheet { display:none; }
   @media print {
     body { background:#fff; }
-    /* 라벨 인쇄 — 라벨 1장 = 1페이지(40×30mm). 페이지 크기는 printLabels()에서 @page로 지정 */
-    body.print-labels { margin:0; }
-    body.print-labels .qr-wrap { display:none; }
-    body.print-labels #labelSheet { display:block; }
-    #labelSheet img { display:block; width:40mm; height:30mm; break-after:page; page-break-after:always; }
-    #labelSheet img:last-child { break-after:auto; page-break-after:auto; }
     .qr-wrap { padding:0; max-width:none; }
     .qr-no-print { display:none !important; }
     .qr-grid { grid-template-columns:repeat(3,1fr); gap:10px; }
-    .qr-card { border:1px dashed #999; }
+    .qr-card { border:none; padding:0; }
+    .qr-card-label { width:40mm; height:30mm; margin:0 auto; border:1px dashed #999; }
   }
 </style>
 </head>
@@ -74,17 +65,15 @@
 
       <div class="qr-actions">
         <button type="button" class="qr-btn primary" onclick="generate()"><span class="material-icons-round">qr_code_2</span>QR 만들기</button>
-        <button type="button" class="qr-btn" onclick="printLabels()"><span class="material-icons-round">label</span>라벨 인쇄 (40×30mm)</button>
+        <button type="button" class="qr-btn" onclick="saveAllLabels()"><span class="material-icons-round">download</span>전체 이미지 저장</button>
         <button type="button" class="qr-btn" onclick="window.print()"><span class="material-icons-round">print</span>A4 인쇄</button>
       </div>
-      <div class="qr-hint">라벨 인쇄: 인쇄 창에서 라벨 프린터를 선택하고 용지 크기를 40×30mm, 여백 없음, 배율 100%(실제 크기)로 맞춰주세요. 라벨 1장에 QR 하나씩 출력됩니다.</div>
+      <div class="qr-hint">이미지는 40×30mm 라벨 크기(300dpi, 472×354px)로 저장됩니다. 라벨 프린터 프로그램에서 40×30mm 용지에 맞춰 출력하세요.</div>
     </div>
   </div>
 
   <div class="qr-grid" id="qrGrid"></div>
   <div class="qr-empty qr-no-print" id="qrEmpty">장소를 입력하고 "QR 만들기"를 누르세요.</div>
-</div>
-<div id="labelSheet">
 </div>
 
 <script>
@@ -158,6 +147,8 @@ function qrUrl(loc, area) {
   return url.toString();
 }
 
+let generated = []; // 지금 화면에 만들어진 QR — 전체 이미지 저장에 사용
+
 function generate() {
   const loc = norm(document.getElementById('qrLoc').value);
   if (!loc) { alert('점검 장소를 입력하세요.'); return; }
@@ -169,34 +160,36 @@ function generate() {
   areas.forEach(area => {
     const card = document.createElement('div');
     card.className = 'qr-card';
-    card.innerHTML = `<div class="qr-card-head">Air Max 점검표</div><div class="qr-card-code"></div>
-      <div class="qr-card-loc">${esc(loc)}</div>${area ? `<div class="qr-card-area">${esc(area)}</div>` : ''}
-      <div class="qr-card-btns qr-no-print">
-        <button type="button" class="qr-btn qr-card-save" data-act="png">PNG 저장</button>
-        <button type="button" class="qr-btn qr-card-save" data-act="label">라벨 이미지</button>
-      </div>`;
+    card.innerHTML = `<div class="qr-card-code"></div><img class="qr-card-label" alt=""/>
+      <div class="qr-card-name qr-no-print">${esc(loc)}${area ? ' / ' + esc(area) : ''}</div>
+      <button type="button" class="qr-btn qr-card-save qr-no-print">이미지 저장 (40×30mm)</button>`;
     grid.appendChild(card);
     new QRCode(card.querySelector('.qr-card-code'), { text: qrUrl(loc, area), width: 340, height: 340, correctLevel: QRCode.CorrectLevel.M });
-    card.querySelector('[data-act="png"]').onclick = () => savePng(card, loc, area);
-    card.querySelector('[data-act="label"]').onclick = () => downloadCanvas(makeLabelCanvas(card, loc, area), 'QR라벨_' + fileSafe(loc, area) + '.png');
-    generated.push({ card, loc, area });
+    const item = { card, loc, area };
+    // 화면에도 저장될 라벨 이미지를 그대로 보여줌 — 보이는 것과 출력물이 같도록
+    card.querySelector('.qr-card-label').src = makeLabelCanvas(item).toDataURL('image/png');
+    card.querySelector('.qr-card-save').onclick = () => saveLabel(item);
+    generated.push(item);
   });
   document.getElementById('qrEmpty').style.display = 'none';
 }
 
-let generated = []; // 지금 화면에 만들어진 QR 카드 목록 — 라벨 인쇄에 사용
-
 function fileSafe(loc, area) { return (loc + (area ? '_' + area : '')).replace(/[\\/:*?"<>|\s]+/g, '_'); }
-function downloadCanvas(c, name) {
+function saveLabel(item) {
   const a = document.createElement('a');
-  a.href = c.toDataURL('image/png');
-  a.download = name;
+  a.href = makeLabelCanvas(item).toDataURL('image/png');
+  a.download = 'QR_' + fileSafe(item.loc, item.area) + '.png';
   a.click();
 }
+// 브라우저가 연속 다운로드를 막지 않도록 조금씩 간격을 두고 저장
+function saveAllLabels() {
+  if (!generated.length) { alert('먼저 "QR 만들기"를 눌러 QR을 만드세요.'); return; }
+  generated.forEach((item, i) => setTimeout(() => saveLabel(item), i * 400));
+}
 
-// ===== 40×30mm 라벨 =====
-// 300dpi 기준으로 라벨 한 장을 그대로 그림(472×354px) — 인쇄와 이미지 저장에 같은 그림을 써서 결과가 항상 같게 함.
-// 왼쪽에 QR(약 25mm, 휴대폰으로 찍기 충분한 크기), 오른쪽 좁은 칸에 장소/구역 글자를 줄바꿈해서 넣음
+// ===== 40×30mm 라벨 이미지 =====
+// 300dpi 기준 472×354px. 가운데 QR, 왼쪽에 세로로 "Air Max 점검표", 오른쪽에 세로로 장소/구역.
+// 글자를 세로로 세워서 가로 40mm 안에서 QR을 최대한 크게(약 25mm) 넣음
 const LABEL_DPMM = 300 / 25.4;
 const LABEL_W = Math.round(40 * LABEL_DPMM), LABEL_H = Math.round(30 * LABEL_DPMM);
 function wrapText(g, text, maxW) {
@@ -209,77 +202,56 @@ function wrapText(g, text, maxW) {
   if (line.trim()) lines.push(line.trim());
   return lines;
 }
-function makeLabelCanvas(card, loc, area) {
-  const qr = card.querySelector('.qr-card-code canvas');
+function makeLabelCanvas(item) {
+  const qr = item.card.querySelector('.qr-card-code canvas');
   const c = document.createElement('canvas');
   c.width = LABEL_W; c.height = LABEL_H;
   const g = c.getContext('2d');
   g.fillStyle = '#fff'; g.fillRect(0, 0, LABEL_W, LABEL_H);
-  const pad = Math.round(2 * LABEL_DPMM);               // 라벨 가장자리 여백 2mm (QR 조용한 영역 겸용)
-  const qrSize = Math.round(24 * LABEL_DPMM);            // QR 24mm — 휴대폰으로 찍기 충분하면서 글자 칸을 확보
+  const mm = v => Math.round(v * LABEL_DPMM);
+  const qrSize = mm(25);                  // QR 25mm
+  const leftW = mm(4.5);                  // 왼쪽 세로 글자 칸
+  const qrX = leftW, qrY = Math.round((LABEL_H - qrSize) / 2);
   g.imageSmoothingEnabled = false;
-  g.drawImage(qr, pad, Math.round((LABEL_H - qrSize) / 2), qrSize, qrSize);
-  // 오른쪽 글자 칸 — 글자가 넘치면 들어갈 때까지 글씨를 줄임
-  const tx = pad + qrSize + Math.round(1.2 * LABEL_DPMM), tw = LABEL_W - tx - Math.round(1.2 * LABEL_DPMM), th = LABEL_H - pad * 2;
-  let size = 32, blocks;
-  for (; size >= 16; size -= 2) {
-    g.font = `bold ${size}px Pretendard, sans-serif`;
-    const locLines = wrapText(g, loc, tw);
-    g.font = `${size - 4}px Pretendard, sans-serif`;
-    const areaLines = area ? wrapText(g, area, tw) : [];
-    const height = locLines.length * size * 1.2 + (areaLines.length ? size * 0.4 + areaLines.length * (size - 4) * 1.2 : 0);
-    blocks = { locLines, areaLines, height };
-    if (height <= th) break;
-  }
-  let y = pad + Math.max(0, (th - blocks.height) / 2);
-  g.textBaseline = 'top'; g.textAlign = 'left';
-  g.fillStyle = '#000'; g.font = `bold ${size}px Pretendard, sans-serif`;
-  blocks.locLines.forEach(l => { g.fillText(l, tx, y); y += size * 1.2; });
-  if (blocks.areaLines.length) {
-    y += size * 0.4;
-    g.fillStyle = '#222'; g.font = `${size - 4}px Pretendard, sans-serif`;
-    blocks.areaLines.forEach(l => { g.fillText(l, tx, y); y += (size - 4) * 1.2; });
-  }
-  return c;
-}
-// 라벨 프린터로 인쇄 — 라벨 1장 = 1페이지(40×30mm)로 페이지 크기를 잠시 지정했다가 인쇄 후 원래대로 돌림
-function printLabels() {
-  if (!generated.length) { alert('먼저 "QR 만들기"를 눌러 QR을 만드세요.'); return; }
-  const sheet = document.getElementById('labelSheet');
-  sheet.innerHTML = generated.map(x => `<img src="${makeLabelCanvas(x.card, x.loc, x.area).toDataURL('image/png')}" alt=""/>`).join('');
-  const pageStyle = document.createElement('style');
-  pageStyle.textContent = '@page { size: 40mm 30mm; margin: 0; }';
-  document.head.appendChild(pageStyle);
-  document.body.classList.add('print-labels');
-  const cleanup = () => {
-    document.body.classList.remove('print-labels');
-    pageStyle.remove();
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup);
-  // 이미지가 다 그려진 뒤 인쇄 창을 띄움
-  Promise.all([...sheet.querySelectorAll('img')].map(img => img.decode().catch(() => {}))).then(() => window.print());
-}
+  g.drawImage(qr, qrX, qrY, qrSize, qrSize);
+  g.textBaseline = 'middle'; g.textAlign = 'center';
 
-// 장소/구역 글자까지 포함한 라벨 이미지로 저장 — 출력해서 바로 붙일 수 있게
-function savePng(card, loc, area) {
-  const qr = card.querySelector('.qr-card-code canvas');
-  const W = 480, pad = 40, qrSize = 400;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = pad + 28 + qrSize + (area ? 110 : 76);
-  const g = c.getContext('2d');
-  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = '#666'; g.font = '20px Pretendard, sans-serif'; g.textAlign = 'center';
-  g.fillText('Air Max 점검표', W / 2, pad);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(qr, (W - qrSize) / 2, pad + 20, qrSize, qrSize);
-  g.fillStyle = '#111'; g.font = 'bold 30px Pretendard, sans-serif';
-  g.fillText(loc, W / 2, pad + 20 + qrSize + 46, W - 40);
-  if (area) { g.fillStyle = '#333'; g.font = '26px Pretendard, sans-serif'; g.fillText(area, W / 2, pad + 20 + qrSize + 86, W - 40); }
-  const a = document.createElement('a');
-  a.href = c.toDataURL('image/png');
-  a.download = 'QR_' + (loc + (area ? '_' + area : '')).replace(/[\\/:*?"<>|\s]+/g, '_') + '.png';
-  a.click();
+  // 왼쪽 — 아래에서 위로 읽는 "Air Max 점검표"
+  g.save();
+  g.translate(leftW / 2 + mm(0.3), LABEL_H / 2);
+  g.rotate(-Math.PI / 2);
+  g.fillStyle = '#666'; g.font = `${mm(2.4)}px Pretendard, sans-serif`;
+  g.fillText('Air Max 점검표', 0, 0, qrSize);
+  g.restore();
+
+  // 오른쪽 — 위에서 아래로 읽는 장소(굵게)/구역. 칸에 다 들어갈 때까지 글씨를 줄임
+  const rightX0 = qrX + qrSize + mm(0.8), rightW = LABEL_W - rightX0 - mm(1.2);
+  const maxLen = LABEL_H - mm(3);         // 세로 방향으로 쓸 수 있는 길이
+  let size = mm(3.6), lines;
+  for (; size >= mm(1.6); size -= 2) {
+    const sub = Math.round(size * 0.85);
+    g.font = `bold ${size}px Pretendard, sans-serif`;
+    const locLines = wrapText(g, item.loc, maxLen).map(t => ({ t, size, bold: true }));
+    g.font = `${sub}px Pretendard, sans-serif`;
+    const areaLines = item.area ? wrapText(g, item.area, maxLen).map(t => ({ t, size: sub, bold: false })) : [];
+    lines = locLines.concat(areaLines);
+    const total = lines.reduce((sum, l) => sum + l.size * 1.15, 0);
+    if (total <= rightW) break;
+  }
+  const total = lines.reduce((sum, l) => sum + l.size * 1.15, 0);
+  g.save();
+  g.translate(rightX0 + rightW / 2, LABEL_H / 2);
+  g.rotate(Math.PI / 2);
+  // 회전한 좌표에서 +y는 화면 왼쪽(QR 쪽) — 첫 줄(장소)이 바깥쪽, 구역이 QR 쪽에 오도록 위에서부터 쌓음
+  let y = -total / 2;
+  lines.forEach(l => {
+    g.font = `${l.bold ? 'bold ' : ''}${l.size}px Pretendard, sans-serif`;
+    g.fillStyle = l.bold ? '#000' : '#333';
+    g.fillText(l.t, 0, y + l.size * 1.15 / 2, maxLen);
+    y += l.size * 1.15;
+  });
+  g.restore();
+  return c;
 }
 
 renderAreas();
