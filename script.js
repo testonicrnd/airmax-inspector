@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.11.2';
+const APP_VERSION = 'v2.12.0';
 const APP_DATE    = '2026.09.29';
 
 /* ===== 설정 ===== */
@@ -3536,7 +3536,12 @@ async function submitChecklist(){
       document.getElementById('checklistSuccess').style.display='block';
       openChecklistPhotoModal();
     } else {
-      alert('제출 실패: '+(json.error||'오류'));
+      if(json.code==='UNKNOWN_INSPECTOR'){
+        alert(`등록되지 않은 점검자입니다: ${data.inspector||'(이름 없음)'}\n\n점검자 이름을 정확히 입력했는지 확인해주세요.\n처음 점검하는 분이라면 관리자에게 점검자 등록을 요청해주세요.`);
+        document.getElementById('clInspector')?.focus();
+      } else {
+        alert('제출 실패: '+(json.error||'오류'));
+      }
       btn.disabled=false; btn.textContent='제출하기';
       setChecklistFormLocked(false);
     }
@@ -3595,6 +3600,58 @@ function closeChecklistPhotoModal(){
 }
 function checklistPhotoModalOverlayClick(e){
   if(e.target===document.getElementById('checklistPhotoModal')) closeChecklistPhotoModal();
+}
+
+/* ===== 점검자 관리 (관리자 전용) =====
+   점검표는 GAS에 등록된 점검자 이름으로만 제출된다(QR로 아무나 들어와 장난 제출하는 것을 막기 위함).
+   명단은 처음엔 지금까지 점검표를 제출한 사람들로 자동으로 채워지고, 여기서 추가/삭제한다 */
+async function inspectorRequest(payload){
+  const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)},15000);
+  return JSON.parse(await res.text());
+}
+function renderInspectorList(list,msg){
+  const wrap=document.getElementById('inspectorList');
+  if(msg){ wrap.innerHTML=`<div class="inspector-empty">${escHtml(msg)}</div>`; return; }
+  if(!list.length){ wrap.innerHTML='<div class="inspector-empty">등록된 점검자가 없습니다.</div>'; return; }
+  wrap.innerHTML=list.map(n=>`<div class="inspector-row"><span>${escHtml(n)}</span>
+    <button class="pe-btn" data-name="${escHtml(n)}" onclick="removeInspectorFromModal(this.dataset.name)"><span class="material-icons-round ico">delete</span>삭제</button></div>`).join('');
+}
+async function openInspectorModal(){
+  if(!adminAuthenticated) return;
+  document.getElementById('inspectorModal').style.display='flex';
+  document.body.style.overflow='hidden';
+  renderInspectorList([], '불러오는 중…');
+  try{
+    const json=await inspectorRequest({action:'getInspectors'});
+    if(json.success) renderInspectorList(json.inspectors||[]);
+    else renderInspectorList([], '불러오기 실패: '+(json.error||'오류'));
+  }catch(e){ renderInspectorList([], '불러오기 실패 — 네트워크를 확인해주세요.'); }
+}
+function closeInspectorModal(){
+  document.getElementById('inspectorModal').style.display='none';
+  document.body.style.overflow='';
+}
+async function addInspectorFromModal(){
+  const input=document.getElementById('inspectorNewName');
+  const name=clNormPlace(input.value);
+  if(!name||!adminAuthenticated) return;
+  const btn=document.getElementById('inspectorAddBtn');
+  btn.disabled=true;
+  try{
+    const json=await inspectorRequest({action:'addInspector',name});
+    if(json.success){ input.value=''; renderInspectorList(json.inspectors||[]); }
+    else alert(json.error||'추가 실패');
+  }catch(e){ alert('추가 실패 — 네트워크를 확인해주세요.'); }
+  btn.disabled=false;
+}
+async function removeInspectorFromModal(name){
+  if(!adminAuthenticated) return;
+  if(!confirm(`"${name}" 점검자를 명단에서 삭제할까요?\n삭제하면 이 이름으로는 점검표를 제출할 수 없습니다. (이미 제출된 기록은 그대로 남습니다)`)) return;
+  try{
+    const json=await inspectorRequest({action:'removeInspector',name});
+    if(json.success) renderInspectorList(json.inspectors||[]);
+    else alert(json.error||'삭제 실패');
+  }catch(e){ alert('삭제 실패 — 네트워크를 확인해주세요.'); }
 }
 
 /* ===== 점검 히스토리 ===== */

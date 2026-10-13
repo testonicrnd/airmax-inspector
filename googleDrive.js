@@ -29,6 +29,7 @@ Google Apps Script 코드 — 아래 코드를 복사하여 GAS 프로젝트에 
         "장소-<점검장소>" — 해당 장소의 점검 기록만 모아 보기 (원본 "점검표"를 FILTER 수식으로 참조)
     기존 데이터로 처음 만들 때는 GAS 편집기에서 rebuildChecklistReports() 함수를 한 번 직접 실행하면 된다.
     세부구역 열이 생기기 전 "장소(구역)"처럼 괄호로 적은 데이터는 splitChecklistLocationParens()로 나눌 수 있다.
+    점검표는 등록된 점검자 이름으로만 제출된다 — 명단은 스크립트 속성(CHECKLIST_INSPECTORS)에 저장되고 앱의 관리자 "점검자 관리"에서 추가/삭제.
 ================================================================================
 */
 // GET 요청 — 제품 리스트 시트에서 영역/설치장소 + 월별 점검 시트 목록 반환
@@ -68,6 +69,7 @@ try {
     if (action === 'saveWeeklyReport')    return saveWeeklyReport(data);
     if (action === 'submitChecklist')     return handleSubmitChecklist(data);
     if (action === 'getChecklistPlaces')  return getChecklistPlaces();
+    if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
 
     // 저장 요청 시각 기준으로 KST 날짜 산출
     var savedDate = data.savedAt ? new Date(data.savedAt) : new Date();
@@ -325,13 +327,18 @@ function handleSubmitChecklist(data) {
         if (dedupeKey && cache.get(dedupeKey)) {
             return buildJson({ success: true }); // 이미 처리된 제출 — 다시 저장하지 않고 성공만 응답
         }
+        // 등록된 점검자만 제출 가능 — QR로 누구나 점검표에 들어올 수 있어 장난 제출을 막기 위함
+        var inspector = normalizeChecklistLocation(data.inspector);
+        if (getInspectorList().indexOf(inspector) === -1) {
+            return buildJson({ success: false, code: 'UNKNOWN_INSPECTOR', error: '등록되지 않은 점검자입니다: ' + (inspector || '(이름 없음)') });
+        }
         var ss = getOrCreateChecklistSpreadsheet();
         var sheet = ss.getSheetByName('점검표') || ss.getSheets()[0];
         var savedDate = data.savedAt ? new Date(data.savedAt) : new Date();
         var submittedAt = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
         var submissionId = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyyMMddHHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
         var location = normalizeChecklistLocation(data.location);
-        var base = [submissionId, submittedAt, location, normalizeChecklistLocation(data.area), data.date || '', data.inspector || '', data.type || ''];
+        var base = [submissionId, submittedAt, location, normalizeChecklistLocation(data.area), data.date || '', inspector, data.type || ''];
         var rows = buildChecklistItemRows(base, data);
         // 동시 제출 시 getLastRow() 기준으로 같은 행에 덮어쓰지 않도록 잠금
         var lock = LockService.getScriptLock();
@@ -756,6 +763,43 @@ function refreshChecklistStats(ss) {
     sheet.setColumnWidth(2, 180); // 상태 열 — B4 요약 숫자 "N곳 / N구역"(큰 글씨)도 잘리지 않는 너비
     sheet.setFrozenColumns(1);
     sheet.setHiddenGridlines(true);
+}
+
+// ===== 점검자 명단 =====
+// 점검표는 여기 등록된 이름으로만 제출됨. 스크립트 속성에 JSON 배열로 저장하고, 앱의 관리자 화면에서 추가/삭제함.
+// 처음 한 번은 지금까지 점검표를 제출한 점검자(통계 현황판의 점검자 줄과 같은 사람들)로 자동으로 채움
+var CHECKLIST_INSPECTORS_PROP = 'CHECKLIST_INSPECTORS';
+function getInspectorList() {
+    var props = PropertiesService.getScriptProperties();
+    var raw = props.getProperty(CHECKLIST_INSPECTORS_PROP);
+    if (raw) {
+        try { return JSON.parse(raw); } catch (e) { /* 깨진 값이면 아래에서 다시 채움 */ }
+    }
+    var seen = {}, list = [];
+    readChecklistSubmissions(getOrCreateChecklistSpreadsheet()).forEach(function(s) {
+        if (s.inspector && !seen[s.inspector]) { seen[s.inspector] = true; list.push(s.inspector); }
+    });
+    props.setProperty(CHECKLIST_INSPECTORS_PROP, JSON.stringify(list));
+    return list;
+}
+function handleInspectorAction(data) {
+    try {
+        var list = getInspectorList();
+        var name = normalizeChecklistLocation(data.name);
+        if (data.action === 'addInspector') {
+            if (!name) return buildJson({ success: false, error: '이름을 입력하세요.' });
+            if (list.indexOf(name) !== -1) return buildJson({ success: false, error: '이미 등록된 점검자입니다: ' + name });
+            list.push(name);
+        } else if (data.action === 'removeInspector') {
+            list = list.filter(function(n) { return n !== name; });
+        }
+        if (data.action !== 'getInspectors') {
+            PropertiesService.getScriptProperties().setProperty(CHECKLIST_INSPECTORS_PROP, JSON.stringify(list));
+        }
+        return buildJson({ success: true, inspectors: list });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
 }
 
 // 점검표 앱의 장소/세부구역 선택 목록 — 지금까지 제출된 장소와 그 장소에서 쓰인 구역을 최근 점검순으로 반환

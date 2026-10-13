@@ -1152,3 +1152,14 @@ body.checklist-page-active { padding-bottom:46px; }
 .cl-logo-btn { display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px 10px; }
 .cl-logo-btn img { display:block; width:100%; max-width:180px; height:38px; object-fit:contain; background:#fff; border-radius:4px; padding:4px; box-sizing:border-box; }
 .cl-logo-btn span { font-size:14px; }
+
+/* 점검자 관리 모달 */
+.inspector-modal-box { max-width:440px; }
+.inspector-modal-hint { font-size:13px; color:var(--text2); line-height:1.55; margin-bottom:12px; }
+.inspector-add-row { display:flex; gap:8px; margin-bottom:14px; }
+.inspector-add-row .checklist-input { flex:1; min-width:0; }
+.inspector-add-row .btn-primary { padding:10px 18px; }
+.inspector-list { display:flex; flex-direction:column; border:1.5px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.inspector-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; font-size:15px; color:var(--text); border-bottom:1px solid var(--border2); }
+.inspector-row:last-child { border-bottom:none; }
+.inspector-empty { padding:16px; text-align:center; font-size:13px; color:var(--text3); }
