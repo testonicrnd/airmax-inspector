@@ -7,7 +7,7 @@
 <title>점검표 QR 만들기</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.12.2"/>
+<link rel="stylesheet" href="style.css?v=2.12.3"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   body { background:var(--bg); color:var(--text); font-family:var(--font-sans); margin:0; }
@@ -216,10 +216,10 @@ function makeLabelCanvas(item) {
   g.drawImage(qr, qrX, qrY, qrSize, qrSize);
   g.textBaseline = 'middle'; g.textAlign = 'center';
 
-  // 왼쪽 — 아래에서 위로 읽는 "Air Max 점검표"
+  // 왼쪽 — 오른쪽 장소 글자와 같은 방향(위에서 아래로 읽음)으로 "Air Max 점검표"
   g.save();
   g.translate(leftW / 2 + mm(0.3), LABEL_H / 2);
-  g.rotate(-Math.PI / 2);
+  g.rotate(Math.PI / 2);
   g.fillStyle = '#666'; g.font = `${mm(2.4)}px Pretendard, sans-serif`;
   g.fillText('Air Max 점검표', 0, 0, qrSize);
   g.restore();
