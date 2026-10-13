@@ -1149,9 +1149,12 @@ body.checklist-page-active { padding-bottom:46px; }
 .cl-continue-btn { display:block; margin:20px auto 0; padding:12px 20px; font-size:15px; }
 
 /* 점검표 — LCD 버전(로고) 선택 버튼 */
-.cl-logo-btn { display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px 10px; }
+/* 로고는 흰 바탕 기준으로 만들어진 이미지라, 다크 모드에서도 버튼 전체를 항상 흰 바탕으로 고정 */
+.cl-logo-btn,
+.cl-logo-btn:hover { display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px 10px; background:#fff; color:#433f3d; border-color:#ddd9d5; }
+.cl-logo-btn.on-sel { background:#fff; color:#b8430c; border-color:#ee6018; box-shadow:inset 0 0 0 1.5px #ee6018; }
 .cl-logo-btn img { display:block; width:100%; max-width:180px; height:38px; object-fit:contain; background:#fff; border-radius:4px; padding:4px; box-sizing:border-box; }
-.cl-logo-btn span { font-size:14px; }
+.cl-logo-btn span { font-size:14px; font-weight:600; }
 
 /* 점검자 관리 모달 */
 .inspector-modal-box { max-width:440px; }
