@@ -29,6 +29,9 @@ Google Apps Script 코드 — 아래 코드를 복사하여 GAS 프로젝트에 
         "장소-<점검장소>" — 해당 장소의 점검 기록만 모아 보기 (원본 "점검표"를 FILTER 수식으로 참조)
     기존 데이터로 처음 만들 때는 GAS 편집기에서 rebuildChecklistReports() 함수를 한 번 직접 실행하면 된다.
     세부구역 열이 생기기 전 "장소(구역)"처럼 괄호로 적은 데이터는 splitChecklistLocationParens()로 나눌 수 있다.
+    업체 담당자 서명 PDF는 드라이브 "Air Max 점검표 서명" 폴더에 저장되고, 담당자 이메일이 있으면 메일로도 발송된다
+    (참조/답장 주소는 CHECKLIST_MAIL_CC / CHECKLIST_MAIL_REPLY_TO). 처음 한 번 authorizeDrive(), authorizeMail() 실행 필요.
+    관리자 비밀번호는 코드가 아니라 스크립트 속성 ADMIN_PASSWORD / SUPER_ADMIN_PASSWORD에 저장한다(관리자 전용 요청은 서버에서 토큰 확인).
     점검표는 등록된 점검자 이름으로만 제출된다 — 명단은 스크립트 속성(CHECKLIST_INSPECTORS)에 저장되고 앱의 관리자 "점검자 관리"에서 추가/삭제.
 ================================================================================
 */
@@ -60,6 +63,14 @@ function doPost(e) {
 try {
     var data = JSON.parse(e.postData.contents);
     var action = data.action || 'saveResults';
+
+    if (action === 'adminLogin')  return handleAdminLogin(data);
+    if (action === 'adminCheck')  return handleAdminCheck(data);
+    if (action === 'adminLogout') return handleAdminLogout(data);
+    // 관리자 전용 요청 — 앱 화면에서 버튼을 숨기는 것만으로는 막을 수 없으므로 서버에서 관리자 토큰을 확인
+    if (ADMIN_ONLY_ACTIONS[action] && !getAdminLevel(data.adminToken)) {
+        return buildJson({ success: false, code: 'ADMIN_REQUIRED', error: '관리자 인증이 필요합니다. 관리자 비밀번호로 다시 로그인해주세요.' });
+    }
 
     if (action === 'addProduct')          return handleAddProduct(data);
     if (action === 'updateProduct')       return handleUpdateProduct(data);
@@ -795,14 +806,23 @@ function getChecklistSignatureFolder(ss) {
     props.setProperty(CHECKLIST_SIGN_FOLDER_PROP, folder.getId());
     return folder;
 }
-// 앱의 점검 완료 보고 화면에서 업체 담당자 서명이 담긴 PDF를 받아 드라이브에 저장하고,
-// 같은 제출 건에 '업체 담당자 확인' 행(결과 = 담당자 이름, 비고 = PDF 링크)을 추가함.
-// 같은 제출 건에 다시 서명하면 새 행을 만들지 않고 그 행을 새 PDF로 바꿈
+// ===== 점검표 메일 발송 설정 =====
+var CHECKLIST_MAIL_CC = 'rnd@testonic.co.kr';     // 모든 점검표 메일의 참조
+var CHECKLIST_MAIL_REPLY_TO = '';                 // 고객이 답장하면 받을 주소 — 정해지면 여기에 입력 (비워두면 이 GAS 계정 주소로 감)
+var CHECKLIST_MAIL_SENDER_NAME = '테스토닉 Air Max 점검';
+
+// 앱의 점검 완료 보고 화면에서 업체 담당자 서명이 담긴 PDF를 받아
+//  ① 드라이브에 저장하고  ② 담당자 이메일이 있으면 PDF를 첨부해 메일로 보내고(참조 CHECKLIST_MAIL_CC)
+//  ③ 같은 제출 건에 '업체 담당자 확인'(이름 + PDF 링크), '업체 담당자 이메일'(주소 + 발송 결과) 행을 기록함.
+// 같은 제출 건에 다시 서명하면 새 행을 만들지 않고 기존 행을 고쳐 씀. 드라이브 저장과 메일 발송은 서로 독립적으로
+// 시도해서, 하나가 실패해도 다른 하나는 진행됨
 function handleAttachChecklistSignature(data) {
     try {
         var submissionId = String(data.submissionId || '').trim();
         if (!submissionId) return buildJson({ success: false, error: '제출번호가 없습니다.' });
         if (!data.file) return buildJson({ success: false, error: 'PDF가 없습니다.' });
+        var email = String(data.email || '').trim();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return buildJson({ success: false, error: '이메일 주소 형식이 올바르지 않습니다: ' + email });
         var ss = getOrCreateChecklistSpreadsheet();
         var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
         var H = CHECKLIST_LONG_HEADERS;
@@ -810,35 +830,100 @@ function handleAttachChecklistSignature(data) {
         if (lastRow < 2) return buildJson({ success: false, error: '점검표 데이터가 없습니다.' });
         var values = sheet.getRange(2, 1, lastRow - 1, H.length).getValues();
         var idCol = H.indexOf('제출ID'), itemCol = H.indexOf('항목'), sectionCol = H.indexOf('구분');
-        var baseRow = null, existingIdx = -1;
+        var baseRow = null, existing = {};
         values.forEach(function(row, i) {
             if (String(row[idCol]).trim() !== submissionId) return;
             if (!baseRow) baseRow = row;
-            if (String(row[itemCol]).trim() === '업체 담당자 확인') existingIdx = i;
+            var item = String(row[itemCol]).trim();
+            if (item === '업체 담당자 확인' || item === '업체 담당자 이메일') existing[item] = i;
         });
         if (!baseRow) return buildJson({ success: false, error: '해당 제출 건을 찾지 못했습니다: ' + submissionId });
         var managerName = normalizeChecklistLocation(data.managerName);
         var fileName = String(data.fileName || ('점검보고서_' + submissionId + '.pdf')).replace(/[\\\/:*?"<>|]/g, '_');
         var blob = Utilities.newBlob(Utilities.base64Decode(String(data.file)), 'application/pdf', fileName);
-        var url = getChecklistSignatureFolder(ss).createFile(blob).getUrl();
-        var newRow = baseRow.slice(0, sectionCol).concat(['완료보고', '업체 담당자 확인', managerName, url]);
+
+        var url = '', driveError = '';
+        try { url = getChecklistSignatureFolder(ss).createFile(blob.copyBlob()).getUrl(); }
+        catch (e) { driveError = e.message; }
+
+        var mailed = false, mailError = '';
+        if (email) {
+            try {
+                sendChecklistReportMail(email, blob, baseRow, managerName);
+                mailed = true;
+            } catch (e) { mailError = e.message; }
+        }
+
+        var base = baseRow.slice(0, sectionCol);
+        var rowsToWrite = [
+            ['업체 담당자 확인', base.concat(['완료보고', '업체 담당자 확인', managerName, url || ('PDF 저장 실패: ' + driveError)])]
+        ];
+        if (email) {
+            rowsToWrite.push(['업체 담당자 이메일', base.concat(['완료보고', '업체 담당자 이메일', email,
+                mailed ? ('메일 발송 완료 (참조 ' + CHECKLIST_MAIL_CC + ')') : ('메일 발송 실패: ' + mailError)])]);
+        }
         var lock = LockService.getScriptLock();
         lock.waitLock(20000);
         try {
-            if (existingIdx >= 0) {
-                sheet.getRange(existingIdx + 2, 1, 1, H.length).setValues([newRow]);
-            } else {
-                var startRow = sheet.getLastRow() + 1;
-                if (startRow > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1000);
-                sheet.getRange(startRow, 1, 1, H.length).setValues([newRow]);
-            }
+            rowsToWrite.forEach(function(x) {
+                if (existing[x[0]] !== undefined) {
+                    sheet.getRange(existing[x[0]] + 2, 1, 1, H.length).setValues([x[1]]);
+                } else {
+                    var startRow = sheet.getLastRow() + 1;
+                    if (startRow > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1000);
+                    sheet.getRange(startRow, 1, 1, H.length).setValues([x[1]]);
+                }
+            });
         } finally {
             lock.releaseLock();
         }
-        return buildJson({ success: true, url: url });
+        var errors = [];
+        if (driveError) errors.push('드라이브 저장 실패: ' + driveError);
+        if (mailError) errors.push('메일 발송 실패: ' + mailError);
+        return buildJson({ success: !errors.length, url: url, mailed: mailed, error: errors.join(' / ') });
     } catch (err) {
         return buildJson({ success: false, error: err.message });
     }
+}
+
+// 업체 담당자에게 점검표 PDF를 첨부해 메일 발송 (참조: CHECKLIST_MAIL_CC)
+function sendChecklistReportMail(email, pdfBlob, baseRow, managerName) {
+    var H = CHECKLIST_LONG_HEADERS;
+    var tz = Session.getScriptTimeZone();
+    var cell = function(name) { return checklistCellText(baseRow[H.indexOf(name)], tz); };
+    var location = cell('점검장소'), area = cell('세부구역'), date = cell('점검일자'), inspector = cell('점검자');
+    var dateDot = date.replace(/-/g, '.');
+    var place = location + (area ? ' ' + area : '');
+    var subject = '[테스토닉] 에어맥스 클린매트 점검 결과 안내 — ' + location + (area ? ' / ' + area : '') + ' (' + dateDot + ')';
+    var lines = [
+        (managerName ? managerName + '님, ' : '') + '안녕하세요. ㈜테스토닉입니다.',
+        '',
+        place + ' 에어맥스 클린매트 점검을 완료하여 점검표를 첨부드립니다.',
+        '',
+        '· 업체명: ' + location,
+        area ? '· 설치 장소: ' + area : null,
+        '· 점검 일자: ' + dateDot,
+        '· 점검자: ' + inspector,
+        '',
+        '문의: 031-432-4380 / www.testonic.co.kr',
+        '감사합니다.'
+    ].filter(function(l) { return l !== null; });
+    var options = {
+        cc: CHECKLIST_MAIL_CC,
+        name: CHECKLIST_MAIL_SENDER_NAME,
+        attachments: [pdfBlob],
+        htmlBody: lines.map(function(l) {
+            return l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }).join('<br>')
+    };
+    if (CHECKLIST_MAIL_REPLY_TO) options.replyTo = CHECKLIST_MAIL_REPLY_TO;
+    MailApp.sendEmail(email, subject, lines.join('\n'), options);
+}
+// GAS 편집기에서 한 번 직접 실행 — 메일 발송 권한을 승인받고 오늘 남은 발송 가능 수를 확인
+// (하루 한도는 "받는 사람 수" 기준: 담당자 1명 + 참조 1명 = 메일 1통당 2명)
+function authorizeMail() {
+    Logger.log('메일 권한 확인 완료 — 오늘 남은 발송 가능 인원: ' + MailApp.getRemainingDailyQuota() + '명');
+    Logger.log('이제 [배포 관리 → 편집 → 새 버전]으로 재배포하세요.');
 }
 // GAS 편집기에서 한 번 직접 실행 — 서명 PDF 저장에 필요한 드라이브 권한(폴더/파일 만들기)을 승인받고,
 // 실제 저장 경로와 똑같이 서명 폴더를 찾거나 만들어서 정상 동작하는지 확인함
@@ -846,6 +931,79 @@ function authorizeDrive() {
     var folder = getChecklistSignatureFolder(getOrCreateChecklistSpreadsheet());
     Logger.log('드라이브 권한 확인 완료 — 서명 폴더: ' + folder.getUrl());
     Logger.log('이제 [배포 관리 → 편집 → 새 버전]으로 재배포하세요.');
+}
+
+// ===== 관리자 인증 =====
+// 관리자 비밀번호는 코드에 두지 않고 스크립트 속성에만 저장 (⚙ 프로젝트 설정 → 스크립트 속성):
+//   ADMIN_PASSWORD        — 일반 관리자 비밀번호
+//   SUPER_ADMIN_PASSWORD  — 슈퍼 관리자 비밀번호
+// 로그인에 성공하면 추측할 수 없는 토큰을 발급하고, 관리자 전용 요청은 이 토큰을 확인한 뒤에만 처리.
+// 토큰에는 발급 당시 비밀번호의 지문(해시)을 함께 저장해서, 비밀번호를 바꾸면 기존 토큰이 모두 무효가 됨
+var ADMIN_ONLY_ACTIONS = {
+    addProduct: true, updateProduct: true, deleteProduct: true,
+    saveResults: true, getMonthGrid: true, getWeeklyReportDraft: true, saveWeeklyReport: true,
+    getInspectors: true, addInspector: true, removeInspector: true
+};
+var ADMIN_TOKENS_PROP = 'ADMIN_TOKENS';
+var ADMIN_TOKEN_LIMIT = 50;          // 저장해 둘 최대 토큰 수 (넘으면 오래된 것부터 정리)
+var ADMIN_LOGIN_MAX_FAILS = 10;      // 10분 동안 이만큼 틀리면 잠시 로그인 잠금 (무작위 대입 방지)
+function adminPasswordDigest(pw) {
+    return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'airmax-admin:' + pw, Utilities.Charset.UTF_8));
+}
+function readAdminTokens() {
+    try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(ADMIN_TOKENS_PROP) || '{}'); } catch (e) { return {}; }
+}
+function writeAdminTokens(tokens) {
+    var keys = Object.keys(tokens).sort(function(a, b) { return tokens[a].at - tokens[b].at; });
+    while (keys.length > ADMIN_TOKEN_LIMIT) delete tokens[keys.shift()];
+    PropertiesService.getScriptProperties().setProperty(ADMIN_TOKENS_PROP, JSON.stringify(tokens));
+}
+// 토큰이 유효하면 'super' | 'admin', 아니면 null
+function getAdminLevel(token) {
+    token = String(token || '');
+    if (!token) return null;
+    var t = readAdminTokens()[token];
+    if (!t) return null;
+    var props = PropertiesService.getScriptProperties();
+    var pw = props.getProperty(t.level === 'super' ? 'SUPER_ADMIN_PASSWORD' : 'ADMIN_PASSWORD');
+    if (!pw || adminPasswordDigest(pw) !== t.pw) return null; // 비밀번호가 바뀌었으면 무효
+    return t.level;
+}
+function handleAdminLogin(data) {
+    try {
+        var props = PropertiesService.getScriptProperties();
+        var superPw = props.getProperty('SUPER_ADMIN_PASSWORD'), adminPw = props.getProperty('ADMIN_PASSWORD');
+        if (!superPw && !adminPw) {
+            return buildJson({ success: false, error: '관리자 비밀번호가 아직 설정되지 않았습니다. GAS 스크립트 속성(ADMIN_PASSWORD, SUPER_ADMIN_PASSWORD)을 먼저 등록해주세요.' });
+        }
+        var cache = CacheService.getScriptCache();
+        var fails = Number(cache.get('admin_login_fails') || 0);
+        if (fails >= ADMIN_LOGIN_MAX_FAILS) {
+            return buildJson({ success: false, code: 'ADMIN_LOCKED', error: '비밀번호를 여러 번 틀려 잠시 잠겼습니다. 10분 뒤에 다시 시도해주세요.' });
+        }
+        var pw = String(data.password || '');
+        var level = (superPw && pw === superPw) ? 'super' : ((adminPw && pw === adminPw) ? 'admin' : null);
+        if (!level) {
+            cache.put('admin_login_fails', String(fails + 1), 600);
+            return buildJson({ success: false, code: 'ADMIN_WRONG', error: '비밀번호가 올바르지 않습니다.' });
+        }
+        var token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
+        var tokens = readAdminTokens();
+        tokens[token] = { level: level, pw: adminPasswordDigest(pw), at: Date.now() };
+        writeAdminTokens(tokens);
+        return buildJson({ success: true, level: level, token: token });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
+}
+function handleAdminCheck(data) {
+    var level = getAdminLevel(data.adminToken);
+    return buildJson(level ? { success: true, level: level } : { success: false, code: 'ADMIN_REQUIRED' });
+}
+function handleAdminLogout(data) {
+    var tokens = readAdminTokens();
+    if (tokens[data.adminToken]) { delete tokens[data.adminToken]; writeAdminTokens(tokens); }
+    return buildJson({ success: true });
 }
 
 // ===== 점검자 명단 =====
@@ -893,12 +1051,27 @@ function getChecklistPlaces() {
         readChecklistSubmissions(ss).forEach(function(s) {
             if (!s.location) return;
             var p = map[s.location];
-            if (!p) { p = map[s.location] = { name: s.location, areas: [], last: '' }; list.push(p); }
+            if (!p) { p = map[s.location] = { name: s.location, areas: [], last: '', managers: [], _mgr: {} }; list.push(p); }
             if (s.area && p.areas.indexOf(s.area) === -1) p.areas.push(s.area);
             if (s.submittedAt > p.last) p.last = s.submittedAt;
+            // 메일을 보낸 적 있는 업체 담당자(이름 + 이메일) — 같은 이메일은 가장 최근 이름으로 하나만
+            var mName = '', mEmail = '';
+            s.items.forEach(function(it) {
+                if (it.item === '업체 담당자 확인') mName = it.result;
+                if (it.item === '업체 담당자 이메일') mEmail = it.result;
+            });
+            if (mEmail) {
+                var m = p._mgr[mEmail];
+                if (!m) { m = p._mgr[mEmail] = { name: mName, email: mEmail, last: '' }; p.managers.push(m); }
+                if (s.submittedAt >= m.last) { m.last = s.submittedAt; if (mName) m.name = mName; }
+            }
         });
         list.sort(function(a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : 0; });
-        list.forEach(function(p) { p.areas.sort(); });
+        list.forEach(function(p) {
+            p.areas.sort();
+            p.managers.sort(function(a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : 0; });
+            delete p._mgr;
+        });
         return buildJson({ success: true, places: list });
     } catch (err) {
         return buildJson({ success: false, error: err.message });

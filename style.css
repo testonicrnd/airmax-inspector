@@ -1255,3 +1255,10 @@ body.checklist-page-active { padding-bottom:46px; }
 .cf-sign-inline { position:absolute; left:-6px; top:50%; transform:translateY(-50%); height:44px; max-width:96px; width:auto; object-fit:contain; } /* 너비 제한 — 오른쪽 점검자 칸까지 넘어가지 않게 */
 .cl-report-sheet.capturing .cf-sign-slot { display:inline-block; }
 .cl-report-sheet.capturing .cf-sign-area { display:none; }
+
+/* 고객용 점검표 — 담당자 이메일(선택) 입력 영역 (PDF에는 들어가지 않음) */
+.cf-mail { margin-top:16px; padding-top:12px; border-top:1px dashed #ddd9d5; }
+.cf-mail .cl-chip-row { margin-top:6px; margin-bottom:6px; }
+.cl-report-sheet .cf-email-input { display:block; width:100%; box-sizing:border-box; }
+.cl-report-sheet .cl-chip { background:#fff; color:#433f3d; border-color:#ddd9d5; }
+.cl-report-sheet .cl-chip-label { color:#6b6560; }

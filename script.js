@@ -1,17 +1,16 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.13.1';
+const APP_VERSION = 'v2.14.0';
 const APP_DATE    = '2026.10.19';
 
 /* ===== 설정 ===== */
-const ADMIN_PASSWORD       = 'airmax87';  /* 관리자 비밀번호 */
-const SUPER_ADMIN_PASSWORD = 'wjdzn';    /* 슈퍼 관리자 비밀번호 */
+/* 관리자 비밀번호는 코드에 두지 않음 — GAS 스크립트 속성(ADMIN_PASSWORD / SUPER_ADMIN_PASSWORD)에서 서버가 확인 */
 const GAS_URL        = 'https://script.google.com/macros/s/AKfycbw61auB8x8HFf_lk-rxEnpjAY1e9AoIxs7yRkkttZG_wqoSHKxpy4w0YkFzjSoMc8nyNw/exec';
 const API      = 'https://api-airmax.testonic.co.kr/api/external/reports';
 const LS_EXTRA        = 'airmax_extra_ids';
 const LS_EXCLUDE      = 'airmax_exclude_reasons';
 const LS_ENDID        = 'airmax_end_id';
 const LS_GLOBAL_ENDID = 'airmax_global_end_id';
-const LS_ADMIN_AUTH = 'airmax_admin_auth'; // 'super' | 'admin' — 한번 인증하면 만료 없이 유지
+const LS_ADMIN_AUTH = 'airmax_admin_auth'; // {level:'super'|'admin', token} — 서버가 발급한 관리자 토큰. 한번 인증하면 유지(비밀번호가 바뀌면 무효)
 const LS_THEME = 'airmax_theme';
 const LS_MODE  = 'airmax_mode';
 const LS_PROD_LOCS    = 'airmax_product_locations';
@@ -144,26 +143,38 @@ function toggleAdminPwVisibility(){
 }
 
 /* ===== 관리자 인증 ===== */
-function authenticateAdmin(){
-  const pw=document.getElementById('adminPwInput').value;
+// 비밀번호는 GAS 서버가 확인하고, 맞으면 관리자 토큰을 발급받아 기억함. 관리자 전용 요청에는 이 토큰을 함께 보냄
+let adminToken='';
+function adminPayload(obj){ return Object.assign({adminToken},obj); }
+async function authenticateAdmin(){
+  const input=document.getElementById('adminPwInput');
+  const pw=input.value;
   const badge=document.getElementById('adminAuthBadge');
-
-  if(pw===SUPER_ADMIN_PASSWORD){
+  if(!pw) return;
+  const fail=msg=>{
+    badge.textContent='✗ '+msg; badge.className='admin-auth-badge fail';
+    setTimeout(()=>{ badge.textContent=''; badge.className='admin-auth-badge'; },3000);
+  };
+  badge.textContent='확인 중…'; badge.className='admin-auth-badge';
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'adminLogin',password:pw})});
+    const json=await res.json();
+    if(!json.success) return fail(json.code==='ADMIN_WRONG'?'비밀번호 오류':(json.error||'인증 실패'));
+    adminToken=json.token;
     adminAuthenticated=true;
-    superAdminAuthenticated=true;
-    lsSet(LS_ADMIN_AUTH,'super');
-    _applyAdminAuthedUI('super');
+    superAdminAuthenticated=json.level==='super';
+    lsSet(LS_ADMIN_AUTH,{level:json.level,token:json.token});
+    _applyAdminAuthedUI(json.level);
     setTimeout(()=>toggleAdminRow(false),1200);
-  } else if(pw===ADMIN_PASSWORD){
-    adminAuthenticated=true;
-    superAdminAuthenticated=false;
-    lsSet(LS_ADMIN_AUTH,'admin');
-    _applyAdminAuthedUI('admin');
-    setTimeout(()=>toggleAdminRow(false),1200);
-  } else {
-    badge.textContent='✗ 비밀번호 오류'; badge.className='admin-auth-badge fail';
-    setTimeout(()=>{ badge.textContent=''; badge.className='admin-auth-badge'; },2500);
-  }
+  }catch(e){ fail('서버에 연결하지 못했습니다'); }
+}
+// 저장된 토큰이 아직 유효한지 서버에 확인 — 비밀번호가 바뀌었거나 토큰이 지워졌으면 로그아웃
+async function verifyStoredAdmin(){
+  try{
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'adminCheck',adminToken})});
+    const json=await res.json();
+    if(!json.success&&json.code==='ADMIN_REQUIRED') deauthAdmin();
+  }catch(e){ /* 네트워크 문제면 그대로 두고, 실제 요청 때 서버가 다시 확인함 */ }
 }
 
 // 인증 성공 시(또는 새로고침 후 저장된 인증 복원 시) UI 반영 — 비밀번호는 한 번만 입력하면 만료 없이 유지됨
@@ -190,7 +201,7 @@ async function fetchOverdueBadge(){
   if(!badge||!GAS_URL) return;
   try{
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'getWeeklyReportDraft', asOfDate:todayStr()})});
+      body:JSON.stringify(adminPayload({action:'getWeeklyReportDraft', asOfDate:todayStr()}))});
     const json=await res.json();
     if(json.success && Array.isArray(json.overdueItems) && json.overdueItems.length){
       overdueBadgeItems=json.overdueItems;
@@ -240,6 +251,8 @@ function _applyDustAuthUI(){
 }
 
 function deauthAdmin(){
+  if(adminToken) fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'adminLogout',adminToken})}).catch(()=>{});
+  adminToken='';
   adminAuthenticated=false;
   superAdminAuthenticated=false;
   lsSet(LS_ADMIN_AUTH,null);
@@ -294,7 +307,7 @@ async function saveToSheet(){
     const res=await fetch(GAS_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({results:lastResults.map(r=>({id:r.id,status:excludeReasons[r.id]||r.status})), savedAt:new Date().toISOString()})
+      body:JSON.stringify(adminPayload({results:lastResults.map(r=>({id:r.id,status:excludeReasons[r.id]||r.status})), savedAt:new Date().toISOString()}))
     });
     const json=await res.json();
     if(json.success){
@@ -996,7 +1009,7 @@ async function saveCardEdit(id){
   if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='저장 중…'; }
   try{
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'updateProduct',id,zone,location:loc})});
+      body:JSON.stringify(adminPayload({action:'updateProduct',id,zone,location:loc}))});
     const json=await res.json();
     if(json.success){
       sheetZones.forEach(z=>{ z.ids=z.ids.filter(i=>i!==id); });
@@ -1067,7 +1080,7 @@ async function bulkSaveProducts(){
   try{
     const results=await Promise.all(changed.map(item=>
       fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-        body:JSON.stringify({action:'updateProduct',...item})})
+        body:JSON.stringify(adminPayload({action:'updateProduct',...item}))})
         .then(r=>r.json())
     ));
     const ok=results.filter(r=>r.success).length;
@@ -1100,7 +1113,7 @@ async function deleteProductFromSheet(id){
   if(row) row.style.opacity='0.4';
   try{
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'deleteProduct',id})});
+      body:JSON.stringify(adminPayload({action:'deleteProduct',id}))});
     const json=await res.json();
     if(json.success){
       sheetZones.forEach(z=>{ z.ids=z.ids.filter(i=>i!==id); });
@@ -1132,7 +1145,7 @@ async function addProductToSheet(){
   btn.disabled=true; btn.textContent='추가 중…';
   try{
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'addProduct',id,zone,location:loc})});
+      body:JSON.stringify(adminPayload({action:'addProduct',id,zone,location:loc}))});
     const json=await res.json();
     if(json.success){
       let zoneObj=sheetZones.find(z=>z.name===zone);
@@ -3268,9 +3281,9 @@ function openChecklistReport(){
     ['매트','호스상태',st(d.hoseResult,d.hoseIssue)],
     ['집진기','작동상태',st(d.powerResult,d.powerIssue)],
     ['집진기','센서상태',st(d.sensorResult,d.sensorIssue)],
-    ['집진기','먼지봉투',st(d.bagReplaced?'교환':'')],
-    ['집진기','HEPA 필터',st(d.hepaReplaced?'교환':'')],
-    ['집진기','모터',st(d.motorReplaced?'교환':'')],
+    ['집진기','먼지봉투',st(d.bagReplaced?'교환':'교체하지 않음')],
+    ['집진기','HEPA 필터',st(d.hepaReplaced?'교환':'교체하지 않음')],
+    ['집진기','모터',st(d.motorReplaced?'교환':'교체하지 않음')],
   ];
   const groupSize=g=>rows.filter(r=>r[0]===g).length;
   const body=rows.map((x,i)=>{
@@ -3304,6 +3317,13 @@ function openChecklistReport(){
         <canvas id="clSignPad" class="cl-sign-pad"></canvas>
         <div class="cl-sign-placeholder" id="clSignPlaceholder">여기에 서명</div>
       </div>
+      <div class="cf-mail">
+        <div class="cf-sign-label">담당자 이메일 (선택) — 입력하면 점검표 PDF를 메일로 보냅니다 · 참조 ${CL_MAIL_CC}</div>
+        <div class="cl-chip-row" id="clManagerChips"></div>
+        <input type="email" inputmode="email" autocomplete="email" class="clr-name-input cf-email-input" id="clManagerEmail"
+          placeholder="예: manager@company.com" oninput="clUpdateReportSaveLabel()"/>
+        <div class="cl-chip-row">${CL_MAIL_DOMAINS.map(dm=>`<button type="button" class="cl-chip" onclick="clApplyMailDomain('${dm}')">@${dm}</button>`).join('')}</div>
+      </div>
     </div>
     <div class="cf-stamp"><span>㈜테스토닉</span><img src="assets/checklist/seal.jpg" alt="직인"/></div>
     <div class="cf-footer">
@@ -3311,6 +3331,8 @@ function openChecklistReport(){
       <div class="cf-contact">www.testonic.co.kr<br/>031-432-4380</div>
     </div>`;
   clMarkSigned(false);
+  clRenderManagerChips(true);
+  clUpdateReportSaveLabel();
   document.getElementById('clReportGuide').style.display='';
   document.getElementById('clReportActions').style.display='';
   document.getElementById('clReportSkipBtn').style.display='';
@@ -3338,6 +3360,53 @@ function clCropSignature(){
   out.width=x1-x0+1; out.height=y1-y0+1;
   out.getContext('2d').drawImage(c,x0,y0,out.width,out.height,0,0,out.width,out.height);
   return out.toDataURL('image/png');
+}
+/* ----- 담당자 이메일 입력을 줄이는 도구 ----- */
+const CL_MAIL_CC='rnd@testonic.co.kr'; // GAS의 CHECKLIST_MAIL_CC와 같은 값 (화면 안내용)
+const CL_MAIL_DOMAINS=['naver.com','gmail.com','daum.net','hanmail.net','nate.com','kakao.com'];
+function clIsEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+// 그 장소에서 예전에 메일을 보낸 담당자들을 "이름 · 이메일" 버튼으로 — 누르면 이름/이메일이 함께 채워짐.
+// prefill=true면 가장 최근 담당자로 미리 채워둠(이름 칸이 비어 있거나 같은 사람일 때만)
+function clRenderManagerChips(prefill){
+  const wrap=document.getElementById('clManagerChips');
+  if(!wrap) return;
+  const loc=clNormPlace(clLastSubmission?.data?.location);
+  const list=(clPlaces.find(p=>p.name===loc)?.managers)||[];
+  wrap.innerHTML=list.length?'<span class="cl-chip-label">이 장소의 최근 담당자</span>'+list.map((m,i)=>
+    `<button type="button" class="cl-chip" onclick="clPickManager(${i})">${escHtml((m.name?m.name+' · ':'')+m.email)}</button>`).join(''):'';
+  if(prefill&&list.length){
+    const nameEl=document.getElementById('clManagerName');
+    if(!nameEl.value||nameEl.value===list[0].name) clPickManager(0);
+  }
+}
+function clPickManager(i){
+  const loc=clNormPlace(clLastSubmission?.data?.location);
+  const m=(clPlaces.find(p=>p.name===loc)?.managers||[])[i];
+  if(!m) return;
+  if(m.name) document.getElementById('clManagerName').value=m.name;
+  document.getElementById('clManagerEmail').value=m.email;
+  clUpdateReportSaveLabel();
+}
+// 아이디만 입력하고 도메인 버튼을 누르면 "@도메인"을 붙임 (이미 @가 있으면 도메인만 바꿈)
+function clApplyMailDomain(domain){
+  const el=document.getElementById('clManagerEmail');
+  const id=(el.value||'').split('@')[0].trim();
+  el.value=id+'@'+domain;
+  clUpdateReportSaveLabel();
+  if(!id) { el.focus(); el.setSelectionRange(0,0); }
+}
+function clUpdateReportSaveLabel(){
+  const btn=document.getElementById('clReportSaveBtn');
+  const email=(document.getElementById('clManagerEmail')?.value||'').trim();
+  if(btn&&!btn.disabled) btn.textContent=clIsEmail(email)?'서명 완료 · 메일 보내기':'서명 완료 · PDF 저장';
+}
+// 메일을 보낸 담당자를 그 장소 목록 맨 앞에 기억 — 서버 목록을 다시 받기 전에도 바로 쓰이게 기기에도 저장
+function clRememberManager(loc,name,email){
+  loc=clNormPlace(loc);
+  let p=clPlaces.find(x=>x.name===loc);
+  if(!p){ p={name:loc,areas:[]}; clPlaces.unshift(p); }
+  p.managers=[{name,email}].concat((p.managers||[]).filter(m=>m.email!==email));
+  lsSet(LS_CL_PLACES,clPlaces);
 }
 // PDF 라이브러리는 서명할 때만 필요하므로 그때 불러옴
 function clLoadScript(src){
@@ -3400,6 +3469,8 @@ async function clSaveSignedReport(){
   const name=clNormPlace(nameEl?.value);
   if(!name){ alert('업체 담당자 이름을 입력해주세요.'); nameEl?.focus(); return; }
   if(!clSignHasInk){ alert('서명란에 서명해주세요.'); return; }
+  const email=(document.getElementById('clManagerEmail')?.value||'').trim();
+  if(email&&!clIsEmail(email)){ alert('이메일 주소 형식을 확인해주세요: '+email); document.getElementById('clManagerEmail').focus(); return; }
   const btn=document.getElementById('clReportSaveBtn');
   btn.disabled=true; btn.textContent='PDF 만드는 중…';
   document.getElementById('clManagerNameText').textContent=name;
@@ -3409,32 +3480,38 @@ async function clSaveSignedReport(){
   try{ pdf=await clMakeReportPdf(); }
   catch(e){
     alert('PDF를 만들지 못했습니다: '+e.message+'\n네트워크 연결을 확인한 뒤 다시 눌러주세요.');
-    btn.disabled=false; btn.textContent='서명 완료 · PDF 저장';
+    clUpdateReportSaveLabel(); btn.disabled=false;
     return;
   }
   clLastManagerName=name;
   clLastPdf={blobUrl:URL.createObjectURL(pdf.output('blob')), fileName};
-  clDownloadLastPdf(); // ① 기기에 저장
-  // ② 드라이브 보관 + 시트에 링크 기록 — 실패해도 기기에는 이미 저장됐으므로 안내만 함
-  btn.textContent='시트에 기록 중…';
-  let uploaded=false, uploadErr='';
+  // 메일을 보내는 경우엔 기기에 따로 저장하지 않음(완료 화면의 "PDF 저장"으로 필요할 때만 받기). 메일이 없으면 기기에 저장
+  if(!email) clDownloadLastPdf();
+  // 드라이브 보관 + (이메일이 있으면) 메일 발송 + 시트 기록
+  btn.textContent=email?'메일 보내는 중…':'시트에 기록 중…';
+  let ok=false, errMsg='', mailed=false;
   try{
     const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'attachChecklistSignature',submissionId,managerName:name,fileName,
-        file:pdf.output('datauristring').split('base64,')[1]})},30000);
+      body:JSON.stringify({action:'attachChecklistSignature',submissionId,managerName:name,email,fileName,
+        file:pdf.output('datauristring').split('base64,')[1]})},45000);
     const json=JSON.parse(await res.text());
-    uploaded=!!json.success;
-    if(!uploaded) uploadErr=json.error||'오류';
-  }catch(e){ uploadErr='네트워크 문제로 서버에 연결하지 못했습니다.'; }
-  btn.disabled=false; btn.textContent='서명 완료 · PDF 저장';
+    ok=!!json.success; mailed=!!json.mailed;
+    if(!ok) errMsg=json.error||'오류';
+    // GAS가 메일 기능 이전 버전이면 오류 없이 메일만 안 나가므로 실패로 안내
+    else if(email&&!mailed){ ok=false; errMsg='메일이 발송되지 않았습니다 (GAS 코드가 최신 버전인지 확인 필요)'; }
+  }catch(e){ errMsg='네트워크 문제로 서버에 연결하지 못했습니다.'; }
+  if(mailed) clRememberManager(d.location,name,email);
+  clUpdateReportSaveLabel(); btn.disabled=false;
   document.getElementById('clReportGuide').style.display='none';
   document.getElementById('clReportActions').style.display='none';
   document.getElementById('clReportSkipBtn').style.display='none';
-  document.getElementById('clReportDoneMsg').textContent=`${name}님 서명이 완료되어 PDF로 저장했습니다.`+(uploaded?' 시트에도 서명 기록이 저장되었습니다.':'');
-  // 시트 기록 실패는 버튼 아래에 따로 — PDF는 이미 기기에 저장됐다는 점을 함께 안내
+  document.getElementById('clReportDoneMsg').textContent=email
+    ? (mailed?`${name}님 서명이 완료되어 ${email} 으로 점검표를 보냈습니다. (참조 ${CL_MAIL_CC})`:`${name}님 서명은 완료되었습니다.`)
+    : `${name}님 서명이 완료되어 PDF로 저장했습니다.`+(ok?' 시트에도 서명 기록이 저장되었습니다.':'');
+  // 실패 안내는 버튼 아래에 따로
   const uploadMsgEl=document.getElementById('clReportUploadMsg');
-  uploadMsgEl.textContent=uploaded?'':`시트 기록 실패: ${uploadErr} — PDF는 기기에 저장되었습니다.`;
-  uploadMsgEl.style.display=uploaded?'none':'block';
+  uploadMsgEl.textContent=ok?'':`${errMsg} — ${email?'아래 "PDF 저장"으로 기기에 받아 직접 전달해주세요.':'PDF는 기기에 저장되었습니다.'}`;
+  uploadMsgEl.style.display=ok?'none':'block';
   document.getElementById('clReportDone').style.display='block';
   document.getElementById('clSignPad').style.pointerEvents='none'; // 완료 후에는 서명이 바뀌지 않게
   openChecklistPhotoModal();
@@ -3993,7 +4070,7 @@ function checklistPhotoModalOverlayClick(e){
    점검표는 GAS에 등록된 점검자 이름으로만 제출된다(QR로 아무나 들어와 장난 제출하는 것을 막기 위함).
    명단은 처음엔 지금까지 점검표를 제출한 사람들로 자동으로 채워지고, 여기서 추가/삭제한다 */
 async function inspectorRequest(payload){
-  const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)},15000);
+  const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(adminPayload(payload))},15000);
   return JSON.parse(await res.text());
 }
 function renderInspectorList(list,msg){
@@ -4067,7 +4144,7 @@ async function loadHistoryGrid(sheetName){
   scrollEl.style.display='none'; emptyEl.style.display='block'; emptyEl.textContent='불러오는 중…';
   try{
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'getMonthGrid', sheetName})});
+      body:JSON.stringify(adminPayload({action:'getMonthGrid', sheetName}))});
     const json=await res.json();
     if(!json.success){ emptyEl.textContent='불러오기 실패: '+(json.error||'오류'); return; }
     historyGridData=json;
@@ -4242,7 +4319,7 @@ async function openWeeklyReportModal(){
   try{
     const asOfDate=todayStr();
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'getWeeklyReportDraft', asOfDate})});
+      body:JSON.stringify(adminPayload({action:'getWeeklyReportDraft', asOfDate}))});
     const json=await res.json();
     if(!json.success){ alert('요청서 초안 조회 실패: '+(json.error||'오류')); closeWeeklyReportModal(); return; }
     weeklyDraft=json;
@@ -4432,7 +4509,7 @@ async function exportWeeklyReportXlsx(){
     URL.revokeObjectURL(url);
 
     const saveRes=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'saveWeeklyReport', date:weeklyDraft.asOfDate, requester, items:[...items,...overdue]})});
+      body:JSON.stringify(adminPayload({action:'saveWeeklyReport', date:weeklyDraft.asOfDate, requester, items:[...items,...overdue]}))});
     const saveJson=await saveRes.json();
     if(saveJson.success){
       addLog(`주간 점검 요청서 생성 및 이력 저장 완료 (${saveJson.saved}건)`,'ok');
@@ -4458,11 +4535,15 @@ async function exportWeeklyReportXlsx(){
   const savedTheme=storedTheme||(systemPrefersDark?'dark':'light');
   document.documentElement.setAttribute('data-theme',savedTheme);
   document.getElementById('themeIcon').textContent=savedTheme==='dark'?'light_mode':'dark_mode';
-  const savedAuthLevel=lsGet(LS_ADMIN_AUTH,null);
-  if(savedAuthLevel==='super'||savedAuthLevel==='admin'){
+  const savedAuth=lsGet(LS_ADMIN_AUTH,null);
+  if(savedAuth&&typeof savedAuth==='object'&&savedAuth.token&&(savedAuth.level==='super'||savedAuth.level==='admin')){
+    adminToken=savedAuth.token;
     adminAuthenticated=true;
-    superAdminAuthenticated=(savedAuthLevel==='super');
-    _applyAdminAuthedUI(savedAuthLevel);
+    superAdminAuthenticated=(savedAuth.level==='super');
+    _applyAdminAuthedUI(savedAuth.level);
+    verifyStoredAdmin();
+  } else if(savedAuth){
+    lsSet(LS_ADMIN_AUTH,null); // 서버 인증 이전 방식으로 저장된 값 — 다시 로그인 필요
   }
 
   productLocations=lsGet(LS_PROD_LOCS,{});
