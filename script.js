@@ -1,6 +1,6 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.12.4';
-const APP_DATE    = '2026.10.13';
+const APP_VERSION = 'v2.13.0';
+const APP_DATE    = '2026.10.19';
 
 /* ===== 설정 ===== */
 const ADMIN_PASSWORD       = 'airmax87';  /* 관리자 비밀번호 */
@@ -3043,6 +3043,7 @@ function initChecklistDate(){
   if(typeGroup && !typeGroup.dataset.value) clResetTypeDefault();
   clRenderPlaceChips();
   clLoadPlaces(false);
+  clUpdateSignModeVisibility();
 }
 function clResetTypeDefault(){
   const group=document.getElementById('clType');
@@ -3156,16 +3157,367 @@ function clApplyQrParams(){
   // 주소에서 QR 값을 지워둠 — 새로고침이나 "새 점검표 작성" 이후에 QR 장소가 다시 덮어쓰지 않게
   history.replaceState(null,'',location.pathname+location.hash);
 }
+/* ----- 현장 담당자 서명 패드 -----
+   손가락/마우스로 그린 서명을 PNG(data URL)로 만들어 제출 데이터에 포함 — GAS가 드라이브에 이미지로 저장하고
+   시트에는 그 파일 링크를 남긴다. 화면 크기/회전이 바뀌어도 선이 어긋나지 않게 실제 픽셀 크기에 맞춰 캔버스를 다시 잡음 */
+let clSignHasInk=false;
+function clSignCanvas(){ return document.getElementById('clSignPad'); }
+function clSetupSignPad(){
+  const c=clSignCanvas();
+  if(!c||c.dataset.ready) return;
+  c.dataset.ready='1';
+  let drawing=false, last=null;
+  const pos=e=>{ const r=c.getBoundingClientRect(); return{x:e.clientX-r.left, y:e.clientY-r.top}; };
+  c.addEventListener('pointerdown',e=>{
+    clFitSignPad();
+    drawing=true; last=pos(e);
+    c.setPointerCapture(e.pointerId);
+    const g=c.getContext('2d');
+    g.beginPath(); g.arc(last.x,last.y,1.2,0,Math.PI*2); g.fill(); // 점 하나만 찍어도 남도록
+    clMarkSigned(true);
+  });
+  c.addEventListener('pointermove',e=>{
+    if(!drawing) return;
+    const p=pos(e), g=c.getContext('2d');
+    g.beginPath(); g.moveTo(last.x,last.y); g.lineTo(p.x,p.y); g.stroke();
+    last=p;
+  });
+  const end=()=>{ drawing=false; };
+  c.addEventListener('pointerup',end);
+  c.addEventListener('pointercancel',end);
+}
+window.addEventListener('resize',clFitSignPad); // 휴대폰 회전 등으로 서명 칸 크기가 바뀌면 다시 맞춤
+// 캔버스 내부 해상도를 화면 크기 × 기기 배율로 맞춤 — 크기가 그대로면 건드리지 않고, 바뀌면 그려둔 서명을 다시 얹음
+function clFitSignPad(){
+  const c=clSignCanvas();
+  if(!c) return;
+  const r=c.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  const w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
+  if(!w||!h||(c.width===w&&c.height===h)) return;
+  const prev=clSignHasInk?c.toDataURL():null;
+  c.width=w; c.height=h;
+  const g=c.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.lineWidth=2.4; g.lineCap='round'; g.lineJoin='round'; g.strokeStyle='#111'; g.fillStyle='#111';
+  if(prev) clLoadSignature(prev);
+}
+function clMarkSigned(on){
+  clSignHasInk=on;
+  const ph=document.getElementById('clSignPlaceholder');
+  if(ph) ph.style.display=on?'none':'';
+}
+function clClearSignature(){
+  const c=clSignCanvas();
+  if(!c) return;
+  const g=c.getContext('2d');
+  g.save(); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.restore();
+  clMarkSigned(false);
+}
+function clLoadSignature(dataUrl){
+  const c=clSignCanvas();
+  if(!c||!dataUrl) return;
+  const img=new Image();
+  img.onload=()=>{
+    const g=c.getContext('2d');
+    g.save(); g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height); g.restore();
+    clMarkSigned(true);
+  };
+  img.src=dataUrl;
+}
+// 서명이 없으면 빈 문자열(전송 데이터에서 빠짐). 전송량을 줄이려고 흰 바탕 PNG로 최대 600px 폭까지 줄여서 보냄
+function clSignatureDataUrl(){
+  const c=clSignCanvas();
+  if(!c||!clSignHasInk) return '';
+  const scale=Math.min(1,600/c.width);
+  const out=document.createElement('canvas');
+  out.width=Math.round(c.width*scale); out.height=Math.round(c.height*scale);
+  const g=out.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,out.width,out.height);
+  g.drawImage(c,0,0,out.width,out.height);
+  return out.toDataURL('image/png');
+}
+
+/* ----- 점검 완료 보고 (업체 담당자 서명 → PDF) -----
+   점검표에서 "서명 받음"을 고르고 제출하면 이 화면으로 옴. 간략한 점검 결과 + 서명란을 보여주고,
+   서명하면 그 화면(clReportSheet)을 그대로 PDF로 만들어 ① 기기에 저장하고 ② GAS로 보내 드라이브에 보관 + 시트에 링크 기록 */
+let clLastSubmission=null; // {data, submissionId, submittedAt}
+let clLastPdf=null;        // {blobUrl, fileName} — "PDF 다시 저장"용
+let clLastManagerName='';  // 같은 현장 다음 구역에서 담당자 이름을 다시 쓰지 않게
+function clShowSuccess(){
+  const d=clLastSubmission?.data||{};
+  const placeLabel=clNormPlace(d.location)+(d.area?' / '+clNormPlace(d.area):'');
+  document.getElementById('clSuccessPlace').textContent=placeLabel+' 점검표가 저장되었습니다.';
+  document.getElementById('checklistReport').style.display='none';
+  document.getElementById('checklistSuccess').style.display='block';
+  openChecklistPhotoModal();
+}
+function clSkipSignature(){
+  if(!confirm('서명 없이 완료할까요?\n점검표는 이미 저장되어 있고, 서명 기록만 남지 않습니다.')) return;
+  clShowSuccess();
+}
+// 고객에게 보여주고 PDF로 저장하는 점검표 — 종이 양식 "에어맥스 클린매트 점검표"와 같은 항목/순서만 표시
+// (점검 방법, 표시상태/통신/사용률/특이사항 등 앱에만 있는 항목은 넣지 않음)
+function openChecklistReport(){
+  const {data:d}=clLastSubmission;
+  const st=(r,note)=>({r:r||'',note:note||''});
+  const rows=[
+    ['매트','볼상태',st(d.ballResult,d.ballIssue)],
+    ['매트','매트외관',st(d.matResult,d.matIssue)],
+    ['매트','스프링상태',st(d.springResult,d.springIssue)],
+    ['매트','흡입상태',d.windTest==='실시'?st('정상',d.windTestDetail):st('미실시')], // 풍속을 쟀으면 정상 + 풍속 값, 안 쟀으면 미실시
+    ['매트','호스상태',st(d.hoseResult,d.hoseIssue)],
+    ['집진기','작동상태',st(d.powerResult,d.powerIssue)],
+    ['집진기','센서상태',st(d.sensorResult,d.sensorIssue)],
+    ['집진기','먼지봉투',st(d.bagReplaced?'교환':'')],
+    ['집진기','HEPA 필터',st(d.hepaReplaced?'교환':'')],
+    ['집진기','모터',st(d.motorReplaced?'교환':'')],
+  ];
+  const groupSize=g=>rows.filter(r=>r[0]===g).length;
+  const body=rows.map((x,i)=>{
+    const first=i===0||rows[i-1][0]!==x[0];
+    const bad=x[2].r==='이상'||x[2].r==='NO';
+    return `<tr><td class="cf-no">${i+1}</td>${first?`<td class="cf-group" rowspan="${groupSize(x[0])}">${x[0]}</td>`:''}
+      <td class="cf-item">${escHtml(x[1])}</td><td class="cf-state${bad?' bad':''}">${escHtml(x[2].r)}</td><td class="cf-note">${escHtml(x[2].note)}</td></tr>`;
+  }).join('');
+  const [y,m,day]=(d.date||todayStr()).split('-');
+  // 종이 양식처럼 업체명(점검 장소)과 설치 장소(세부 구역)를 나눠서 표시 — 세부 구역이 없으면 설치 장소는 빈칸
+  document.getElementById('clReportSheet').innerHTML=`
+    <div class="cf-title">에어맥스 클린매트 점검표</div>
+    <div class="cf-company"><div><b>업체명:</b> ${escHtml(clNormPlace(d.location))}</div><div><b>설치 장소:</b> ${escHtml(clNormPlace(d.area))}</div></div>
+    <table class="cf-table"><colgroup><col style="width:11%"/><col style="width:15%"/><col style="width:25%"/><col style="width:15%"/><col/></colgroup>
+      <thead><tr><th class="cf-no">순서</th><th colspan="2">항목</th><th class="cf-state">상태</th><th>비고</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="cf-confirm">상기 내용으로 점검하였음을 확인합니다.</div>
+    <div class="cf-date">${escHtml(y||'')} 년 ${escHtml(String(Number(m)||''))} 월 ${escHtml(String(Number(day)||''))} 일</div>
+    <div class="cf-people">
+      <div class="cf-person"><span class="cf-person-label">확인자:</span>
+        <input type="text" class="clr-name-input" id="clManagerName" placeholder="업체 담당자 이름" autocomplete="off" value="${escHtml(clLastManagerName)}"/>
+        <span class="clr-name-text" id="clManagerNameText"></span>
+        <span class="cf-sign-slot">(서명)<img class="cf-sign-inline" id="clSignInline" alt=""/></span>
+      </div>
+      <div class="cf-person"><span class="cf-person-label">점검자:</span><b>${escHtml(d.inspector||'')}</b></div>
+    </div>
+    <div class="cf-sign-area">
+      <div class="cf-sign-label">확인자 서명 (PDF에는 이름 옆에 들어갑니다)</div>
+      <div class="cl-sign-wrap">
+        <canvas id="clSignPad" class="cl-sign-pad"></canvas>
+        <div class="cl-sign-placeholder" id="clSignPlaceholder">여기에 서명</div>
+      </div>
+    </div>
+    <div class="cf-stamp"><span>㈜테스토닉</span><img src="assets/checklist/seal.jpg" alt="직인"/></div>
+    <div class="cf-footer">
+      <img class="cf-logo" src="assets/checklist/logo-new.jpg" alt="TESTONIC"/>
+      <div class="cf-contact">www.testonic.co.kr<br/>031-432-4380</div>
+    </div>`;
+  clMarkSigned(false);
+  document.getElementById('clReportGuide').style.display='';
+  document.getElementById('clReportActions').style.display='';
+  document.getElementById('clReportSkipBtn').style.display='';
+  document.getElementById('clReportDone').style.display='none';
+  document.getElementById('clReportUploadMsg').style.display='none';
+  document.getElementById('checklistSuccess').style.display='none';
+  document.getElementById('checklistReport').style.display='block';
+  clSetupSignPad();
+  requestAnimationFrame(clFitSignPad); // 화면에 보인 뒤에야 캔버스 크기를 알 수 있음
+  document.getElementById('checklistReport').scrollIntoView({block:'start'});
+}
+// 서명 캔버스에서 실제로 그린 부분만 잘라 투명 배경 PNG로 반환 — 이름 옆에 작게 붙여도 서명이 너무 작아지지 않게
+function clCropSignature(){
+  const c=clSignCanvas();
+  const g=c.getContext('2d');
+  const {data,width,height}=g.getImageData(0,0,c.width,c.height);
+  let x0=width, y0=height, x1=-1, y1=-1;
+  for(let y=0;y<height;y++) for(let x=0;x<width;x++){
+    if(data[(y*width+x)*4+3]>0){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+  }
+  if(x1<0) return c.toDataURL('image/png');
+  const pad=Math.round(4*(window.devicePixelRatio||1));
+  x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(width-1,x1+pad); y1=Math.min(height-1,y1+pad);
+  const out=document.createElement('canvas');
+  out.width=x1-x0+1; out.height=y1-y0+1;
+  out.getContext('2d').drawImage(c,x0,y0,out.width,out.height,0,0,out.width,out.height);
+  return out.toDataURL('image/png');
+}
+// PDF 라이브러리는 서명할 때만 필요하므로 그때 불러옴
+function clLoadScript(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)) return resolve();
+    const el=document.createElement('script');
+    el.src=src; el.onload=resolve; el.onerror=()=>reject(new Error('라이브러리를 불러오지 못했습니다'));
+    document.head.appendChild(el);
+  });
+}
+async function clMakeReportPdf(){
+  await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  const sheet=document.getElementById('clReportSheet');
+  // 종이 양식처럼 "확인자: 홍길동 (서명)" 모양이 되도록, 서명한 부분만 잘라 이름 옆 자리에 넣음
+  const inline=document.getElementById('clSignInline');
+  inline.src=clCropSignature();
+  await inline.decode().catch(()=>{});
+  sheet.classList.add('capturing'); // 이름 입력칸 → 글자, 큰 서명 칸은 숨기고 이름 옆 서명만 보이게
+  const margin=12, maxW=210-margin*2, maxH=297-margin*2; // A4에서 여백을 뺀 인쇄 영역(mm)
+  const stretched=clStretchReportToA4(sheet, maxH/maxW);
+  try{
+    const canvas=await html2canvas(sheet,{scale:3,backgroundColor:'#ffffff',useCORS:true});
+    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+    let w=maxW, h=canvas.height*w/canvas.width;
+    if(h>maxH){ h=maxH; w=canvas.width*h/canvas.height; } // 내용이 A4보다 길면 한 장에 들어가도록 줄임
+    pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',(210-w)/2,margin,w,h);
+    return pdf;
+  }finally{
+    stretched.forEach(([el,prop])=>{ el.style[prop]=''; });
+    sheet.classList.remove('capturing');
+  }
+}
+// PDF가 A4 한 장을 꽉 채우도록 점검표를 A4 비율(ratio = 세로/가로) 높이까지 늘림 — 남는 높이의 대부분은
+// 표의 각 행에 나눠 주고, 나머지는 확인 문구 위/하단 로고 위 여백으로 줘서 하단 내용이 페이지 아래쪽에 오게 함.
+// 바꾼 스타일 목록을 돌려줘서 캡처 후 원래대로 되돌림
+function clStretchReportToA4(sheet, ratio){
+  const changed=[];
+  const target=Math.round(sheet.offsetWidth*ratio);
+  const extra=target-sheet.offsetHeight;
+  if(extra<=0) return changed;
+  const rows=[...sheet.querySelectorAll('.cf-table tbody tr')];
+  const perRow=Math.floor(extra*0.7/Math.max(rows.length,1));
+  rows.forEach(r=>{ r.style.height=(r.offsetHeight+perRow)+'px'; changed.push([r,'height']); });
+  const rest=target-sheet.offsetHeight; // 행을 늘리고 남은 높이
+  const confirmEl=sheet.querySelector('.cf-confirm'), footerEl=sheet.querySelector('.cf-footer');
+  if(rest>0&&confirmEl&&footerEl){
+    const add=(el,v)=>{ el.style.marginTop=(parseFloat(getComputedStyle(el).marginTop)+v)+'px'; changed.push([el,'marginTop']); };
+    add(confirmEl,Math.floor(rest/2));
+    add(footerEl,rest-Math.floor(rest/2));
+  }
+  return changed;
+}
+async function clSaveSignedReport(){
+  const nameEl=document.getElementById('clManagerName');
+  const name=clNormPlace(nameEl?.value);
+  if(!name){ alert('업체 담당자 이름을 입력해주세요.'); nameEl?.focus(); return; }
+  if(!clSignHasInk){ alert('서명란에 서명해주세요.'); return; }
+  const btn=document.getElementById('clReportSaveBtn');
+  btn.disabled=true; btn.textContent='PDF 만드는 중…';
+  document.getElementById('clManagerNameText').textContent=name;
+  const {data:d, submissionId}=clLastSubmission;
+  const fileName=`점검보고서_${(clNormPlace(d.location)+(d.area?'_'+clNormPlace(d.area):'')).replace(/[\\/:*?"<>|\s]+/g,'_')}_${d.date||todayStr()}.pdf`;
+  let pdf;
+  try{ pdf=await clMakeReportPdf(); }
+  catch(e){
+    alert('PDF를 만들지 못했습니다: '+e.message+'\n네트워크 연결을 확인한 뒤 다시 눌러주세요.');
+    btn.disabled=false; btn.textContent='서명 완료 · PDF 저장';
+    return;
+  }
+  clLastManagerName=name;
+  clLastPdf={blobUrl:URL.createObjectURL(pdf.output('blob')), fileName};
+  clDownloadLastPdf(); // ① 기기에 저장
+  // ② 드라이브 보관 + 시트에 링크 기록 — 실패해도 기기에는 이미 저장됐으므로 안내만 함
+  btn.textContent='시트에 기록 중…';
+  let uploaded=false, uploadErr='';
+  try{
+    const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'attachChecklistSignature',submissionId,managerName:name,fileName,
+        file:pdf.output('datauristring').split('base64,')[1]})},30000);
+    const json=JSON.parse(await res.text());
+    uploaded=!!json.success;
+    if(!uploaded) uploadErr=json.error||'오류';
+  }catch(e){ uploadErr='네트워크 문제로 서버에 연결하지 못했습니다.'; }
+  btn.disabled=false; btn.textContent='서명 완료 · PDF 저장';
+  document.getElementById('clReportGuide').style.display='none';
+  document.getElementById('clReportActions').style.display='none';
+  document.getElementById('clReportSkipBtn').style.display='none';
+  document.getElementById('clReportDoneMsg').textContent=`${name}님 서명이 완료되어 PDF로 저장했습니다.`+(uploaded?' 시트에도 서명 기록이 저장되었습니다.':'');
+  // 시트 기록 실패는 버튼 아래에 따로 — PDF는 이미 기기에 저장됐다는 점을 함께 안내
+  const uploadMsgEl=document.getElementById('clReportUploadMsg');
+  uploadMsgEl.textContent=uploaded?'':`시트 기록 실패: ${uploadErr} — PDF는 기기에 저장되었습니다.`;
+  uploadMsgEl.style.display=uploaded?'none':'block';
+  document.getElementById('clReportDone').style.display='block';
+  document.getElementById('clSignPad').style.pointerEvents='none'; // 완료 후에는 서명이 바뀌지 않게
+  openChecklistPhotoModal();
+}
+function clDownloadLastPdf(){
+  if(!clLastPdf) return;
+  const a=document.createElement('a');
+  a.href=clLastPdf.blobUrl; a.download=clLastPdf.fileName;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ----- 업체 담당자 서명 — 시범 운영 -----
+   우선 지정된 점검자만 서명 단계를 쓰도록 제한. 다른 점검자에게는 서명 선택 자체가 보이지 않고,
+   제출하면 기존 완료 화면으로 바로 감. 전체 적용 시 이 목록 조건을 없애면 됨 */
+const CL_SIGN_PILOT_INSPECTORS=['강정규'];
+function clSignModeEnabled(){
+  return CL_SIGN_PILOT_INSPECTORS.includes(clNormPlace(document.getElementById('clInspector')?.value));
+}
+function clUpdateSignModeVisibility(){
+  const section=document.getElementById('clSignModeSection');
+  if(!section) return;
+  const on=clSignModeEnabled();
+  section.style.display=on?'':'none';
+  if(!on){ // 숨길 때는 골라둔 값도 지워서 다른 점검자 제출에 섞이지 않게
+    const g=document.getElementById('clSignMode');
+    if(g){ delete g.dataset.value; g.querySelectorAll('.checklist-toggle-btn').forEach(b=>b.classList.remove('on-sel')); }
+  }
+}
+
+/* ----- 제출 전 최종 확인 창 ----- */
+function openClConfirm(d){
+  const row=(label,value,note,bad)=>`<div class="cl-confirm-row${bad?' bad':''}"><span class="cl-confirm-label">${escHtml(label)}</span>
+    <span class="cl-confirm-value">${escHtml(value||'—')}${note?`<span class="cl-confirm-note">${escHtml(note)}</span>`:''}</span></div>`;
+  const res=(label,result,issue)=>result?row(label,result,issue,result==='이상'||result==='NO'):'';
+  const hours=d.usageUnit==='Hr';
+  const usageWord=hours?'사용시간':'사용률';
+  const u=v=>v+(hours?' Hr':'%');
+  const sec=(title,body)=>body?`<div class="cl-confirm-sec"><div class="cl-confirm-sec-title">${title}</div>${body}</div>`:'';
+  const version=d.displayType==='LCD'&&d.lcdVersion?` (${d.lcdVersion} 로고)`:'';
+  const hasModem=d.displayType==='LCD'&&d.lcdVersion!=='구형';
+  let html='';
+  html+=sec('기본 정보',
+    row('점검 장소',(d.location||'')+(d.area?' / '+d.area:''))+row('점검 일자',d.date)+row('점검자',d.inspector)+row('점검 구분',d.type));
+  html+=sec('1. 매트',
+    res('① 볼 상태',d.ballResult,d.ballIssue)+res('② 상판/경사면',d.matResult,d.matIssue)+res('③ 스프링',d.springResult,d.springIssue)+
+    row('④ 흡입력(풍속)',d.windTest,d.windTest==='실시'?d.windTestDetail:'')+res('⑤ 호스',d.hoseResult,d.hoseIssue));
+  html+=sec('2. 집진기',
+    res('① 전원 및 동작',d.powerResult,d.powerIssue)+res('② 센서',d.sensorResult,d.sensorIssue)+row('제품 종류',(d.displayType||'')+version)+
+    (d.displayType==='LED'?res('③ LED 표시상태',d.ledResult,d.ledIssue):'')+
+    (d.displayType==='LCD'?res('③ LCD 표시상태',d.lcdResult,d.lcdIssue):'')+
+    (hasModem&&d.modemInstalled?row('모뎀 설치',d.modemInstalled==='O'?'설치 O':'설치 X'):'')+
+    (hasModem&&d.modemInstalled==='O'?res('④ 통신상태',d.commResult,d.commIssue)+res('④ 공기질 센서',d.airSensorResult,d.airSensorIssue):''));
+  html+=sec('3. 소모품',
+    (d.bagRate?row('먼지봉투 '+usageWord,u(d.bagRate)):'')+(d.hepaRate?row('HEPA '+usageWord,u(d.hepaRate)):'')+
+    (d.motorRate?row('모터 '+usageWord,u(d.motorRate)):'')+(d.bagWeight?row('포집량 측정값',d.bagWeight+' g'):'')+
+    (d.inputDone?row('집진기 입력','완료'):'')+
+    (d.bagReplaced?row('교체한 소모품',['먼지봉투',d.hepaReplaced&&'HEPA 필터',d.motorReplaced&&'모터'].filter(Boolean).join(', ')):''));
+  html+=sec('4. 완료 보고',
+    row('특이사항',d.remark)+(d.signMode?row('업체 담당자 서명',d.signMode==='Y'?'서명 받음 — 제출 후 서명 화면으로 이동':'서명 없음'):''));
+  const badCount=(html.match(/cl-confirm-row bad/g)||[]).length;
+  const head=`<div class="cl-confirm-lead">입력한 내용이 맞는지 확인해주세요.${badCount?` <b class="cl-confirm-warn">이상 ${badCount}건</b>`:''}</div>`;
+  document.getElementById('clConfirmBody').innerHTML=head+html;
+  document.getElementById('clConfirmBody').scrollTop=0;
+  document.getElementById('clConfirmModal').style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function closeClConfirm(){
+  document.getElementById('clConfirmModal').style.display='none';
+  document.body.style.overflow='';
+}
+
 // 제출 완료 후 "같은 장소에서 다음 구역 점검" — 장소/일자/점검자/점검 구분은 그대로 두고 점검 항목만 비움.
 // 학교처럼 한 장소에 여러 대가 있는 현장에서 장소를 매번 다시 입력하지 않도록 함
 function clContinueSameLocation(){
   const get=id=>document.getElementById(id)?.value||'';
+  // 같은 현장이면 업체 담당자 서명 여부도 보통 같으므로 그 선택도 유지
   const keep={loc:get('clLocation'), date:get('clDate'), inspector:get('clInspector'),
-    type:document.getElementById('clType')?.dataset.value||''};
+    type:document.getElementById('clType')?.dataset.value||'', signMode:document.getElementById('clSignMode')?.dataset.value||''};
   resetChecklistForm();
+  if(keep.signMode){
+    const btn=document.querySelectorAll('#clSignMode .checklist-toggle-btn')[keep.signMode==='Y'?0:1];
+    if(btn) clSetToggle('clSignMode',keep.signMode,btn,'on-sel');
+  }
   document.getElementById('clLocation').value=keep.loc;
   if(keep.date) document.getElementById('clDate').value=keep.date;
   if(keep.inspector) document.getElementById('clInspector').value=keep.inspector;
+  clUpdateSignModeVisibility();
   if(keep.type){
     const btn=[...document.querySelectorAll('#clType .checklist-toggle-btn')].find(b=>b.textContent.trim()===keep.type);
     if(btn) clSetToggle('clType',keep.type,btn,'on-sel');
@@ -3379,8 +3731,24 @@ function clUpdateInputDoneAvailability(){
   inputDone.disabled=!enable;
   if(!enable) inputDone.checked=false;
 }
+// 소모품 교체를 켜면 먼지봉투 교체로 기록되고, 아래에서 HEPA 필터/모터를 함께 교체했는지 고를 수 있음
+let clHepaReplaced=false, clMotorReplaced=false;
+function clToggleExtraReplace(kind){
+  if(kind==='hepa') clHepaReplaced=!clHepaReplaced; else clMotorReplaced=!clMotorReplaced;
+  document.getElementById('clHepaReplaceBtn')?.classList.toggle('on-sel',clHepaReplaced);
+  document.getElementById('clMotorReplaceBtn')?.classList.toggle('on-sel',clMotorReplaced);
+}
+function clResetExtraReplace(){
+  clHepaReplaced=false; clMotorReplaced=false;
+  document.getElementById('clHepaReplaceBtn')?.classList.remove('on-sel');
+  document.getElementById('clMotorReplaceBtn')?.classList.remove('on-sel');
+  const extra=document.getElementById('clReplaceExtra');
+  if(extra) extra.style.display='none';
+}
 function clToggleConsumableReplace(){
   clReplaceActive=!clReplaceActive;
+  if(clReplaceActive) document.getElementById('clReplaceExtra').style.display='block';
+  else clResetExtraReplace();
   const btn=document.getElementById('clReplaceToggleBtn');
   const weightEl=document.getElementById('clBagWeight');
   if(weightEl){
@@ -3413,8 +3781,10 @@ function collectChecklistData(){
     commResult:tog('clCommResult'), commIssue:val('clCommIssue'),
     airSensorResult:tog('clAirSensorResult'), airSensorIssue:val('clAirSensorIssue'),
     bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'), usageUnit:clUsageIsHours()?'Hr':'%',
-    bagWeight:val('clBagWeight'), inputDone:document.getElementById('clInputDone')?.checked||false,
-    remark:val('clRemark')
+    bagWeight:val('clBagWeight'),
+    bagReplaced:clReplaceActive, hepaReplaced:clReplaceActive&&clHepaReplaced, motorReplaced:clReplaceActive&&clMotorReplaced, inputDone:document.getElementById('clInputDone')?.checked||false,
+    remark:val('clRemark'),
+    signMode:clSignModeEnabled()?tog('clSignMode'):''
   };
 }
 // 체크(정상/이상, OK/NO 등)가 안 된 점검 항목을 찾아 라벨 목록으로 반환 — 빈 배열이면 전부 체크된 것
@@ -3450,6 +3820,7 @@ function getChecklistMissingItems(){
       if(!val(id)) missing.push('소모품 ① '+CL_USAGE_NAMES[id]+' '+usageWord+' (LCD 제품 필수)');
     });
   }
+  if(clSignModeEnabled()&&!tog('clSignMode')) missing.push('업체 담당자 서명 여부 (서명 받음/서명 없음)');
   return missing;
 }
 // 소모품 교체를 진행하고 포집량까지 측정해놓고 "집진기 입력 완료"를 안 누르면, 포집량을
@@ -3519,7 +3890,16 @@ async function submitChecklist(){
     alert('다음 항목이 누락되었습니다:\n\n'+missing.map(m=>'· '+m).join('\n'));
     return;
   }
-  const data=compactChecklistData(collectChecklistData());
+  // 바로 전송하지 않고 입력 내용을 한 번 보여준 뒤, 확인을 눌러야 전송
+  clPendingData=compactChecklistData(collectChecklistData());
+  openClConfirm(clPendingData);
+}
+let clPendingData=null;
+// 확인 창의 "이대로 제출"
+async function confirmSubmitChecklist(){
+  const data=clPendingData;
+  if(!data) return;
+  closeClConfirm();
   const btn=document.getElementById('clSubmitBtn');
   btn.disabled=true; btn.textContent='제출 중…';
   setChecklistFormLocked(true); // 제출 중엔 다른 항목 수정 못 하게 폼 전체 잠금
@@ -3530,11 +3910,11 @@ async function submitChecklist(){
       if(data.inspector) lsSet(LS_CL_INSPECTOR,data.inspector); // 이 기기의 다음 점검표 작성 시 자동으로 채워지도록 기억
       clRememberPlace(data.location,data.area);
       clDoneToday.add((data.date||'')+'|'+clNormPlace(data.location)+'|'+clNormPlace(data.area));
-      const placeLabel=clNormPlace(data.location)+(data.area?' / '+clNormPlace(data.area):'');
-      document.getElementById('clSuccessPlace').textContent=placeLabel+' 점검표가 저장되었습니다.';
+      clLastSubmission={data, submissionId:json.submissionId||'', submittedAt:json.submittedAt||''};
       document.getElementById('checklistForm').style.display='none';
-      document.getElementById('checklistSuccess').style.display='block';
-      openChecklistPhotoModal();
+      // 서명 받음 → 점검 완료 보고(서명) 화면, 서명 없음 → 기존 완료 화면
+      if(data.signMode==='Y') openChecklistReport();
+      else clShowSuccess();
     } else {
       if(json.code==='UNKNOWN_INSPECTOR'){
         alert(`등록되지 않은 점검자입니다: ${data.inspector||'(이름 없음)'}\n\n점검자 이름을 정확히 입력했는지 확인해주세요.\n처음 점검하는 분이라면 관리자에게 점검자 등록을 요청해주세요.`);
@@ -3553,6 +3933,8 @@ async function submitChecklist(){
 }
 function resetChecklistForm(){
   document.getElementById('checklistSuccess').style.display='none';
+  document.getElementById('checklistReport').style.display='none';
+  clLastSubmission=null; clLastPdf=null;
   clCurrentSubmissionId=null; // 새 점검표는 새로운 제출 ID를 쓰도록 초기화
   const form=document.getElementById('checklistForm');
   form.style.display='block';
@@ -3574,6 +3956,7 @@ function resetChecklistForm(){
   if(modemSection) modemSection.style.display='none';
   if(commSection) commSection.style.display='none';
   clReplaceActive=false;
+  clResetExtraReplace();
   const weightEl=document.getElementById('clBagWeight');
   if(weightEl){ weightEl.disabled=true; weightEl.value=''; }
   CL_USAGE_RATE_IDS.forEach(id=>{

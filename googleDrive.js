@@ -69,7 +69,12 @@ try {
     if (action === 'saveWeeklyReport')    return saveWeeklyReport(data);
     if (action === 'submitChecklist')     return handleSubmitChecklist(data);
     if (action === 'getChecklistPlaces')  return getChecklistPlaces();
+    if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
+    // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
+    if (action !== 'saveResults' || !Array.isArray(data.results)) {
+        return buildJson({ success: false, error: '알 수 없는 요청입니다: ' + action + ' — GAS 코드가 최신 버전인지 확인해주세요.' });
+    }
 
     // 저장 요청 시각 기준으로 KST 날짜 산출
     var savedDate = data.savedAt ? new Date(data.savedAt) : new Date();
@@ -314,8 +319,13 @@ function buildChecklistItemRows(base, data) {
     add('소모품', 'HEPA필터' + usageSuffix, data.hepaRate, '');
     add('소모품', '모터' + usageSuffix, data.motorRate, '');
     add('소모품', '먼지봉투 포집량 측정값(g)', data.bagWeight, '');
+    add('소모품', '먼지봉투 교체', data.bagReplaced ? '교체' : '', '');
+    add('소모품', 'HEPA필터 교체', data.hepaReplaced ? '교체' : '', '');
+    add('소모품', '모터 교체', data.motorReplaced ? '교체' : '', '');
     add('소모품', '집진기 입력완료', data.inputDone ? '완료' : '', '');
     add('완료보고', '특이사항', '', data.remark);
+    // 서명을 받는 경우 실제 서명은 제출 후 완료 보고 화면에서 받고, 그때 '업체 담당자 확인' 행이 따로 추가됨
+    add('완료보고', '업체 담당자 서명', data.signMode === 'Y' ? '서명 받음' : (data.signMode === 'N' ? '서명 없음' : ''), '');
     return rows;
 }
 // 모바일 환경에선 저장은 성공했는데 응답만 유실되는 경우가 있어, 클라이언트가 같은 clientSubmissionId로
@@ -324,8 +334,11 @@ function handleSubmitChecklist(data) {
     try {
         var cache = CacheService.getScriptCache();
         var dedupeKey = data.clientSubmissionId ? ('cl_sub_' + data.clientSubmissionId) : null;
-        if (dedupeKey && cache.get(dedupeKey)) {
-            return buildJson({ success: true }); // 이미 처리된 제출 — 다시 저장하지 않고 성공만 응답
+        var cached = dedupeKey ? cache.get(dedupeKey) : null;
+        if (cached) {
+            // 이미 처리된 제출 — 다시 저장하지 않고, 처음 저장할 때의 제출번호/시각만 돌려줌
+            var prev = cached.split('|');
+            return buildJson({ success: true, submissionId: prev[0] || '', submittedAt: prev[1] || '' });
         }
         // 등록된 점검자만 제출 가능 — QR로 누구나 점검표에 들어올 수 있어 장난 제출을 막기 위함
         var inspector = normalizeChecklistLocation(data.inspector);
@@ -338,7 +351,8 @@ function handleSubmitChecklist(data) {
         var submittedAt = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
         var submissionId = Utilities.formatDate(savedDate, 'Asia/Seoul', 'yyyyMMddHHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
         var location = normalizeChecklistLocation(data.location);
-        var base = [submissionId, submittedAt, location, normalizeChecklistLocation(data.area), data.date || '', inspector, data.type || ''];
+        var area = normalizeChecklistLocation(data.area);
+        var base = [submissionId, submittedAt, location, area, data.date || '', inspector, data.type || ''];
         var rows = buildChecklistItemRows(base, data);
         // 동시 제출 시 getLastRow() 기준으로 같은 행에 덮어쓰지 않도록 잠금
         var lock = LockService.getScriptLock();
@@ -350,7 +364,7 @@ function handleSubmitChecklist(data) {
                 if (startRow + rows.length - 1 > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1000);
                 sheet.getRange(startRow, 1, rows.length, CHECKLIST_LONG_HEADERS.length).setValues(rows);
             }
-            if (dedupeKey) cache.put(dedupeKey, '1', 600);
+            if (dedupeKey) cache.put(dedupeKey, submissionId + '|' + submittedAt, 600);
             // 장소별 시트/통계 시트 갱신 — 실패해도 원본 저장은 이미 끝났으므로 제출은 성공으로 응답
             try {
                 if (location) getOrCreateLocationSheet(ss, location);
@@ -359,7 +373,7 @@ function handleSubmitChecklist(data) {
         } finally {
             lock.releaseLock();
         }
-        return buildJson({ success: true });
+        return buildJson({ success: true, submissionId: submissionId, submittedAt: submittedAt });
     } catch(err) {
         return buildJson({ success: false, error: err.message });
     }
@@ -763,6 +777,75 @@ function refreshChecklistStats(ss) {
     sheet.setColumnWidth(2, 180); // 상태 열 — B4 요약 숫자 "N곳 / N구역"(큰 글씨)도 잘리지 않는 너비
     sheet.setFrozenColumns(1);
     sheet.setHiddenGridlines(true);
+}
+
+// ===== 업체 담당자 서명 =====
+// 서명이 담긴 점검 완료 보고서 PDF는 "Air Max 점검표" 스프레드시트와 같은 폴더 안의 "Air Max 점검표 서명" 폴더에 저장.
+// 폴더 ID는 스크립트 속성에 기억해 두고 재사용함. 파일은 스프레드시트와 같은 계정 소유라 공유 설정도 같이 따라감
+var CHECKLIST_SIGN_FOLDER_PROP = 'CHECKLIST_SIGN_FOLDER_ID';
+function getChecklistSignatureFolder(ss) {
+    var props = PropertiesService.getScriptProperties();
+    var id = props.getProperty(CHECKLIST_SIGN_FOLDER_PROP);
+    if (id) {
+        try { return DriveApp.getFolderById(id); } catch (e) { /* 폴더가 지워졌으면 새로 만듦 */ }
+    }
+    var parents = DriveApp.getFileById(ss.getId()).getParents();
+    var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+    var folder = parent.createFolder('Air Max 점검표 서명');
+    props.setProperty(CHECKLIST_SIGN_FOLDER_PROP, folder.getId());
+    return folder;
+}
+// 앱의 점검 완료 보고 화면에서 업체 담당자 서명이 담긴 PDF를 받아 드라이브에 저장하고,
+// 같은 제출 건에 '업체 담당자 확인' 행(결과 = 담당자 이름, 비고 = PDF 링크)을 추가함.
+// 같은 제출 건에 다시 서명하면 새 행을 만들지 않고 그 행을 새 PDF로 바꿈
+function handleAttachChecklistSignature(data) {
+    try {
+        var submissionId = String(data.submissionId || '').trim();
+        if (!submissionId) return buildJson({ success: false, error: '제출번호가 없습니다.' });
+        if (!data.file) return buildJson({ success: false, error: 'PDF가 없습니다.' });
+        var ss = getOrCreateChecklistSpreadsheet();
+        var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
+        var H = CHECKLIST_LONG_HEADERS;
+        var lastRow = sheet.getLastRow();
+        if (lastRow < 2) return buildJson({ success: false, error: '점검표 데이터가 없습니다.' });
+        var values = sheet.getRange(2, 1, lastRow - 1, H.length).getValues();
+        var idCol = H.indexOf('제출ID'), itemCol = H.indexOf('항목'), sectionCol = H.indexOf('구분');
+        var baseRow = null, existingIdx = -1;
+        values.forEach(function(row, i) {
+            if (String(row[idCol]).trim() !== submissionId) return;
+            if (!baseRow) baseRow = row;
+            if (String(row[itemCol]).trim() === '업체 담당자 확인') existingIdx = i;
+        });
+        if (!baseRow) return buildJson({ success: false, error: '해당 제출 건을 찾지 못했습니다: ' + submissionId });
+        var managerName = normalizeChecklistLocation(data.managerName);
+        var fileName = String(data.fileName || ('점검보고서_' + submissionId + '.pdf')).replace(/[\\\/:*?"<>|]/g, '_');
+        var blob = Utilities.newBlob(Utilities.base64Decode(String(data.file)), 'application/pdf', fileName);
+        var url = getChecklistSignatureFolder(ss).createFile(blob).getUrl();
+        var newRow = baseRow.slice(0, sectionCol).concat(['완료보고', '업체 담당자 확인', managerName, url]);
+        var lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        try {
+            if (existingIdx >= 0) {
+                sheet.getRange(existingIdx + 2, 1, 1, H.length).setValues([newRow]);
+            } else {
+                var startRow = sheet.getLastRow() + 1;
+                if (startRow > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1000);
+                sheet.getRange(startRow, 1, 1, H.length).setValues([newRow]);
+            }
+        } finally {
+            lock.releaseLock();
+        }
+        return buildJson({ success: true, url: url });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
+}
+// GAS 편집기에서 한 번 직접 실행 — 서명 PDF 저장에 필요한 드라이브 권한(폴더/파일 만들기)을 승인받고,
+// 실제 저장 경로와 똑같이 서명 폴더를 찾거나 만들어서 정상 동작하는지 확인함
+function authorizeDrive() {
+    var folder = getChecklistSignatureFolder(getOrCreateChecklistSpreadsheet());
+    Logger.log('드라이브 권한 확인 완료 — 서명 폴더: ' + folder.getUrl());
+    Logger.log('이제 [배포 관리 → 편집 → 새 버전]으로 재배포하세요.');
 }
 
 // ===== 점검자 명단 =====

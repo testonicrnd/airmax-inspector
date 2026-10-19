@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.12.4"/>
+<link rel="stylesheet" href="style.css?v=2.13.0"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -614,7 +614,7 @@
         </div>
         <div class="checklist-q">
           <div class="checklist-q-label">점검자</div>
-          <input type="text" class="checklist-input" id="clInspector" placeholder="이름"/>
+          <input type="text" class="checklist-input" id="clInspector" placeholder="이름" oninput="clUpdateSignModeVisibility()"/>
         </div>
         <div class="checklist-q">
           <div class="checklist-q-label">점검 구분</div>
@@ -793,14 +793,21 @@
         </div>
 
         <div class="checklist-q">
-          <div class="checklist-q-label">② 먼지봉투 포집량 측정 (교체 진행 시, 저울 측정)</div>
-          <div class="checklist-q-hint">먼지봉투 교체 시 포집된 먼지 무게(g)를 측정하고, 반드시 집진기에 포집량을 입력</div>
+          <div class="checklist-q-label">② 소모품 교체 (교체 진행 시)</div>
+          <div class="checklist-q-hint">먼지봉투를 교체하면 "소모품 교체"를 누르고 포집된 먼지 무게(g)를 측정해 입력한 뒤, 반드시 집진기에 포집량을 입력. HEPA 필터·모터를 함께 교체했으면 아래에서 선택</div>
           <button type="button" class="checklist-toggle-btn" id="clReplaceToggleBtn" style="width:100%;margin-bottom:12px" onclick="clToggleConsumableReplace()">소모품 교체</button>
           <input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input" id="clBagWeight" placeholder="측정값 (g)" oninput="clSanitizeNumberInput(this)" disabled/>
           <label class="checklist-check-row" for="clInputDone" style="cursor:pointer">
             <input type="checkbox" id="clInputDone" disabled/>
             <span>집진기에 포집량 입력 완료 (LCD 제품만 해당)</span>
           </label>
+          <div id="clReplaceExtra" style="display:none">
+            <div class="checklist-q-hint" style="margin:14px 0 8px">함께 교체한 소모품 (해당하는 것만 선택)</div>
+            <div class="checklist-toggle-group">
+              <button type="button" class="checklist-toggle-btn" id="clHepaReplaceBtn" onclick="clToggleExtraReplace('hepa')">HEPA 필터 교체</button>
+              <button type="button" class="checklist-toggle-btn" id="clMotorReplaceBtn" onclick="clToggleExtraReplace('motor')">모터 교체</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -809,6 +816,14 @@
         <div class="checklist-q" style="padding-top:0;border-top:none">
           <div class="checklist-q-label">특이사항</div>
           <textarea class="checklist-textarea" id="clRemark" placeholder="집진기 점검 완료 후 특이사항이 있을 경우 작성"></textarea>
+        </div>
+        <div class="checklist-q" id="clSignModeSection" style="display:none">
+          <div class="checklist-q-label">업체 담당자 서명</div>
+          <div class="checklist-q-hint">업체 담당자에게 점검 결과를 확인받고 서명을 받을 수 있으면 "서명 받음"을 선택하세요. 제출 후 점검 완료 보고 화면에서 서명을 받고 PDF로 저장합니다.</div>
+          <div class="checklist-toggle-group" id="clSignMode">
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clSignMode','Y',this,'on-sel')">서명 받음</button>
+            <button type="button" class="checklist-toggle-btn" onclick="clSetToggle('clSignMode','N',this,'on-sel')">서명 없음</button>
+          </div>
         </div>
       </div>
 
@@ -821,13 +836,52 @@
       <span class="material-icons-round">check_circle</span>
       <div style="font-size:17px;font-weight:600;color:var(--text)">제출 완료되었습니다</div>
       <div style="font-size:14px;color:var(--text2);margin-top:6px" id="clSuccessPlace">점검표가 저장되었습니다.</div>
-      <button class="btn-primary cl-continue-btn" onclick="clContinueSameLocation()">같은 장소에서 다음 구역 점검</button>
-      <button class="btn-ghost" style="margin-top:10px" onclick="resetChecklistForm()">새 점검표 작성 (다른 장소)</button>
+      <div class="cl-done-btns">
+        <button class="cl-done-btn" onclick="clContinueSameLocation()"><span class="material-icons-round">add_location_alt</span>같은 장소 다음 구역</button>
+        <button class="cl-done-btn" onclick="resetChecklistForm()"><span class="material-icons-round">note_add</span>새 점검표 (다른 장소)</button>
+      </div>
+    </div>
+
+    <!-- 점검 완료 보고 (업체 담당자 서명) — 점검표에서 "서명 받음"을 고르고 제출한 경우에만 표시.
+         보고서 영역(clReportSheet)이 그대로 PDF로 저장되므로 테마와 상관없이 흰 종이 모양으로 고정 -->
+    <div id="checklistReport" class="cl-report" style="display:none">
+      <div class="cl-report-guide" id="clReportGuide">점검표가 저장되었습니다. 업체 담당자에게 아래 내용을 확인받고 이름과 서명을 받아주세요.</div>
+      <div class="cl-report-sheet" id="clReportSheet"></div>
+      <div class="cl-report-actions" id="clReportActions">
+        <button class="btn-ghost" onclick="clClearSignature()"><span class="material-icons-round ico">refresh</span>서명 지우기</button>
+        <button class="btn-primary" id="clReportSaveBtn" onclick="clSaveSignedReport()">서명 완료 · PDF 저장</button>
+      </div>
+      <button class="btn-ghost cl-report-skip" id="clReportSkipBtn" onclick="clSkipSignature()">서명 없이 완료</button>
+      <div class="cl-report-done" id="clReportDone" style="display:none">
+        <div class="cl-report-done-msg" id="clReportDoneMsg"></div>
+        <div class="cl-done-btns">
+          <button class="cl-done-btn" onclick="clDownloadLastPdf()"><span class="material-icons-round">download</span>PDF 다시 저장</button>
+          <button class="cl-done-btn" onclick="clContinueSameLocation()"><span class="material-icons-round">add_location_alt</span>같은 장소 다음 구역</button>
+          <button class="cl-done-btn" onclick="resetChecklistForm()"><span class="material-icons-round">note_add</span>새 점검표 (다른 장소)</button>
+        </div>
+        <!-- 시트 기록 실패 등 부가 안내 — 버튼 아래에 따로 표시 -->
+        <div class="cl-report-upload-msg" id="clReportUploadMsg" style="display:none"></div>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- 점검 완료 후 사진 공유 안내 팝업 -->
+<!-- 점검표 제출 전 최종 확인 — 입력한 내용을 한눈에 보여주고, 확인을 눌러야 실제로 전송됨 -->
+<div id="clConfirmModal" class="dust-modal-overlay" style="display:none" onclick="if(event.target===this) closeClConfirm()">
+  <div class="dust-modal-box cl-confirm-box">
+    <div class="dust-modal-header">
+      <span class="dust-modal-title">제출 전 확인</span>
+      <button class="pe-btn" onclick="closeClConfirm()"><span class="material-icons-round ico">close</span>닫기</button>
+    </div>
+    <div class="dust-modal-body" id="clConfirmBody"></div>
+    <div class="cl-confirm-actions">
+      <button class="btn-ghost" onclick="closeClConfirm()">수정하기</button>
+      <button class="btn-primary" id="clConfirmSubmitBtn" onclick="confirmSubmitChecklist()">이대로 제출</button>
+    </div>
+  </div>
+</div>
+
 <!-- 점검자 관리 (관리자 전용) — 여기 등록된 이름으로만 점검표가 제출됨 -->
 <div id="inspectorModal" class="dust-modal-overlay" style="display:none" onclick="if(event.target===this) closeInspectorModal()">
   <div class="dust-modal-box inspector-modal-box">
@@ -917,6 +971,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.12.4"></script>
+<script defer src="script.js?v=2.13.0"></script>
 </body>
 </html>

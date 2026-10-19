@@ -1166,3 +1166,92 @@ body.checklist-page-active { padding-bottom:46px; }
 .inspector-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; font-size:15px; color:var(--text); border-bottom:1px solid var(--border2); }
 .inspector-row:last-child { border-bottom:none; }
 .inspector-empty { padding:16px; text-align:center; font-size:13px; color:var(--text3); }
+
+/* 점검표 — 현장 담당자 서명 */
+.cl-sign-wrap { position:relative; margin-top:10px; }
+/* 서명은 테마와 상관없이 흰 바탕에 검은 선(저장되는 이미지와 같은 모습) */
+.cl-sign-pad { display:block; width:100%; height:170px; background:#fff; border:1.5px dashed var(--border); border-radius:var(--radius); touch-action:none; cursor:crosshair; }
+.cl-sign-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#b5b0ab; font-size:15px; pointer-events:none; }
+
+/* 점검표 — 제출 전 확인 창 */
+.cl-confirm-box { max-width:520px; }
+.cl-confirm-lead { font-size:14px; color:var(--text2); margin-bottom:12px; }
+.cl-confirm-sec { margin-bottom:14px; }
+.cl-confirm-sec-title { font-size:13px; font-weight:600; color:var(--text3); margin-bottom:6px; }
+.cl-confirm-row { display:flex; gap:10px; padding:7px 10px; border-bottom:1px solid var(--border2); font-size:14px; }
+.cl-confirm-row.bad { background:var(--pm-bg); }
+.cl-confirm-label { flex:0 0 108px; color:var(--text3); }
+.cl-confirm-value { flex:1; min-width:0; color:var(--text); word-break:keep-all; overflow-wrap:anywhere; }
+.cl-confirm-row.bad .cl-confirm-value { color:var(--pm-text); font-weight:600; }
+.cl-confirm-note { display:block; font-size:12px; font-weight:400; color:var(--text2); margin-top:2px; }
+.cl-confirm-warn { color:var(--pm-text); font-weight:600; }
+.cl-confirm-actions { display:flex; gap:8px; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--border); flex-shrink:0; }
+.cl-confirm-actions .btn-primary { padding:10px 22px; }
+
+/* 점검 완료 보고 (업체 담당자 서명) — 보고서 영역은 PDF로 그대로 저장되므로 테마와 상관없이 흰 종이 모양 */
+.cl-report { max-width:640px; margin:0 auto; }
+.cl-report-guide { font-size:14px; color:var(--text2); line-height:1.6; margin-bottom:12px; padding:12px 14px; background:var(--accent-bg); border:1.5px solid var(--accent); border-radius:var(--radius); }
+.cl-report-sheet { background:#fff; color:#111; border:1px solid #ddd9d5; border-radius:6px; padding:22px 18px 16px; font-size:13px; }
+/* 공통 input[type=text] 다크 스타일보다 우선하도록 보고서 영역 안으로 한정 */
+.cl-report-sheet .clr-name-input { flex:1; min-width:0; font-size:16px; font-family:inherit; padding:8px 10px; border:1.5px solid #ddd9d5; border-radius:6px; background:#fff; color:#171514; }
+.clr-name-text { display:none; font-size:16px; font-weight:600; }
+.cl-report-sheet .cl-sign-pad { border-color:#c9c4bf; }
+/* PDF로 만들 때만 — 입력칸 대신 글자로, 서명 칸 점선 테두리는 실선 밑줄로 */
+.cl-report-sheet.capturing .clr-name-input { display:none; }
+.cl-report-sheet.capturing .clr-name-text { display:inline; }
+.cl-report-sheet.capturing .cl-sign-pad { border:none; border-bottom:1px solid #171514; border-radius:0; }
+.cl-report-sheet.capturing .cl-sign-placeholder { display:none; }
+/* PDF에는 화면용 둥근 테두리를 넣지 않음 (종이 한 장처럼) */
+.cl-report-sheet.capturing { border:none; border-radius:0; }
+.cl-report-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+.cl-report-actions .btn-ghost { display:inline-flex; align-items:center; gap:4px; }
+.cl-report-actions .btn-primary { padding:12px 20px; font-size:15px; }
+.cl-report-skip { display:block; margin:14px auto 0; }
+.cl-report-done { text-align:center; margin-top:16px; }
+.cl-report-done-msg { font-size:14px; color:var(--text); line-height:1.6; margin-bottom:12px; }
+.cl-report-done .btn-ghost { display:inline-flex; align-items:center; gap:4px; }
+
+/* 점검 완료 화면 버튼 — 같은 모양으로 한 줄에 나란히 (좁은 화면에서는 같은 너비로 줄바꿈) */
+.cl-done-btns { display:flex; gap:8px; justify-content:center; margin-top:18px; }
+.cl-done-btn {
+  flex:1 1 0; min-width:0; display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  padding:12px 6px; border:1.5px solid var(--border); border-radius:var(--radius); background:var(--input-bg);
+  color:var(--text); font-size:13px; font-weight:500; font-family:inherit; cursor:pointer; line-height:1.3; word-break:keep-all;
+  transition:all 0.15s cubic-bezier(0.4,0,0.2,1);
+}
+.cl-done-btn .material-icons-round { font-size:20px; color:var(--text3); }
+.cl-done-btn:hover { border-color:var(--accent); color:var(--accent-text); background:var(--accent-bg); }
+.cl-done-btn:hover .material-icons-round { color:var(--accent); }
+.checklist-success .cl-done-btns { max-width:420px; margin-left:auto; margin-right:auto; }
+.cl-report-upload-msg { margin-top:14px; padding:10px 12px; font-size:13px; line-height:1.5; color:var(--pm-text); background:var(--pm-bg); border:1px solid var(--pm-border); border-radius:var(--radius); text-align:left; }
+
+/* 고객용 점검표 — 종이 양식 "에어맥스 클린매트 점검표" 모양 */
+.cf-title { font-size:24px; font-weight:800; text-align:center; letter-spacing:1px; padding-bottom:12px; border-bottom:2px solid #111; }
+.cf-company { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:14px; padding:10px 2px; }
+.cf-company > div { flex:1 1 140px; min-width:0; word-break:keep-all; overflow-wrap:anywhere; }
+.cf-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:13px; }
+.cf-table th, .cf-table td { border:1px solid #333; padding:8px 4px; text-align:center; vertical-align:middle; }
+.cf-table thead th { background:#e7e7e7; font-weight:600; }
+.cf-table td.cf-state { font-weight:600; }
+.cf-table td.cf-state.bad { color:#c5221f; }
+.cf-table td.cf-note { font-size:12px; word-break:keep-all; overflow-wrap:anywhere; }
+.cf-confirm { text-align:center; font-size:15px; font-weight:700; margin:22px 0 10px; }
+.cf-date { text-align:center; font-size:14px; font-weight:600; word-spacing:4px; margin-bottom:14px; }
+.cf-people { display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; justify-content:space-between; }
+.cf-person { display:flex; align-items:center; gap:6px; flex:1 1 160px; min-width:0; font-size:14px; }
+.cf-person-label { font-weight:700; flex-shrink:0; }
+.cf-sign-label { font-size:12px; color:#6b6560; margin-top:12px; }
+.cl-report-sheet .cl-sign-pad { height:140px; border-color:#c9c4bf; }
+.cf-stamp { display:flex; align-items:center; justify-content:center; gap:4px; margin-top:16px; font-size:20px; font-weight:800; }
+.cf-stamp img { width:52px; height:52px; object-fit:contain; }
+.cf-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; padding-top:10px; border-top:1px solid #ddd; }
+.cf-logo { height:26px; width:auto; }
+.cf-contact { font-size:12px; text-align:right; line-height:1.5; color:#333; }
+
+/* 고객용 점검표 — PDF에서는 서명을 이름 바로 옆에 (종이 양식의 "성명 (서명)" 모양) */
+/* "(서명)" 글자 위에 서명을 겹쳐 그린 모양 — 종이에 직접 서명한 것처럼 */
+.cf-sign-slot { display:none; position:relative; margin-left:8px; padding:0 4px; font-size:14px; color:#555; white-space:nowrap; }
+/* 이름을 덮지 않도록 "(서명)" 글자 앞쪽에서 시작해 오른쪽 빈 공간으로 그려지게 */
+.cf-sign-inline { position:absolute; left:-6px; top:50%; transform:translateY(-50%); height:44px; max-width:96px; width:auto; object-fit:contain; } /* 너비 제한 — 오른쪽 점검자 칸까지 넘어가지 않게 */
+.cl-report-sheet.capturing .cf-sign-slot { display:inline-block; }
+.cl-report-sheet.capturing .cf-sign-area { display:none; }
