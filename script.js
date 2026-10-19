@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.13.0';
+const APP_VERSION = 'v2.13.1';
 const APP_DATE    = '2026.10.19';
 
 /* ===== 설정 ===== */
@@ -3348,6 +3348,7 @@ function clLoadScript(src){
     document.head.appendChild(el);
   });
 }
+const CL_REPORT_PDF_WIDTH=680; // PDF용 점검표를 그릴 고정 폭(px)
 async function clMakeReportPdf(){
   await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
   await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
@@ -3358,9 +3359,12 @@ async function clMakeReportPdf(){
   await inline.decode().catch(()=>{});
   sheet.classList.add('capturing'); // 이름 입력칸 → 글자, 큰 서명 칸은 숨기고 이름 옆 서명만 보이게
   const margin=12, maxW=210-margin*2, maxH=297-margin*2; // A4에서 여백을 뺀 인쇄 영역(mm)
-  const stretched=clStretchReportToA4(sheet, maxH/maxW);
+  // 휴대폰처럼 좁은 화면에서는 점검표가 좁고 길게 그려져 A4에 넣으면 좌우가 비게 되므로,
+  // PDF를 만들 때만 기기와 상관없이 같은 폭(PC 기준)으로 그린 뒤 A4 비율로 늘려서 찍음
+  sheet.style.width=CL_REPORT_PDF_WIDTH+'px';
+  const stretched=[[sheet,'width']].concat(clStretchReportToA4(sheet, maxH/maxW));
   try{
-    const canvas=await html2canvas(sheet,{scale:3,backgroundColor:'#ffffff',useCORS:true});
+    const canvas=await html2canvas(sheet,{scale:3,backgroundColor:'#ffffff',useCORS:true,windowWidth:Math.max(window.innerWidth,CL_REPORT_PDF_WIDTH+40)});
     const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
     let w=maxW, h=canvas.height*w/canvas.width;
     if(h>maxH){ h=maxH; w=canvas.width*h/canvas.height; } // 내용이 A4보다 길면 한 장에 들어가도록 줄임
