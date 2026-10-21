@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.17.0"/>
+<link rel="stylesheet" href="style.css?v=2.17.1"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -55,11 +55,8 @@
   </div>
 </div>
 
-<div id="inspectionPage">
-<div class="controls">
-  <!-- API 토큰 (숨김) -->
-  <input type="hidden" id="tokenInput" value="1|WrmwJU8n5mrF0oO0cYlPiGYR40N1txioHrpUXgSM0ab1084c"/>
-
+<!-- 관리자 로그인/메뉴 — 어느 탭에서든 헤더의 [관리자] 버튼으로 열고 닫음 (점검 탭 안에 있으면 다른 탭에서 쓸 수 없었음) -->
+<div class="admin-panel" id="adminPanel">
   <!-- 관리자 비밀번호 -->
   <div class="admin-row" id="adminRow" hidden>
     <label style="min-width:80px">관리자 PW</label>
@@ -73,11 +70,18 @@
   </div>
   <!-- 관리자 액션 버튼 (인증 후 표시) -->
   <div class="admin-actions-row" id="adminActionsRow" style="display:none">
-    <button class="btn-admin-action" onclick="toggleProductEditor()"><span class="material-icons-round ico">inventory_2</span>제품 편집</button>
+    <button class="btn-admin-action" onclick="openProductEditorFromAnyTab()"><span class="material-icons-round ico">inventory_2</span>제품 편집</button>
     <button class="btn-admin-action" onclick="switchPage('qr')"><span class="material-icons-round ico">qr_code_2</span>점검표 QR 만들기</button>
     <button class="btn-admin-action" onclick="openInspectorModal()"><span class="material-icons-round ico">badge</span>점검자 관리</button>
     <button type="button" class="overdue-badge" id="overdueBadge" style="display:none" onclick="openOverdueBadgeModal()"></button>
   </div>
+
+</div>
+
+<div id="inspectionPage">
+<div class="controls">
+  <!-- API 토큰 (숨김) -->
+  <input type="hidden" id="tokenInput" value="1|WrmwJU8n5mrF0oO0cYlPiGYR40N1txioHrpUXgSM0ab1084c"/>
 
   <!-- 제품 편집 (관리자 전용) — 시트 연동 -->
   <div class="product-editor-section" id="productEditorSection" style="display:none">
@@ -900,6 +904,7 @@
         <div class="cl-records-filter" id="clRecordsFilter"></div>
         <div class="cl-records-state" id="clRecordsState"></div>
         <div class="cl-records-list" id="clRecordsList"></div>
+        <div class="single-pagination cl-records-pages" id="clRecordsPages"></div>
       </div>
       <div id="clRecordDetail" style="display:none">
         <button type="button" class="btn-ghost cl-record-back" onclick="clRecordsBackToList()"><span class="material-icons-round ico">arrow_back</span>목록</button>
@@ -1038,6 +1043,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.17.0"></script>
+<script defer src="script.js?v=2.17.1"></script>
 </body>
 </html>

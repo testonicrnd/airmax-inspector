@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.17.0';
+const APP_VERSION = 'v2.17.1';
 const APP_DATE    = '2026.10.21';
 
 /* ===== 설정 ===== */
@@ -132,6 +132,12 @@ function toggleAdminRow(force){
   row.hidden=!open;
   document.getElementById('adminToggle').classList.toggle('active',open);
   if(open && !adminAuthenticated) document.getElementById('adminPwInput').focus();
+  updateAdminPanel();
+}
+// 관리자 영역(모든 탭 공용) — 로그인 줄이나 관리자 메뉴 중 하나라도 보이면 여백/구분선을 보여줌
+function updateAdminPanel(){
+  const row=document.getElementById('adminRow'), actions=document.getElementById('adminActionsRow');
+  document.getElementById('adminPanel')?.classList.toggle('open',!row.hidden||actions.style.display!=='none');
 }
 
 function toggleAdminPwVisibility(){
@@ -191,6 +197,7 @@ function _applyAdminAuthedUI(level){
   document.getElementById('adminActionsRow').style.display='flex';
   _applyDustAuthUI();
   updateRunBtnText(); updateSheetBtn(); updatePageTabsVisibility();
+  updateAdminPanel();
   fetchOverdueBadge();
 }
 
@@ -268,6 +275,7 @@ function deauthAdmin(){
   productLocEditorOpen=false;
   _applyDustAuthUI();
   updateRunBtnText(); updateSheetBtn(); updatePageTabsVisibility();
+  updateAdminPanel();
 }
 
 function updateRunBtnText(){
@@ -867,6 +875,11 @@ function renderGrid(){
 }
 
 /* ===== 제품 편집 (시트 연동) ===== */
+// 관리자 메뉴의 [제품 편집] — 제품 편집 화면은 점검 탭 안에 있으므로 다른 탭에서 누르면 점검 탭으로 이동해서 엶
+function openProductEditorFromAnyTab(){
+  if(currentPage!=='inspection'){ switchPage('inspection'); if(productLocEditorOpen) return; }
+  toggleProductEditor();
+}
 function toggleProductEditor(){
   productLocEditorOpen=!productLocEditorOpen;
   const sec=document.getElementById('productEditorSection');
@@ -3712,17 +3725,43 @@ async function loadChecklistRecords(){
     if(!json.success){ state.textContent=json.error||'불러오지 못했습니다.'; return; }
     clRecordsCache=json.items||[];
     state.textContent=clRecordsCache.length?`${json.total}건${json.total>clRecordsCache.length?` (최근 ${clRecordsCache.length}건 표시)`:''}`:'조회된 점검표가 없습니다.';
-    list.innerHTML=clRecordsCache.map((r,i)=>{
-      const place=escHtml(r.location)+(r.area?' / '+escHtml(r.area):'');
-      const status=r.bad?`<span class="cl-record-badge bad">이상 ${r.bad}건</span>`:'<span class="cl-record-badge">정상</span>';
-      const sign=r.signed?`서명 ${escHtml(r.managerName||'')}`:(r.signMode==='서명 받음'?'서명 대기':'서명 없음');
-      const mail=r.email?(r.mailStatus.indexOf('실패')>=0?` · 메일 실패`:` · 메일 ${escHtml(r.email)}`):'';
-      return `<button type="button" class="cl-record-item" onclick="openChecklistRecord(${i})">
-        <div class="cl-record-top"><b>${place}</b>${status}</div>
-        <div class="cl-record-sub">${escHtml(r.submittedAt.slice(0,16))} · ${escHtml(r.inspector)} · ${sign}${mail}</div>
-      </button>`;
-    }).join('');
+    clRecordsPage=0;
+    clRenderRecordsPage();
   }catch(e){ state.textContent='네트워크 문제로 불러오지 못했습니다.'; }
+}
+// 목록은 한 페이지에 10건씩 — 아래 페이지 번호로 이동 (상세를 봤다가 돌아오면 보던 페이지 그대로)
+const CL_RECORDS_PAGE_SIZE=10;
+let clRecordsPage=0;
+function clRenderRecordsPage(){
+  const list=document.getElementById('clRecordsList'), pages=document.getElementById('clRecordsPages');
+  const totalPages=Math.max(1,Math.ceil(clRecordsCache.length/CL_RECORDS_PAGE_SIZE));
+  clRecordsPage=Math.max(0,Math.min(clRecordsPage,totalPages-1));
+  const start=clRecordsPage*CL_RECORDS_PAGE_SIZE;
+  list.innerHTML=clRecordsCache.slice(start,start+CL_RECORDS_PAGE_SIZE).map((r,k)=>{
+    const i=start+k;
+    const place=escHtml(r.location)+(r.area?' / '+escHtml(r.area):'');
+    const status=r.bad?`<span class="cl-record-badge bad">이상 ${r.bad}건</span>`:'<span class="cl-record-badge">정상</span>';
+    const sign=r.signed?`서명 ${escHtml(r.managerName||'')}`:(r.signMode==='서명 받음'?'서명 대기':'서명 없음');
+    const mail=r.email?(r.mailStatus.indexOf('실패')>=0?` · 메일 실패`:` · 메일 ${escHtml(r.email)}`):'';
+    return `<button type="button" class="cl-record-item" onclick="openChecklistRecord(${i})">
+      <div class="cl-record-top"><b>${place}</b>${status}</div>
+      <div class="cl-record-sub">${escHtml(r.submittedAt.slice(0,16))} · ${escHtml(r.inspector)} · ${sign}${mail}</div>
+    </button>`;
+  }).join('');
+  if(totalPages<=1){ pages.innerHTML=''; return; }
+  // 현재 페이지 앞뒤 2쪽 + 처음/끝 페이지 번호
+  const near=2, from=Math.max(0,clRecordsPage-near), to=Math.min(totalPages-1,clRecordsPage+near);
+  let html=`<button class="pg-btn" onclick="clGoRecordsPage(${clRecordsPage-1})" ${clRecordsPage===0?'disabled':''}>← 이전</button>`;
+  if(from>0) html+=`<button class="pg-btn" onclick="clGoRecordsPage(0)">1</button>${from>1?'<span class="pg-info">…</span>':''}`;
+  for(let p=from;p<=to;p++) html+=`<button class="pg-btn${p===clRecordsPage?' active':''}" onclick="clGoRecordsPage(${p})">${p+1}</button>`;
+  if(to<totalPages-1) html+=`${to<totalPages-2?'<span class="pg-info">…</span>':''}<button class="pg-btn" onclick="clGoRecordsPage(${totalPages-1})">${totalPages}</button>`;
+  html+=`<button class="pg-btn" onclick="clGoRecordsPage(${clRecordsPage+1})" ${clRecordsPage===totalPages-1?'disabled':''}>다음 →</button>`;
+  pages.innerHTML=html;
+}
+function clGoRecordsPage(p){
+  clRecordsPage=p;
+  clRenderRecordsPage();
+  document.getElementById('checklistRecords').scrollIntoView({block:'start'});
 }
 function clRecordsBackToList(){
   document.getElementById('clRecordDetail').style.display='none';
