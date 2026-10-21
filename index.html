@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.14.0"/>
+<link rel="stylesheet" href="style.css?v=2.15.0"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -593,6 +593,12 @@
         <div class="checklist-desc">매트 / 집진기 / 소모품 점검 — 현장에서 작성 후 제출하면 바로 저장됩니다.</div>
       </div>
 
+      <!-- 단계 진행 표시 (시범: 지정된 점검자만) — 한 화면에 한 섹션씩 -->
+      <div class="cl-wizard-bar" id="clWizardBar" style="display:none">
+        <div class="cl-wizard-label" id="clWizardLabel"></div>
+        <div class="cl-wizard-steps" id="clWizardSteps"></div>
+      </div>
+
       <div class="checklist-section">
         <div class="checklist-q" style="padding-top:0;border-top:none">
           <div class="checklist-q-label">점검 장소</div>
@@ -827,6 +833,10 @@
         </div>
       </div>
 
+      <div class="cl-wizard-nav" id="clWizardNav" style="display:none">
+        <button type="button" class="btn-ghost cl-wizard-prev" id="clWizardPrev" onclick="clWizardGo(-1)">이전</button>
+        <button type="button" class="btn-primary cl-wizard-next" id="clWizardNext" onclick="clWizardGo(1)">다음</button>
+      </div>
       <div class="checklist-submit-bar">
         <button class="btn-primary" id="clSubmitBtn" onclick="submitChecklist()">제출하기</button>
       </div>
@@ -971,6 +981,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.14.0"></script>
+<script defer src="script.js?v=2.15.0"></script>
 </body>
 </html>

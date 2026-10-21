@@ -1262,3 +1262,19 @@ body.checklist-page-active { padding-bottom:46px; }
 .cl-report-sheet .cf-email-input { display:block; width:100%; box-sizing:border-box; }
 .cl-report-sheet .cl-chip { background:#fff; color:#433f3d; border-color:#ddd9d5; }
 .cl-report-sheet .cl-chip-label { color:#6b6560; }
+
+/* 점검표 — 섹션 단계 방식 (시범) */
+.cl-wizard-bar { padding:4px 0 12px; margin-bottom:6px; }
+.cl-wizard-label { font-size:15px; font-weight:700; color:var(--text); margin-bottom:8px; }
+.cl-wizard-steps { display:flex; gap:4px; }
+.cl-wizard-step { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 2px;
+  border:1.5px solid var(--border); border-radius:var(--radius); background:var(--input-bg); color:var(--text4);
+  font-size:11px; font-family:inherit; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cl-wizard-step span { font-size:13px; font-weight:700; }
+.cl-wizard-step:disabled { cursor:default; opacity:0.6; }
+.cl-wizard-step.done { color:var(--ok-text); border-color:var(--ok-border); background:var(--ok-bg); }
+.cl-wizard-step.on { color:var(--accent-text); border-color:var(--accent); background:var(--accent-bg); }
+.cl-wizard-nav { display:flex; gap:8px; padding:8px 0 0; }
+.cl-wizard-nav .cl-wizard-prev { flex:0 0 30%; padding:16px 0; font-size:16px; }
+.cl-wizard-nav .cl-wizard-next { flex:1; padding:16px 0; font-size:17px; }
+#checklistForm.cl-wizard .checklist-section { margin-bottom:8px; }

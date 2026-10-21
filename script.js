@@ -1,6 +1,6 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.14.0';
-const APP_DATE    = '2026.10.19';
+const APP_VERSION = 'v2.15.0';
+const APP_DATE    = '2026.10.21';
 
 /* ===== 설정 ===== */
 /* 관리자 비밀번호는 코드에 두지 않음 — GAS 스크립트 속성(ADMIN_PASSWORD / SUPER_ADMIN_PASSWORD)에서 서버가 확인 */
@@ -3531,6 +3531,7 @@ function clSignModeEnabled(){
   return CL_SIGN_PILOT_INSPECTORS.includes(clNormPlace(document.getElementById('clInspector')?.value));
 }
 function clUpdateSignModeVisibility(){
+  clUpdateWizardMode();
   const section=document.getElementById('clSignModeSection');
   if(!section) return;
   const on=clSignModeEnabled();
@@ -3540,6 +3541,95 @@ function clUpdateSignModeVisibility(){
     if(g){ delete g.dataset.value; g.querySelectorAll('.checklist-toggle-btn').forEach(b=>b.classList.remove('on-sel')); }
   }
 }
+
+/* ----- 섹션 단계 방식 (시범: CL_SIGN_PILOT_INSPECTORS와 같은 점검자만) -----
+   한 화면에 한 섹션(기본 정보 → 매트 → 집진기 → 소모품 → 완료 보고)만 보여주고, [다음]은 그 섹션의 필수 항목을
+   다 채워야 넘어감. 항목을 누르면 다음에 답할 항목으로 자동 스크롤. 다른 점검자는 기존 한 페이지 화면 그대로 */
+const CL_WIZARD_LABELS=['기본 정보','매트','집진기','소모품','점검 완료 보고'];
+// 누락 항목 문구(getChecklistMissingItems)를 어느 단계 것인지 가려내는 규칙 — 단계 순서와 같음
+const CL_WIZARD_MISSING_RULES=[
+  m=>/^점검 (장소|일자|구분)/.test(m)||m==='점검자',
+  m=>m.startsWith('매트'),
+  m=>m.startsWith('집진기'),
+  m=>m.startsWith('소모품'),
+  m=>m.startsWith('업체 담당자'),
+];
+let clWizardStep=0, clWizardMax=0;
+function clWizardOn(){ return document.getElementById('checklistForm')?.classList.contains('cl-wizard'); }
+function clWizardSections(){ return [...document.querySelectorAll('#checklistForm > .checklist-section')]; }
+function clUpdateWizardMode(){
+  const form=document.getElementById('checklistForm');
+  if(!form) return;
+  const on=clSignModeEnabled(); // 서명 시범과 같은 점검자 목록 사용
+  if(on===clWizardOn()) return;
+  form.classList.toggle('cl-wizard',on);
+  document.getElementById('clWizardBar').style.display=on?'':'none';
+  document.getElementById('clWizardNav').style.display=on?'':'none';
+  if(on) clWizardShow(clWizardStep);
+  else {
+    clWizardSections().forEach(s=>s.style.display='');
+    document.querySelector('#checklistForm .checklist-submit-bar').style.display='';
+  }
+}
+function clWizardMissing(step){
+  const missing=getChecklistMissingItems().filter(CL_WIZARD_MISSING_RULES[step]);
+  if(step===0&&!clNormPlace(document.getElementById('clInspector')?.value)) missing.unshift('점검자');
+  return missing;
+}
+function clWizardShow(step){
+  const secs=clWizardSections();
+  clWizardStep=Math.max(0,Math.min(step,secs.length-1));
+  clWizardMax=Math.max(clWizardMax,clWizardStep);
+  secs.forEach((s,i)=>{ s.style.display=i===clWizardStep?'':'none'; });
+  const last=clWizardStep===secs.length-1;
+  document.getElementById('clWizardLabel').textContent=`${clWizardStep+1} / ${secs.length} · ${CL_WIZARD_LABELS[clWizardStep]}`;
+  // 진행 점 — 이미 지나온 단계는 눌러서 돌아갈 수 있음
+  document.getElementById('clWizardSteps').innerHTML=CL_WIZARD_LABELS.map((l,i)=>{
+    const cls=i===clWizardStep?'on':(i<=clWizardMax?'done':'');
+    return `<button type="button" class="cl-wizard-step ${cls}" ${i<=clWizardMax?`onclick="clWizardShow(${i})"`:'disabled'} title="${l}"><span>${i+1}</span>${l}</button>`;
+  }).join('');
+  document.getElementById('clWizardPrev').style.visibility=clWizardStep===0?'hidden':'visible';
+  document.getElementById('clWizardNext').style.display=last?'none':'';
+  // 마지막 단계에서만 제출하기 버튼
+  document.querySelector('#checklistForm .checklist-submit-bar').style.display=last?'':'none';
+  // 단계 표시가 화면 맨 위에 오도록 — 위에 고정된 헤더 높이만큼 비켜서 스크롤
+  const bar=document.getElementById('clWizardBar'), header=document.querySelector('.header');
+  window.scrollTo({top:bar.getBoundingClientRect().top+window.scrollY-(header?header.offsetHeight:0)-8});
+}
+function clWizardGo(dir){
+  if(dir<0) return clWizardShow(clWizardStep-1);
+  const missing=clWizardMissing(clWizardStep);
+  if(missing.length){
+    alert('이 단계에서 아직 입력하지 않은 항목이 있습니다:\n\n'+missing.map(m=>'· '+m).join('\n'));
+    clWizardScrollToNext(null);
+    return;
+  }
+  if(clWizardStep===3&&checklistHasUncheckedBagWeight()){
+    alert('해당 항목은 특이 케이스로 집진기에 포집량 입력 완료 체크가 되어있지 않습니다.\n반드시 집진기에 포집량 입력을 진행해주시기 바랍니다.');
+    return;
+  }
+  clWizardShow(clWizardStep+1);
+}
+// 지금 단계에서 after(누른 항목) 다음으로 아직 답하지 않은 항목으로 부드럽게 이동 — 없으면 [다음] 버튼으로
+function clWizardScrollToNext(after){
+  const sec=clWizardSections()[clWizardStep];
+  if(!sec) return;
+  const groups=[...sec.querySelectorAll('.checklist-toggle-group[id]')].filter(g=>g.offsetParent!==null);
+  const start=after?groups.indexOf(after)+1:0;
+  const next=groups.slice(start).find(g=>!g.dataset.value);
+  const target=next?(next.closest('.checklist-q')||next):document.getElementById(clWizardStep===clWizardSections().length-1?'clSubmitBtn':'clWizardNext');
+  target?.scrollIntoView({behavior:'smooth',block:'center'});
+}
+// 항목 버튼을 누른 뒤(인라인 onclick 처리 후) — "이상"이면 이상 내용 입력칸으로, 아니면 다음 미선택 항목으로
+document.addEventListener('click',e=>{
+  if(!clWizardOn()) return;
+  const btn=e.target.closest('#checklistForm .checklist-toggle-btn');
+  const group=btn?.closest('.checklist-toggle-group[id]');
+  if(!group||!group.dataset.value) return;
+  const issue=group.parentElement.querySelector('.cl-issue-field');
+  if(issue&&issue.style.display==='block'){ issue.focus(); return; }
+  setTimeout(()=>clWizardScrollToNext(group),120); // 조건부 항목이 펼쳐진 뒤 계산
+});
 
 /* ----- 제출 전 최종 확인 창 ----- */
 function openClConfirm(d){
@@ -3604,6 +3694,7 @@ function clContinueSameLocation(){
     if(btn) clSetToggle('clType',keep.type,btn,'on-sel');
   }
   clRenderPlaceChips();
+  if(clWizardOn()){ clWizardMax=1; clWizardShow(1); }
   document.getElementById('checklistForm')?.scrollIntoView({block:'start'});
 }
 // 사용률/포집량/풍속 입력란 — type=number만으로는 일부 모바일 브라우저(한글 IME 등)에서 숫자 아닌
@@ -4016,6 +4107,7 @@ function resetChecklistForm(){
   document.getElementById('checklistSuccess').style.display='none';
   document.getElementById('checklistReport').style.display='none';
   clLastSubmission=null; clLastPdf=null;
+  clWizardStep=0; clWizardMax=0;
   clCurrentSubmissionId=null; // 새 점검표는 새로운 제출 ID를 쓰도록 초기화
   const form=document.getElementById('checklistForm');
   form.style.display='block';
