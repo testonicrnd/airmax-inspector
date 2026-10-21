@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.16.0"/>
+<link rel="stylesheet" href="style.css?v=2.17.0"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -623,7 +623,10 @@
   <div class="checklist-wrap">
     <div id="checklistForm">
       <div class="checklist-header">
-        <div class="checklist-title">Air Max 점검표</div>
+        <div class="checklist-title-row">
+          <div class="checklist-title">Air Max 점검표</div>
+          <button type="button" class="cl-records-btn" id="clRecordsBtn" style="display:none" onclick="openChecklistRecords()"><span class="material-icons-round">history</span>점검 기록</button>
+        </div>
         <div class="checklist-desc">매트 / 집진기 / 소모품 점검 — 현장에서 작성 후 제출하면 바로 저장됩니다.</div>
       </div>
 
@@ -887,6 +890,25 @@
       </div>
     </div>
 
+    <!-- 점검 기록 조회 (시범) — 관리자는 전체, 점검자는 자기 이름으로 제출한 최근 7일 -->
+    <div id="checklistRecords" class="cl-records" style="display:none">
+      <div class="cl-records-head">
+        <button type="button" class="btn-ghost" onclick="closeChecklistRecords()"><span class="material-icons-round ico">arrow_back</span>점검표로</button>
+        <div class="cl-records-title">점검 기록</div>
+      </div>
+      <div id="clRecordsListView">
+        <div class="cl-records-filter" id="clRecordsFilter"></div>
+        <div class="cl-records-state" id="clRecordsState"></div>
+        <div class="cl-records-list" id="clRecordsList"></div>
+      </div>
+      <div id="clRecordDetail" style="display:none">
+        <button type="button" class="btn-ghost cl-record-back" onclick="clRecordsBackToList()"><span class="material-icons-round ico">arrow_back</span>목록</button>
+        <div class="cl-report-sheet" id="clRecordSheet"></div>
+        <div class="cl-record-actions" id="clRecordActions"></div>
+        <div class="cl-report-upload-msg" id="clRecordMsg" style="display:none"></div>
+      </div>
+    </div>
+
     <!-- 점검 완료 보고 (업체 담당자 서명) — 점검표에서 "서명 받음"을 고르고 제출한 경우에만 표시.
          보고서 영역(clReportSheet)이 그대로 PDF로 저장되므로 테마와 상관없이 흰 종이 모양으로 고정 -->
     <div id="checklistReport" class="cl-report" style="display:none">
@@ -1016,6 +1038,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.16.0"></script>
+<script defer src="script.js?v=2.17.0"></script>
 </body>
 </html>

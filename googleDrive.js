@@ -81,6 +81,7 @@ try {
     if (action === 'submitChecklist')     return handleSubmitChecklist(data);
     if (action === 'getChecklistPlaces')  return getChecklistPlaces();
     if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
+    if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
     if (action !== 'saveResults' || !Array.isArray(data.results)) {
@@ -936,6 +937,108 @@ function authorizeDrive() {
     Logger.log('이제 [배포 관리 → 편집 → 새 버전]으로 재배포하세요.');
 }
 
+// ===== 점검표 조회 / PDF / 메일 다시 보내기 =====
+// 관리자(토큰 확인)는 전체 점검표를, 점검자는 자기 이름(등록된 점검자)으로 제출한 최근 CHECKLIST_VIEW_DAYS일 것만 볼 수 있음.
+// 메일 다시 보내기는 서명 PDF가 있는 건만 가능하고, 보낼 때마다 '업체 담당자 이메일 재발송' 행을 남김
+var CHECKLIST_VIEW_DAYS = 7;
+var CHECKLIST_LIST_LIMIT = 300;
+function checklistAccess(data) {
+    if (getAdminLevel(data.adminToken)) return { admin: true };
+    var name = normalizeChecklistLocation(data.inspector);
+    if (name && getInspectorList().indexOf(name) !== -1) return { admin: false, inspector: name };
+    return null;
+}
+function checklistSubmittedTime(s) {
+    var t = new Date(String(s.submittedAt).replace(' ', 'T') + '+09:00').getTime();
+    return isNaN(t) ? 0 : t;
+}
+function checklistCanSee(acc, s) {
+    if (acc.admin) return true;
+    return s.inspector === acc.inspector && checklistSubmittedTime(s) >= Date.now() - CHECKLIST_VIEW_DAYS * 86400000;
+}
+function checklistSummary(s) {
+    var sum = { id: s.id, submittedAt: s.submittedAt, date: s.date, location: s.location, area: s.area,
+        inspector: s.inspector, type: s.type, bad: 0, signMode: '', managerName: '', pdfUrl: '', email: '', mailStatus: '', product: '' };
+    s.items.forEach(function(it) {
+        if (isChecklistBadResult(it.result)) sum.bad++;
+        if (it.item === '업체 담당자 서명') sum.signMode = it.result;
+        if (it.item === '업체 담당자 확인') { sum.managerName = it.result; if (/^https?:/.test(it.note)) sum.pdfUrl = it.note; }
+        if (it.item === '업체 담당자 이메일' || it.item === '업체 담당자 이메일 재발송') { sum.email = it.result; sum.mailStatus = it.note; }
+        if (it.item === '제품 종류' || it.item === '표시 방식') sum.product = it.result;
+    });
+    sum.signed = !!sum.pdfUrl;
+    return sum;
+}
+function handleChecklistRecords(data) {
+    try {
+        var acc = checklistAccess(data);
+        if (!acc) return buildJson({ success: false, code: 'NO_ACCESS', error: '등록된 점검자 이름이나 관리자 인증이 필요합니다.' });
+        var ss = getOrCreateChecklistSpreadsheet();
+        var subs = readChecklistSubmissions(ss).filter(function(s) { return checklistCanSee(acc, s); });
+
+        if (data.action === 'listChecklists') {
+            if (acc.admin) {
+                var from = String(data.from || ''), to = String(data.to || '');
+                var who = normalizeChecklistLocation(data.inspectorFilter), q = normalizeChecklistLocation(data.q);
+                subs = subs.filter(function(s) {
+                    if (from && s.date < from) return false;
+                    if (to && s.date > to) return false;
+                    if (who && s.inspector.indexOf(who) === -1) return false;
+                    if (q && (s.location + ' ' + s.area).indexOf(q) === -1) return false;
+                    return true;
+                });
+            }
+            subs.sort(function(a, b) { return a.submittedAt < b.submittedAt ? 1 : a.submittedAt > b.submittedAt ? -1 : 0; });
+            var total = subs.length;
+            return buildJson({ success: true, admin: acc.admin, days: CHECKLIST_VIEW_DAYS, total: total,
+                items: subs.slice(0, CHECKLIST_LIST_LIMIT).map(checklistSummary) });
+        }
+
+        var id = String(data.submissionId || '');
+        var s = null;
+        subs.forEach(function(x) { if (x.id === id) s = x; });
+        if (!s) return buildJson({ success: false, error: '점검표를 찾을 수 없거나 조회 권한이 없습니다.' });
+        var sum = checklistSummary(s);
+
+        if (data.action === 'getChecklist') {
+            return buildJson({ success: true, summary: sum, items: s.items });
+        }
+        if (!sum.pdfUrl) return buildJson({ success: false, error: '서명한 PDF가 없는 점검표입니다.' });
+        var m = sum.pdfUrl.match(/\/d\/([A-Za-z0-9_-]+)/) || sum.pdfUrl.match(/[?&]id=([A-Za-z0-9_-]+)/);
+        if (!m) return buildJson({ success: false, error: 'PDF 링크를 읽을 수 없습니다.' });
+        var file = DriveApp.getFileById(m[1]);
+
+        if (data.action === 'getChecklistPdf') {
+            return buildJson({ success: true, fileName: file.getName(), file: Utilities.base64Encode(file.getBlob().getBytes()) });
+        }
+        // resendChecklistMail
+        var email = String(data.email || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return buildJson({ success: false, error: '이메일 주소 형식이 올바르지 않습니다: ' + email });
+        var baseRow = [s.id, s.submittedAt, s.location, s.area, s.date, s.inspector, s.type];
+        var mailError = '';
+        try { sendChecklistReportMail(email, file.getBlob().setName(file.getName()), baseRow, sum.managerName); }
+        catch (e) { mailError = e.message; }
+        var sheet = ss.getSheetByName(CHECKLIST_MAIN_SHEET);
+        var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+        var who2 = acc.admin ? '관리자' : acc.inspector;
+        var row = baseRow.concat(['완료보고', '업체 담당자 이메일 재발송', email,
+            (mailError ? '메일 재발송 실패: ' + mailError : '메일 재발송 완료 (참조 ' + CHECKLIST_MAIL_CC + ')') + ' · ' + now + ' · ' + who2]);
+        var lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        try {
+            var startRow = sheet.getLastRow() + 1;
+            if (startRow > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1000);
+            sheet.getRange(startRow, 1, 1, CHECKLIST_LONG_HEADERS.length).setValues([row]);
+        } finally {
+            lock.releaseLock();
+        }
+        if (mailError) return buildJson({ success: false, error: '메일 발송 실패: ' + mailError });
+        return buildJson({ success: true });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
+}
+
 // ===== 관리자 인증 =====
 // 관리자 비밀번호는 코드에 두지 않고 스크립트 속성에만 저장 (⚙ 프로젝트 설정 → 스크립트 속성):
 //   ADMIN_PASSWORD        — 일반 관리자 비밀번호
@@ -1061,7 +1164,7 @@ function getChecklistPlaces() {
             var mName = '', mEmail = '';
             s.items.forEach(function(it) {
                 if (it.item === '업체 담당자 확인') mName = it.result;
-                if (it.item === '업체 담당자 이메일') mEmail = it.result;
+                if ((it.item === '업체 담당자 이메일' || it.item === '업체 담당자 이메일 재발송') && it.note.indexOf('실패') === -1) mEmail = it.result;
             });
             if (mEmail) {
                 var m = p._mgr[mEmail];

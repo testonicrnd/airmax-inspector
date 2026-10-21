@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.16.0';
+const APP_VERSION = 'v2.17.0';
 const APP_DATE    = '2026.10.21';
 
 /* ===== 설정 ===== */
@@ -236,6 +236,7 @@ function updatePageTabsVisibility(){
   const qrTab=document.getElementById('pageTabQr');
   if(qrTab) qrTab.style.display=adminAuthenticated?'':'none';
   if(!adminAuthenticated && (currentPage==='history'||currentPage==='qr')) switchPage('inspection');
+  if(typeof clUpdateRecordsBtn==='function') clUpdateRecordsBtn();
 }
 
 // 모바일에서는 관리자 인증(일반/슈퍼 모두 가능) 시 전체 기간 조회 가능 — 미인증(일반 유저)은 당일 데이터만
@@ -3275,8 +3276,9 @@ function clSkipSignature(){
 }
 // 고객에게 보여주고 PDF로 저장하는 점검표 — 종이 양식 "에어맥스 클린매트 점검표"와 같은 항목/순서만 표시
 // (점검 방법, 표시상태/통신/사용률/특이사항 등 앱에만 있는 항목은 넣지 않음)
-function openChecklistReport(){
-  const {data:d}=clLastSubmission;
+// 고객용 점검표(종이 양식 "에어맥스 클린매트 점검표") HTML — 서명 화면과 점검 기록 조회 화면에서 함께 씀.
+// people: 확인자/점검자 줄 HTML, extra: 서명란 등 PDF에는 넣지 않는 입력 영역
+function clCustomerSheetHtml(d,people,extra){
   const st=(r,note)=>({r:r||'',note:note||''});
   const rows=[
     ['매트','볼상태',st(d.ballResult,d.ballIssue)],
@@ -3299,7 +3301,7 @@ function openChecklistReport(){
   }).join('');
   const [y,m,day]=(d.date||todayStr()).split('-');
   // 종이 양식처럼 업체명(점검 장소)과 설치 장소(세부 구역)를 나눠서 표시 — 세부 구역이 없으면 설치 장소는 빈칸
-  document.getElementById('clReportSheet').innerHTML=`
+  return `
     <div class="cf-title">에어맥스 클린매트 점검표</div>
     <div class="cf-company"><div><b>업체명:</b> ${escHtml(clNormPlace(d.location))}</div><div><b>설치 장소:</b> ${escHtml(clNormPlace(d.area))}</div></div>
     <table class="cf-table"><colgroup><col style="width:11%"/><col style="width:15%"/><col style="width:25%"/><col style="width:15%"/><col/></colgroup>
@@ -3308,14 +3310,24 @@ function openChecklistReport(){
     </table>
     <div class="cf-confirm">상기 내용으로 점검하였음을 확인합니다.</div>
     <div class="cf-date">${escHtml(y||'')} 년 ${escHtml(String(Number(m)||''))} 월 ${escHtml(String(Number(day)||''))} 일</div>
-    <div class="cf-people">
+    <div class="cf-people">${people}</div>
+    ${extra||''}
+    <div class="cf-stamp"><span>㈜테스토닉</span><img src="assets/checklist/seal.jpg" alt="직인"/></div>
+    <div class="cf-footer">
+      <img class="cf-logo" src="assets/checklist/logo-new.jpg" alt="TESTONIC"/>
+      <div class="cf-contact">www.testonic.co.kr<br/>031-432-4380</div>
+    </div>`;
+}
+function openChecklistReport(){
+  const {data:d}=clLastSubmission;
+  const people=`
       <div class="cf-person"><span class="cf-person-label">확인자:</span>
         <input type="text" class="clr-name-input" id="clManagerName" placeholder="업체 담당자 이름" autocomplete="off" value="${escHtml(clLastManagerName)}"/>
         <span class="clr-name-text" id="clManagerNameText"></span>
         <span class="cf-sign-slot">(서명)<img class="cf-sign-inline" id="clSignInline" alt=""/></span>
       </div>
-      <div class="cf-person"><span class="cf-person-label">점검자:</span><b>${escHtml(d.inspector||'')}</b></div>
-    </div>
+      <div class="cf-person"><span class="cf-person-label">점검자:</span><b>${escHtml(d.inspector||'')}</b></div>`;
+  const extra=`
     <div class="cf-sign-area">
       <div class="cf-sign-label">확인자 서명 (PDF에는 이름 옆에 들어갑니다)</div>
       <div class="cl-sign-wrap">
@@ -3329,12 +3341,8 @@ function openChecklistReport(){
           placeholder="예: manager@company.com" oninput="clUpdateReportSaveLabel()"/>
         <div class="cl-chip-row">${CL_MAIL_DOMAINS.map(dm=>`<button type="button" class="cl-chip" onclick="clApplyMailDomain('${dm}')">@${dm}</button>`).join('')}</div>
       </div>
-    </div>
-    <div class="cf-stamp"><span>㈜테스토닉</span><img src="assets/checklist/seal.jpg" alt="직인"/></div>
-    <div class="cf-footer">
-      <img class="cf-logo" src="assets/checklist/logo-new.jpg" alt="TESTONIC"/>
-      <div class="cf-contact">www.testonic.co.kr<br/>031-432-4380</div>
     </div>`;
+  document.getElementById('clReportSheet').innerHTML=clCustomerSheetHtml(d,people,extra);
   clMarkSigned(false);
   clRenderManagerChips(true);
   clUpdateReportSaveLabel();
@@ -3431,6 +3439,12 @@ async function clMakeReportPdf(){
   const inline=document.getElementById('clSignInline');
   inline.src=clCropSignature();
   await inline.decode().catch(()=>{});
+  return clSheetToPdf(sheet);
+}
+// 점검표 영역(sheet)을 A4 한 장 PDF로 — capturing 상태에서는 입력칸/서명란이 숨고 이름 글자/작은 서명이 보임
+async function clSheetToPdf(sheet){
+  await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
   sheet.classList.add('capturing'); // 이름 입력칸 → 글자, 큰 서명 칸은 숨기고 이름 옆 서명만 보이게
   const margin=12, maxW=210-margin*2, maxH=297-margin*2; // A4에서 여백을 뺀 인쇄 영역(mm)
   // 휴대폰처럼 좁은 화면에서는 점검표가 좁고 길게 그려져 A4에 넣으면 좌우가 비게 되므로,
@@ -3537,6 +3551,7 @@ function clSignModeEnabled(){
 }
 function clUpdateSignModeVisibility(){
   clUpdateWizardMode();
+  clUpdateRecordsBtn();
   const section=document.getElementById('clSignModeSection');
   if(!section) return;
   const on=clSignModeEnabled();
@@ -3635,6 +3650,175 @@ document.addEventListener('click',e=>{
   if(issue&&issue.style.display==='block'){ issue.focus(); return; }
   setTimeout(()=>clWizardScrollToNext(group),120); // 조건부 항목이 펼쳐진 뒤 계산
 });
+
+/* ----- 점검 기록 조회 (시범: 지정된 점검자 + 관리자) -----
+   관리자는 전체(기간/점검자/장소로 검색), 점검자는 자기 이름으로 제출한 최근 7일 것만 서버가 돌려줌.
+   서명한 건은 드라이브의 서명 PDF를 받아 보여주고 메일을 다시 보낼 수 있음. 서명하지 않은 건은
+   기록된 결과로 고객용 점검표를 다시 그려 PDF로 볼 수 있음(서명란은 비어 있음) */
+let clRecordsCache=[], clRecordCurrent=null, clRecordsPrevView=null;
+function clUpdateRecordsBtn(){
+  const btn=document.getElementById('clRecordsBtn');
+  if(btn) btn.style.display=(clSignModeEnabled()||adminAuthenticated)?'':'none';
+}
+function clRecordsAuth(extra){
+  return adminPayload(Object.assign({inspector:clNormPlace(document.getElementById('clInspector')?.value)},extra));
+}
+async function clRecordsRequest(payload,timeout){
+  const res=await clFetchWithTimeout(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(clRecordsAuth(payload))},timeout||20000);
+  return JSON.parse(await res.text());
+}
+function openChecklistRecords(){
+  // 지금 보이던 화면(작성 중 폼/완료 화면/서명 화면)을 기억해 두었다가 돌아갈 때 그대로 복원
+  const ids=['checklistForm','checklistSuccess','checklistReport'];
+  clRecordsPrevView=ids.map(id=>[id,document.getElementById(id).style.display]);
+  ids.forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('checklistRecords').style.display='block';
+  clRecordsBackToList();
+  const f=document.getElementById('clRecordsFilter');
+  if(adminAuthenticated){
+    const to=todayStr(), from=addDaysStr(to,-6);
+    f.innerHTML=`<div class="cl-records-note">관리자 — 전체 점검표 검색</div>
+      <div class="cl-records-filter-row">
+        <input type="date" class="checklist-input" id="clRecFrom" value="${from}"/><span>~</span><input type="date" class="checklist-input" id="clRecTo" value="${to}"/>
+      </div>
+      <div class="cl-records-filter-row">
+        <input type="text" class="checklist-input" id="clRecInspector" placeholder="점검자 (선택)"/>
+        <input type="text" class="checklist-input" id="clRecQuery" placeholder="장소/구역 검색 (선택)" onkeydown="if(event.key==='Enter')loadChecklistRecords()"/>
+      </div>
+      <button type="button" class="btn-primary cl-records-search" onclick="loadChecklistRecords()">조회</button>`;
+  } else {
+    f.innerHTML=`<div class="cl-records-note">${escHtml(clNormPlace(document.getElementById('clInspector').value))} 님이 최근 7일 동안 제출한 점검표입니다.</div>`;
+  }
+  loadChecklistRecords();
+  window.scrollTo({top:0});
+}
+function closeChecklistRecords(){
+  document.getElementById('checklistRecords').style.display='none';
+  (clRecordsPrevView||[['checklistForm','block']]).forEach(([id,disp])=>{ document.getElementById(id).style.display=disp; });
+  if(!clRecordsPrevView||clRecordsPrevView.every(([,disp])=>disp==='none')) document.getElementById('checklistForm').style.display='block';
+}
+async function loadChecklistRecords(){
+  const state=document.getElementById('clRecordsState'), list=document.getElementById('clRecordsList');
+  state.textContent='불러오는 중…'; list.innerHTML='';
+  const extra={action:'listChecklists'};
+  if(adminAuthenticated){
+    extra.from=document.getElementById('clRecFrom')?.value||'';
+    extra.to=document.getElementById('clRecTo')?.value||'';
+    extra.inspectorFilter=document.getElementById('clRecInspector')?.value||'';
+    extra.q=document.getElementById('clRecQuery')?.value||'';
+  }
+  try{
+    const json=await clRecordsRequest(extra);
+    if(!json.success){ state.textContent=json.error||'불러오지 못했습니다.'; return; }
+    clRecordsCache=json.items||[];
+    state.textContent=clRecordsCache.length?`${json.total}건${json.total>clRecordsCache.length?` (최근 ${clRecordsCache.length}건 표시)`:''}`:'조회된 점검표가 없습니다.';
+    list.innerHTML=clRecordsCache.map((r,i)=>{
+      const place=escHtml(r.location)+(r.area?' / '+escHtml(r.area):'');
+      const status=r.bad?`<span class="cl-record-badge bad">이상 ${r.bad}건</span>`:'<span class="cl-record-badge">정상</span>';
+      const sign=r.signed?`서명 ${escHtml(r.managerName||'')}`:(r.signMode==='서명 받음'?'서명 대기':'서명 없음');
+      const mail=r.email?(r.mailStatus.indexOf('실패')>=0?` · 메일 실패`:` · 메일 ${escHtml(r.email)}`):'';
+      return `<button type="button" class="cl-record-item" onclick="openChecklistRecord(${i})">
+        <div class="cl-record-top"><b>${place}</b>${status}</div>
+        <div class="cl-record-sub">${escHtml(r.submittedAt.slice(0,16))} · ${escHtml(r.inspector)} · ${sign}${mail}</div>
+      </button>`;
+    }).join('');
+  }catch(e){ state.textContent='네트워크 문제로 불러오지 못했습니다.'; }
+}
+function clRecordsBackToList(){
+  document.getElementById('clRecordDetail').style.display='none';
+  document.getElementById('clRecordsListView').style.display='';
+}
+// 시트에 기록된 항목(이름/결과/비고)을 점검표 화면 데이터 형식으로 되돌림
+function clRecordToData(sum,items){
+  const by={}; items.forEach(it=>{ by[it.item]=it; });
+  const r=n=>(by[n]&&by[n].result)||'', note=n=>(by[n]&&by[n].note)||'';
+  return {location:sum.location, area:sum.area, date:sum.date, inspector:sum.inspector, type:sum.type,
+    ballResult:r('① 볼 상태 점검'), ballIssue:note('① 볼 상태 점검'),
+    matResult:r('② 상판/경사면'), matIssue:note('② 상판/경사면'),
+    springResult:r('③ 스프링 상태 점검'), springIssue:note('③ 스프링 상태 점검'),
+    windTest:r('④ 흡입력(풍속 측정)'), windTestDetail:note('④ 흡입력(풍속 측정)'),
+    hoseResult:r('⑤ 호스 상태 점검'), hoseIssue:note('⑤ 호스 상태 점검'),
+    powerResult:r('① 전원 및 동작상태'), powerIssue:note('① 전원 및 동작상태'),
+    sensorResult:r('② 센서 상태'), sensorIssue:note('② 센서 상태'),
+    bagReplaced:!!r('먼지봉투 교체'), hepaReplaced:!!r('HEPA필터 교체'), motorReplaced:!!r('모터 교체')};
+}
+async function openChecklistRecord(i){
+  const sum=clRecordsCache[i];
+  if(!sum) return;
+  document.getElementById('clRecordsListView').style.display='none';
+  document.getElementById('clRecordDetail').style.display='';
+  const sheet=document.getElementById('clRecordSheet'), actions=document.getElementById('clRecordActions'), msg=document.getElementById('clRecordMsg');
+  sheet.innerHTML='<div class="cl-records-state">불러오는 중…</div>'; actions.innerHTML=''; msg.style.display='none';
+  window.scrollTo({top:0});
+  try{
+    const json=await clRecordsRequest({action:'getChecklist',submissionId:sum.id});
+    if(!json.success){ sheet.innerHTML=`<div class="cl-records-state">${escHtml(json.error||'불러오지 못했습니다.')}</div>`; return; }
+    clRecordCurrent=json.summary;
+    const d=clRecordToData(json.summary,json.items);
+    const signNote=json.summary.signed?' <span class="cf-signed">(서명 완료)</span>':'';
+    const people=`<div class="cf-person"><span class="cf-person-label">확인자:</span><b>${escHtml(json.summary.managerName||'')}</b>${signNote}</div>
+      <div class="cf-person"><span class="cf-person-label">점검자:</span><b>${escHtml(d.inspector||'')}</b></div>`;
+    sheet.innerHTML=clCustomerSheetHtml(d,people,'');
+    // 서명한 건 — 드라이브의 서명 PDF 보기 + 메일 다시 보내기 / 서명 안 한 건 — 기록으로 다시 그린 PDF 보기만
+    const s=json.summary;
+    actions.innerHTML=s.signed?`
+      <button type="button" class="cl-done-btn" onclick="clViewRecordPdf()"><span class="material-icons-round">picture_as_pdf</span>서명 PDF 보기</button>
+      <div class="cl-record-mail">
+        <div class="cf-sign-label">메일 다시 보내기 (참조 ${CL_MAIL_CC})</div>
+        <input type="email" inputmode="email" autocomplete="email" class="checklist-input" id="clRecordEmail" placeholder="받는 사람 이메일" value="${escHtml(s.email||'')}"/>
+        <button type="button" class="btn-primary" id="clRecordResendBtn" onclick="clResendRecordMail()">메일 다시 보내기</button>
+        ${s.email?`<div class="cl-records-note">최근 발송: ${escHtml(s.email)} — ${escHtml(s.mailStatus)}</div>`:''}
+      </div>`:`
+      <button type="button" class="cl-done-btn" onclick="clViewRecordPdf()"><span class="material-icons-round">picture_as_pdf</span>PDF 보기 (서명 없음)</button>`;
+  }catch(e){ sheet.innerHTML='<div class="cl-records-state">네트워크 문제로 불러오지 못했습니다.</div>'; }
+}
+function clShowRecordMsg(text,ok){
+  const msg=document.getElementById('clRecordMsg');
+  msg.textContent=text; msg.style.display='block';
+  msg.classList.toggle('ok',!!ok);
+}
+// PDF를 새 창으로 열기 — 팝업이 막히면 내려받기
+function clOpenPdfBlob(blob,fileName){
+  const url=URL.createObjectURL(blob);
+  const w=window.open(url,'_blank');
+  if(!w){ const a=document.createElement('a'); a.href=url; a.download=fileName; document.body.appendChild(a); a.click(); a.remove(); }
+}
+async function clViewRecordPdf(){
+  const s=clRecordCurrent;
+  if(!s) return;
+  const fileName=`점검보고서_${(s.location+(s.area?'_'+s.area:'')).replace(/[\\/:*?"<>|\s]+/g,'_')}_${s.date}.pdf`;
+  try{
+    if(s.signed){
+      clShowRecordMsg('서명 PDF를 불러오는 중…',true);
+      const json=await clRecordsRequest({action:'getChecklistPdf',submissionId:s.id},30000);
+      if(!json.success){ clShowRecordMsg('PDF를 불러오지 못했습니다: '+(json.error||'오류')); return; }
+      const bytes=Uint8Array.from(atob(json.file),c=>c.charCodeAt(0));
+      clOpenPdfBlob(new Blob([bytes],{type:'application/pdf'}),json.fileName||fileName);
+      document.getElementById('clRecordMsg').style.display='none';
+    } else {
+      clShowRecordMsg('PDF를 만드는 중…',true);
+      const pdf=await clSheetToPdf(document.getElementById('clRecordSheet'));
+      clOpenPdfBlob(pdf.output('blob'),fileName);
+      document.getElementById('clRecordMsg').style.display='none';
+    }
+  }catch(e){ clShowRecordMsg('PDF를 열지 못했습니다: '+e.message); }
+}
+async function clResendRecordMail(){
+  const s=clRecordCurrent;
+  const email=(document.getElementById('clRecordEmail')?.value||'').trim();
+  if(!clIsEmail(email)){ alert('이메일 주소 형식을 확인해주세요.'); return; }
+  if(!confirm(`${email} 으로 점검표를 다시 보낼까요? (참조 ${CL_MAIL_CC})`)) return;
+  const btn=document.getElementById('clRecordResendBtn');
+  btn.disabled=true; btn.textContent='보내는 중…';
+  try{
+    const json=await clRecordsRequest({action:'resendChecklistMail',submissionId:s.id,email},45000);
+    if(json.success){
+      clShowRecordMsg(`${email} 으로 점검표를 다시 보냈습니다. (참조 ${CL_MAIL_CC})`,true);
+      s.email=email; clRememberManager(s.location,s.managerName,email);
+    } else clShowRecordMsg(json.error||'메일을 보내지 못했습니다.');
+  }catch(e){ clShowRecordMsg('네트워크 문제로 메일을 보내지 못했습니다.'); }
+  btn.disabled=false; btn.textContent='메일 다시 보내기';
+}
 
 /* ----- 제출 전 최종 확인 창 ----- */
 function openClConfirm(d){

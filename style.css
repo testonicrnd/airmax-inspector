@@ -1312,3 +1312,33 @@ body.checklist-page-active { padding-bottom:46px; }
   body.printing-qr .qr-card { border:none; padding:0; background:#fff; }
   body.printing-qr .qr-card-label { width:40mm; height:30mm; margin:0 auto; border:1px dashed #999; }
 }
+
+/* 점검 기록 조회 (시범) */
+.checklist-title-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.cl-records-btn { display:inline-flex; align-items:center; gap:4px; padding:8px 12px; border:1.5px solid var(--border); border-radius:var(--radius);
+  background:var(--input-bg); color:var(--text2); font-size:13px; font-family:inherit; cursor:pointer; flex-shrink:0; }
+.cl-records-btn .material-icons-round { font-size:18px; }
+.cl-records { max-width:640px; margin:0 auto; }
+.cl-records-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+.cl-records-head .btn-ghost, .cl-record-back { display:inline-flex; align-items:center; gap:4px; }
+.cl-records-title { font-size:20px; font-weight:700; color:var(--text); }
+.cl-records-note { font-size:13px; color:var(--text2); margin:4px 0 10px; line-height:1.5; }
+.cl-records-filter-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; color:var(--text3); }
+.cl-records-filter-row .checklist-input { flex:1; min-width:0; }
+.cl-records-search { width:100%; padding:12px 0; font-size:15px; margin-bottom:6px; }
+.cl-records-state { font-size:13px; color:var(--text3); padding:10px 2px; }
+.cl-records-list { display:flex; flex-direction:column; gap:8px; }
+.cl-record-item { text-align:left; width:100%; padding:12px 14px; border:1.5px solid var(--border); border-radius:var(--radius);
+  background:var(--surface); color:var(--text); font-family:inherit; cursor:pointer; }
+.cl-record-item:hover { border-color:var(--accent); }
+.cl-record-top { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:15px; }
+.cl-record-top b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cl-record-sub { font-size:12px; color:var(--text3); margin-top:4px; }
+.cl-record-badge { flex-shrink:0; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; background:var(--ok-bg); color:var(--ok-text); }
+.cl-record-badge.bad { background:var(--pm-bg); color:var(--pm-text); }
+.cl-record-back { margin-bottom:10px; }
+.cl-record-actions { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+.cl-record-mail { padding:14px; border:1.5px solid var(--border); border-radius:var(--radius); background:var(--surface); display:flex; flex-direction:column; gap:8px; }
+.cl-record-mail .btn-primary { padding:12px 0; font-size:15px; }
+.cf-signed { font-size:12px; color:#3f6b34; font-weight:600; margin-left:4px; }
+.cl-report-upload-msg.ok { color:var(--ok-text); background:var(--ok-bg); border-color:var(--ok-border); }
