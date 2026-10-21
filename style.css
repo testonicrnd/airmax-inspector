@@ -1417,3 +1417,33 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-rank-row span:first-child { width:18px; color:var(--text3); }
 .gm-rank-row b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-rank-row.me { background:var(--accent-bg); }
+
+/* 신동준 키우기 — 캐릭터 이미지 / 무소음 처리 영역 */
+.gm-avatar { position:relative; width:40px; height:40px; flex-shrink:0; }
+.gm-avatar img { width:40px; height:40px; border-radius:50%; object-fit:cover; background:#f1ede8; border:1.5px solid var(--border); display:block; }
+.gm-avatar i { position:absolute; right:-4px; bottom:-4px; font-style:normal; font-size:15px; line-height:1; }
+.gm-arena { display:flex; align-items:flex-end; gap:6px; cursor:default; touch-action:manipulation; min-height:120px; }
+.gm-hero { height:112px; width:auto; flex-shrink:0; pointer-events:none; user-select:none; transform-origin:bottom center; }
+.gm-hero.hit { animation:gmHeroHit 0.18s; }
+@keyframes gmHeroHit { 50% { transform:translateY(-4px) rotate(-3deg); } }
+.gm-task { flex:1; min-width:0; text-align:center; align-self:center; }
+.gm-hint { font-size:10.5px; color:var(--text4); text-align:center; margin-top:4px; }
+
+/* 신동준 키우기 — 키보드 입력 */
+.gm-widget:focus { outline:none; }
+.gm-widget:focus-within { border-color:var(--accent); }
+.gm-keys { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; align-items:center; margin-top:8px; min-height:27px; }
+.gm-key { min-width:22px; height:24px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+  border:1.5px solid var(--border); border-bottom-width:3px; border-radius:5px; background:var(--input-bg); color:var(--text2);
+  font-family:var(--font-mono); font-size:12px; font-weight:700; }
+.gm-key.now { border-color:var(--accent); color:var(--accent-text); background:var(--accent-bg); transform:translateY(-1px); }
+.gm-key.done { opacity:0.3; }
+.gm-keys.miss { animation:gmShake 0.25s; }
+@keyframes gmShake { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
+.gm-combo { font-size:11px; font-weight:600; color:var(--accent-text); margin-left:4px; }
+.gm-hint.on { color:var(--ok-text); }
+.gm-intro-img { width:44px; height:44px; border-radius:50%; float:left; margin:0 8px 4px 0; background:#f1ede8; }
+
+/* 신동준 키우기 — 제목줄을 잡고 창 이동 */
+.gm-head { cursor:move; touch-action:none; }
+.gm-head-btns button { cursor:pointer; }
