@@ -273,7 +273,7 @@
         </div>
         <div class="gm-float-layer" id="gmFloat"></div>
       </div>
-      <div class="gm-keys" id="gmKeys"></div>
+      <div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div>
       <div class="gm-hint" id="gmFocusHint"></div>
       <div class="gm-ups" id="gmUps"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><span id="gmSave"></span></div>`;
@@ -284,8 +284,10 @@
     k.innerHTML=seq.map((x,i)=>`<span class="gm-key${i<seqPos?' done':i===seqPos?' now':''}">${x[1]}</span>`).join('')+
       (combo>1?`<span class="gm-combo">${combo} 콤보 ×${comboMult().toFixed(2)}</span>`:'');
   }
+  function isTouchDevice(){ return window.matchMedia('(pointer:coarse)').matches||(typeof isMobile==='function'&&isMobile()); }
   function renderFocus(){
     const h=el('gmFocusHint'); if(!h) return;
+    if(isTouchDevice()){ h.textContent='👆 화면을 탭해서 업무를 처리하세요'; h.classList.add('on'); return; }
     const on=hasFocus();
     h.textContent=on?'⌨ 키보드 입력 중 — 위 키를 순서대로 누르세요':'창을 한 번 클릭하면 키보드로 처리할 수 있습니다';
     h.classList.toggle('on',on);
@@ -383,7 +385,14 @@
     nick=v; dirty=true; saveServer(true); startPlay();
   };
   // 휴대폰은 키보드 대신 화면 탭으로 처리 (PC 마우스 클릭은 처리하지 않음 — 키보드로 플레이)
-  window.gmTouchTap=function(e){ if(e.pointerType==='touch'||e.pointerType==='pen'){ combo=0; work(1); } };
+  // 휴대폰(터치 화면)은 키보드 대신 탭 — 업무 영역이나 키 표시를 탭하면 지금 눌러야 할 키를 맞게 누른 것으로 처리(콤보 포함).
+  // PC 마우스 클릭은 처리하지 않음(사무실 클릭 소리 방지, 키보드로 플레이)
+  window.gmTouchTap=function(e){
+    if(!(isTouchDevice()||e.pointerType==='touch'||e.pointerType==='pen')) return;
+    e.preventDefault();
+    lastInput=Date.now();
+    if(seq[seqPos]) keyInput(seq[seqPos][0]);
+  };
   window.gmBuy=buy;
   window.gmShowRanking=gmShowRanking;
   window.gmBack=function(){ renderPlay(); el('gmWidget').focus(); };
