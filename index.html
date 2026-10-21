@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.15.0"/>
+<link rel="stylesheet" href="style.css?v=2.15.1"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -802,14 +802,15 @@
           <div class="checklist-q-label">② 소모품 교체 (교체 진행 시)</div>
           <div class="checklist-q-hint">먼지봉투를 교체하면 "소모품 교체"를 누르고 포집된 먼지 무게(g)를 측정해 입력한 뒤, 반드시 집진기에 포집량을 입력. HEPA 필터·모터를 함께 교체했으면 아래에서 선택</div>
           <button type="button" class="checklist-toggle-btn" id="clReplaceToggleBtn" style="width:100%;margin-bottom:12px" onclick="clToggleConsumableReplace()">소모품 교체</button>
-          <input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input" id="clBagWeight" placeholder="측정값 (g)" oninput="clSanitizeNumberInput(this)" disabled/>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" class="checklist-input" id="clBagWeight" placeholder="측정값 (g)" oninput="clSanitizeNumberInput(this);clAutoSelectBagReplace(this)" disabled/>
           <label class="checklist-check-row" for="clInputDone" style="cursor:pointer">
             <input type="checkbox" id="clInputDone" disabled/>
             <span>집진기에 포집량 입력 완료 (LCD 제품만 해당)</span>
           </label>
           <div id="clReplaceExtra" style="display:none">
-            <div class="checklist-q-hint" style="margin:14px 0 8px">함께 교체한 소모품 (해당하는 것만 선택)</div>
+            <div class="checklist-q-hint" style="margin:14px 0 8px">교체한 소모품 (해당하는 것만 선택 — 포집량을 입력하면 먼지봉투는 자동 선택)</div>
             <div class="checklist-toggle-group">
+              <button type="button" class="checklist-toggle-btn" id="clBagReplaceBtn" onclick="clToggleExtraReplace('bag')">먼지봉투 교체</button>
               <button type="button" class="checklist-toggle-btn" id="clHepaReplaceBtn" onclick="clToggleExtraReplace('hepa')">HEPA 필터 교체</button>
               <button type="button" class="checklist-toggle-btn" id="clMotorReplaceBtn" onclick="clToggleExtraReplace('motor')">모터 교체</button>
             </div>
@@ -981,6 +982,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.15.0"></script>
+<script defer src="script.js?v=2.15.1"></script>
 </body>
 </html>

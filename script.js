@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.15.0';
+const APP_VERSION = 'v2.15.1';
 const APP_DATE    = '2026.10.21';
 
 /* ===== 설정 ===== */
@@ -3658,7 +3658,7 @@ function openClConfirm(d){
     (d.bagRate?row('먼지봉투 '+usageWord,u(d.bagRate)):'')+(d.hepaRate?row('HEPA '+usageWord,u(d.hepaRate)):'')+
     (d.motorRate?row('모터 '+usageWord,u(d.motorRate)):'')+(d.bagWeight?row('포집량 측정값',d.bagWeight+' g'):'')+
     (d.inputDone?row('집진기 입력','완료'):'')+
-    (d.bagReplaced?row('교체한 소모품',['먼지봉투',d.hepaReplaced&&'HEPA 필터',d.motorReplaced&&'모터'].filter(Boolean).join(', ')):''));
+    ((d.bagReplaced||d.hepaReplaced||d.motorReplaced)?row('교체한 소모품',[d.bagReplaced&&'먼지봉투',d.hepaReplaced&&'HEPA 필터',d.motorReplaced&&'모터'].filter(Boolean).join(', ')):''));
   html+=sec('4. 완료 보고',
     row('특이사항',d.remark)+(d.signMode?row('업체 담당자 서명',d.signMode==='Y'?'서명 받음 — 제출 후 서명 화면으로 이동':'서명 없음'):''));
   const badCount=(html.match(/cl-confirm-row bad/g)||[]).length;
@@ -3903,17 +3903,27 @@ function clUpdateInputDoneAvailability(){
   inputDone.disabled=!enable;
   if(!enable) inputDone.checked=false;
 }
-// 소모품 교체를 켜면 먼지봉투 교체로 기록되고, 아래에서 HEPA 필터/모터를 함께 교체했는지 고를 수 있음
-let clHepaReplaced=false, clMotorReplaced=false;
-function clToggleExtraReplace(kind){
-  if(kind==='hepa') clHepaReplaced=!clHepaReplaced; else clMotorReplaced=!clMotorReplaced;
+// 소모품 교체를 켜면 아래에 먼지봉투/HEPA 필터/모터 버튼이 나오고, 실제로 교체한 것만 골라 기록함.
+// 먼지봉투는 포집량(g)을 입력하면 자동으로 선택됨 (HEPA 필터나 모터만 교체한 경우도 정확히 남도록 먼지봉투도 따로 선택)
+let clBagReplaced=false, clHepaReplaced=false, clMotorReplaced=false;
+function clRenderExtraReplace(){
+  document.getElementById('clBagReplaceBtn')?.classList.toggle('on-sel',clBagReplaced);
   document.getElementById('clHepaReplaceBtn')?.classList.toggle('on-sel',clHepaReplaced);
   document.getElementById('clMotorReplaceBtn')?.classList.toggle('on-sel',clMotorReplaced);
 }
+function clToggleExtraReplace(kind){
+  if(kind==='bag') clBagReplaced=!clBagReplaced;
+  else if(kind==='hepa') clHepaReplaced=!clHepaReplaced;
+  else clMotorReplaced=!clMotorReplaced;
+  clRenderExtraReplace();
+}
+// 포집량을 입력하면 먼지봉투를 교체한 것이므로 자동 선택 (지워도 선택은 그대로 — 필요하면 버튼으로 해제)
+function clAutoSelectBagReplace(el){
+  if(el.value&&!clBagReplaced){ clBagReplaced=true; clRenderExtraReplace(); }
+}
 function clResetExtraReplace(){
-  clHepaReplaced=false; clMotorReplaced=false;
-  document.getElementById('clHepaReplaceBtn')?.classList.remove('on-sel');
-  document.getElementById('clMotorReplaceBtn')?.classList.remove('on-sel');
+  clBagReplaced=false; clHepaReplaced=false; clMotorReplaced=false;
+  clRenderExtraReplace();
   const extra=document.getElementById('clReplaceExtra');
   if(extra) extra.style.display='none';
 }
@@ -3954,7 +3964,7 @@ function collectChecklistData(){
     airSensorResult:tog('clAirSensorResult'), airSensorIssue:val('clAirSensorIssue'),
     bagRate:val('clBagRate'), hepaRate:val('clHepaRate'), motorRate:val('clMotorRate'), usageUnit:clUsageIsHours()?'Hr':'%',
     bagWeight:val('clBagWeight'),
-    bagReplaced:clReplaceActive, hepaReplaced:clReplaceActive&&clHepaReplaced, motorReplaced:clReplaceActive&&clMotorReplaced, inputDone:document.getElementById('clInputDone')?.checked||false,
+    bagReplaced:clReplaceActive&&clBagReplaced, hepaReplaced:clReplaceActive&&clHepaReplaced, motorReplaced:clReplaceActive&&clMotorReplaced, inputDone:document.getElementById('clInputDone')?.checked||false,
     remark:val('clRemark'),
     signMode:clSignModeEnabled()?tog('clSignMode'):''
   };
