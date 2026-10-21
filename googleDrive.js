@@ -81,7 +81,7 @@ try {
     if (action === 'submitChecklist')     return handleSubmitChecklist(data);
     if (action === 'getChecklistPlaces')  return getChecklistPlaces();
     if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
-    if (action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
+    if (action === 'gameLogin' || action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
     if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
@@ -940,10 +940,13 @@ function authorizeDrive() {
 
 // ===== 숨은 미니 게임 "신동준 키우기" 저장소 =====
 // 점검표와 완전히 분리된 "Air Max 게임 DB" 스프레드시트를 처음 저장할 때 만들고, players 시트에 플레이어 1명 = 1행으로 저장.
-// 플레이어 ID는 앱이 기기마다 만든 무작위 값. 진행 데이터는 JSON 문자열로 한 칸에 저장(크기 제한)
+// 계정 = 닉네임(중복 불가, 대소문자·띄어쓰기 무시) + PIN(숫자 4~6자리). PIN은 해시만 저장하고, 로그인하면 세션 토큰을 받아 저장할 때 사용.
+// PIN을 5번 틀리면 그 닉네임은 10분 동안 로그인 잠금. 진행 데이터는 JSON 문자열로 한 칸에 저장(크기 제한)
+// 랭킹 초기화: GAS 편집기에서 resetGameRanking 실행 (기존 시트는 백업으로 이름만 바꿔 남김)
 var GAME_SHEET_ID_PROP = 'GAME_SHEET_ID';
-var GAME_HEADERS = ['플레이어ID', '닉네임', '스테이지', '레벨', '누적 실적', '저장 데이터', '최근 저장', '처음 시작'];
-function getGameSheet() {
+var GAME_HEADERS = ['플레이어ID', '닉네임', '스테이지', '레벨', '누적 실적', '저장 데이터', '최근 저장', '처음 시작', 'PIN 해시', '세션 토큰'];
+var GAME_PIN_MAX_FAIL = 5, GAME_PIN_LOCK_SEC = 600;
+function getGameSpreadsheet() {
     var props = PropertiesService.getScriptProperties();
     var id = props.getProperty(GAME_SHEET_ID_PROP);
     var ss = null;
@@ -952,26 +955,59 @@ function getGameSheet() {
         ss = SpreadsheetApp.create('Air Max 게임 DB');
         props.setProperty(GAME_SHEET_ID_PROP, ss.getId());
     }
+    return ss;
+}
+function setupGameSheet(sheet) {
+    sheet.getRange(1, 1, 1, GAME_HEADERS.length).setValues([GAME_HEADERS]).setFontWeight('bold').setBackground('#434343').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+    sheet.getRange('A:A').setNumberFormat('@');
+    sheet.getRange('I:J').setNumberFormat('@');
+}
+function getGameSheet() {
+    var ss = getGameSpreadsheet();
     var sheet = ss.getSheetByName('players');
     if (!sheet) {
-        sheet = ss.getSheets()[0];
+        sheet = ss.getSheets().length === 1 && ss.getSheets()[0].getLastRow() === 0 ? ss.getSheets()[0] : ss.insertSheet();
         sheet.setName('players');
+        setupGameSheet(sheet);
+    } else if (sheet.getRange(1, 9).getValue() !== GAME_HEADERS[8]) {
         sheet.getRange(1, 1, 1, GAME_HEADERS.length).setValues([GAME_HEADERS]).setFontWeight('bold').setBackground('#434343').setFontColor('#ffffff');
-        sheet.setFrozenRows(1);
-        sheet.getRange('A:A').setNumberFormat('@');
+        sheet.getRange('I:J').setNumberFormat('@');
     }
     return sheet;
+}
+// 랭킹 초기화 — 지금 players 시트를 "players 백업 날짜"로 이름만 바꾸고 빈 players 시트를 새로 만듦
+function resetGameRanking() {
+    var ss = getGameSpreadsheet();
+    var old = ss.getSheetByName('players');
+    if (old) old.setName('players 백업 ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HHmm'));
+    var sheet = ss.insertSheet('players', 0);
+    setupGameSheet(sheet);
+    Logger.log('랭킹 초기화 완료 — ' + ss.getUrl());
 }
 function gameFindRow(values, playerId) {
     for (var i = 0; i < values.length; i++) if (String(values[i][0]) === playerId) return i;
     return -1;
 }
+function gameNickKey(nick) { return String(nick || '').replace(/\s+/g, '').toLowerCase(); }
+function gameHash(text) {
+    return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8)
+        .map(function(b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+}
+function gameNewId() { return Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); }
+function gameReadState(row) {
+    try { return JSON.parse(String(row[5] || 'null')); } catch (e) { return null; }
+}
 function handleGameAction(data) {
     try {
         var sheet = getGameSheet();
-        var lastRow = sheet.getLastRow();
-        var values = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, GAME_HEADERS.length).getValues() : [];
+        var readValues = function() {
+            var last = sheet.getLastRow();
+            return last >= 2 ? sheet.getRange(2, 1, last - 1, GAME_HEADERS.length).getValues() : [];
+        };
+        var values = readValues();
         var playerId = String(data.playerId || '');
+        var token = String(data.token || '');
 
         if (data.action === 'gameRanking') {
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
@@ -983,34 +1019,72 @@ function handleGameAction(data) {
             return buildJson({ success: true, top: list.slice(0, 10), myRank: myRank, players: list.length });
         }
 
+        // 닉네임 + PIN — 없는 닉네임이면 새로 가입, 있으면 PIN 확인 후 이어하기
+        if (data.action === 'gameLogin') {
+            var nickname = normalizeChecklistLocation(data.nickname).substring(0, 12);
+            var pin = String(data.pin || '');
+            if (!nickname) return buildJson({ success: false, error: '닉네임을 입력해주세요.' });
+            if (!/^\d{4,6}$/.test(pin)) return buildJson({ success: false, error: 'PIN은 숫자 4~6자리로 입력해주세요.' });
+            var key = gameNickKey(nickname);
+            var cache = CacheService.getScriptCache(), failKey = 'gmfail_' + gameHash(key).substring(0, 32);
+            var fails = Number(cache.get(failKey) || 0);
+            if (fails >= GAME_PIN_MAX_FAIL) return buildJson({ success: false, error: 'PIN을 여러 번 틀려서 10분 동안 로그인할 수 없습니다.' });
+            var lock = LockService.getScriptLock();
+            lock.waitLock(20000);
+            try {
+                values = readValues(); // 같은 닉네임 동시 가입 방지 — 잠근 뒤 다시 읽음
+                var at = -1;
+                for (var i = 0; i < values.length; i++) if (gameNickKey(values[i][1]) === key) { at = i; break; }
+                if (at < 0) {
+                    var id = gameNewId(), tok = gameNewId();
+                    var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
+                    sheet.getRange(sheet.getLastRow() + 1, 1, 1, GAME_HEADERS.length)
+                        .setValues([[id, nickname, 1, 1, 0, '', now, now, gameHash(id + ':' + pin), tok]]);
+                    return buildJson({ success: true, created: true, playerId: id, token: tok, nickname: nickname, state: null });
+                }
+                var row = values[at], rowId = String(row[0]);
+                if (!row[8]) return buildJson({ success: false, error: '이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해주세요.' });
+                if (gameHash(rowId + ':' + pin) !== String(row[8])) {
+                    cache.put(failKey, String(fails + 1), GAME_PIN_LOCK_SEC);
+                    return buildJson({ success: false, error: '이미 사용 중인 닉네임이거나 PIN이 틀렸습니다. (' + (GAME_PIN_MAX_FAIL - fails - 1) + '번 남음)' });
+                }
+                cache.remove(failKey);
+                var t = String(row[9] || '');
+                if (!t) { t = gameNewId(); sheet.getRange(at + 2, 10).setValue(t); }
+                return buildJson({ success: true, created: false, playerId: rowId, token: t, nickname: String(row[1]), state: gameReadState(row) });
+            } finally {
+                lock.releaseLock();
+            }
+        }
+
         if (!/^[A-Za-z0-9-]{16,64}$/.test(playerId)) return buildJson({ success: false, error: '플레이어 정보가 올바르지 않습니다.' });
         var idx = gameFindRow(values, playerId);
+        // PIN 계정은 세션 토큰이 맞아야 불러오기/저장 가능. PIN 없는 예전 행은 예전 앱(토큰 없음)이 랭킹 초기화 전까지 계속 쓸 수 있게 둠
+        var legacy = idx >= 0 && !values[idx][8];
+        if (idx >= 0 && !legacy && String(values[idx][9]) !== token) return buildJson({ success: false, auth: false, error: '다시 로그인해주세요.' });
+        if (idx < 0 && token) return buildJson({ success: false, auth: false, error: '계정을 찾을 수 없습니다. 다시 로그인해주세요.' });
 
         if (data.action === 'gameLoad') {
             if (idx < 0) return buildJson({ success: true, found: false });
-            var saved = null;
-            try { saved = JSON.parse(String(values[idx][5] || 'null')); } catch (e) { saved = null; }
+            var saved = gameReadState(values[idx]);
             return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved });
         }
 
-        // gameSave
+        // gameSave — 새 행은 로그인(gameLogin)으로만 만들어짐. 닉네임은 가입할 때 정한 것을 유지
+        if (idx < 0) return buildJson({ success: false, error: '저장할 계정이 없습니다.' });
         var stateStr = String(data.state || '');
         if (stateStr.length > 8000) return buildJson({ success: false, error: '저장 데이터가 너무 큽니다.' });
         var state;
         try { state = JSON.parse(stateStr); } catch (e) { return buildJson({ success: false, error: '저장 데이터 형식 오류' }); }
-        var nickname = normalizeChecklistLocation(data.nickname).substring(0, 12) || '플레이어';
-        var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
-        var row = [playerId, nickname, Number(state.stage) || 1, Number(state.lv) || 1, Math.floor(Number(state.totalDust) || 0), stateStr, now,
-            idx >= 0 ? values[idx][7] : now];
-        var lock = LockService.getScriptLock();
-        lock.waitLock(20000);
+        var saveNow = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
+        var saveLock = LockService.getScriptLock();
+        saveLock.waitLock(20000);
         try {
-            if (idx >= 0) sheet.getRange(idx + 2, 1, 1, GAME_HEADERS.length).setValues([row]);
-            else sheet.getRange(sheet.getLastRow() + 1, 1, 1, GAME_HEADERS.length).setValues([row]);
+            sheet.getRange(idx + 2, 3, 1, 5).setValues([[Number(state.stage) || 1, Number(state.lv) || 1, Math.floor(Number(state.totalGold) || 0), stateStr, saveNow]]);
         } finally {
-            lock.releaseLock();
+            saveLock.releaseLock();
         }
-        return buildJson({ success: true, savedAt: now });
+        return buildJson({ success: true, savedAt: saveNow });
     } catch (err) {
         return buildJson({ success: false, error: err.message });
     }

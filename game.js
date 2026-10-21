@@ -9,11 +9,12 @@
    대시보드 입력칸에서 타이핑할 때는 반응하지 않음. 휴대폰은 화면 탭으로 처리.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)을 강화하며 인턴 → 대표로 승진하는 노가다 게임.
 
-   저장: 이 기기(localStorage)에 계속 저장 + GAS "Air Max 게임 DB" 시트에 30초마다/숨기거나 닫을 때 저장
-   (GAS가 아직 게임 기능 이전 버전이면 기기에만 저장되고 계속 플레이 가능)
+   계정: 닉네임(중복 불가) + PIN 숫자 4~6자리. 처음 쓰는 닉네임이면 가입, 이미 있으면 PIN이 맞을 때 이어하기(다른 기기에서도).
+   저장: 이 기기(localStorage)에 계속 저장 + GAS "Air Max 게임 DB" 시트에 30초마다/숨기거나 닫을 때 저장(로그인 토큰으로 확인)
    ===================================================================== */
 (function(){
-  const LS_STATE='airmax_game_state', LS_PID='airmax_game_pid', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy';
+  // 닉네임+PIN 계정으로 바꾸면서 저장 키를 새로 씀 — 예전(닉네임만) 기기 저장은 이어받지 않고 새로 시작(랭킹 초기화와 함께)
+  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy';
   const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_HIDE=60000;
   // 게임이 비활성(숨김/닫힘/페이지 닫힘)일 때 커피 수혈은 10% 효율로, 최대 누적 시간은 야근 강화로 10분부터 5분씩 늘어남
   const OFFLINE_RATE=0.1, OFFLINE_BASE_MIN=10, OFFLINE_STEP_MIN=5;
@@ -32,7 +33,7 @@
     {key:'offLv',  icon:'🌙', name:'야근',      desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(10%)`, base:60, grow:1.5, max:46},
   ];
   const st0=()=>({v:3,lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,offLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,inactiveAt:0,lastSave:Date.now(),created:Date.now()});
-  let st=st0(), pid='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
+  let st=st0(), pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
   let seq=[], seqPos=0, combo=0, lastInput=Date.now();
 
   /* ---------- 숫자/계산 ---------- */
@@ -57,13 +58,22 @@
   function seqLen(){ return Math.min(4+Math.floor(st.stage/3),10)+(mon&&mon.boss?2:0); } // 단계가 오를수록 키 순서가 길어짐
 
   /* ---------- 저장 ---------- */
-  function newPid(){ const a=new Uint8Array(16); crypto.getRandomValues(a); return Array.from(a,b=>b.toString(16).padStart(2,'0')).join(''); }
   function loadLocal(){
-    pid=lsGet(LS_PID,'')||''; if(!pid){ pid=newPid(); lsSet(LS_PID,pid); }
+    const a=lsGet(LS_ACCT,null)||{};
+    pid=a.pid||''; token=a.token||''; nick=a.nick||'';
     const saved=lsGet(LS_STATE,null);
-    if(saved&&saved.state){ st=Object.assign(st0(),saved.state); nick=saved.nick||''; }
+    st=saved&&saved.state&&saved.pid===pid&&pid?Object.assign(st0(),saved.state):st0();
   }
-  function saveLocal(){ st.lastSave=Date.now(); lsSet(LS_STATE,{state:st,nick}); }
+  function saveLocal(){ if(!pid) return; st.lastSave=Date.now(); lsSet(LS_STATE,{state:st,pid}); }
+  function setAccount(a){
+    pid=a?a.pid:''; token=a?a.token:''; nick=a?a.nick:'';
+    lsSet(LS_ACCT,a);
+  }
+  // 서버가 토큰을 거부(랭킹 초기화로 계정이 없어졌거나 다른 계정) → 로그인 화면으로
+  function authLost(){
+    setAccount(null); stopLoops(); mon=null; st=st0();
+    if(el('gmBody')){ renderNick(); setLoginMsg('다시 로그인해주세요.'); }
+  }
   async function gas(payload){
     if(typeof GAS_URL==='undefined'||!GAS_URL) throw new Error('no gas');
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
@@ -71,21 +81,24 @@
   }
   async function saveServer(force){
     saveLocal();
-    if(!nick||(!dirty&&!force)) return;
+    if(!pid||!token||(!dirty&&!force)) return;
     dirty=false;
     try{
-      const j=await gas({action:'gameSave',playerId:pid,nickname:nick,state:JSON.stringify(st)});
+      const j=await gas({action:'gameSave',playerId:pid,token,state:JSON.stringify(st)});
+      if(j.auth===false){ authLost(); return; }
       serverOk=!!j.success;
     }catch(e){ serverOk=false; }
     renderSaveState();
   }
   async function loadServer(){
     try{
-      const j=await gas({action:'gameLoad',playerId:pid});
+      if(!pid||!token) return;
+      const j=await gas({action:'gameLoad',playerId:pid,token});
+      if(j.auth===false){ setAccount(null); st=st0(); return; }
       if(!j.success){ serverOk=false; return; }
       serverOk=true;
-      // 서버 쪽이 더 최근에 저장됐으면 서버 진행을 사용
-      if(j.found&&j.state&&(j.state.lastSave||0)>(st.lastSave||0)){ st=Object.assign(st0(),j.state); if(j.nickname) nick=j.nickname; saveLocal(); }
+      // 서버 쪽이 더 최근에 저장됐으면(다른 기기에서 플레이) 서버 진행을 사용
+      if(j.found&&j.state&&(j.state.lastSave||0)>(st.lastSave||0)){ st=Object.assign(st0(),j.state); saveLocal(); }
     }catch(e){ serverOk=false; }
   }
 
@@ -251,13 +264,16 @@
   }
   window.addEventListener('resize',()=>{ const w=el('gmWidget'); if(w&&w.style.left){ const r=w.getBoundingClientRect(); placeWidget(r.left,r.top); } });
   function renderNick(){
-    const guess=(typeof LS_CL_INSPECTOR!=='undefined'&&lsGet(LS_CL_INSPECTOR,''))||'';
+    const guess=nick||(typeof LS_CL_INSPECTOR!=='undefined'&&lsGet(LS_CL_INSPECTOR,''))||'';
     el('gmBody').innerHTML=`
       <div class="gm-intro"><img class="gm-intro-img" src="assets/game/dongjun-face.png" alt=""/>신입 <b>신동준</b>이 입사했습니다.<br>
         화면에 뜨는 키(방향키·알파벳)를 순서대로 눌러 업무를 처리하고, 대표까지 승진시켜 주세요.</div>
-      <input class="gm-input" id="gmNick" maxlength="12" placeholder="랭킹에 표시될 닉네임" value="${escHtml(guess)}" onkeydown="if(event.key==='Enter')gmStart()"/>
-      <button type="button" class="gm-btn primary" onclick="gmStart()">입사시키기</button>`;
+      <input class="gm-input" id="gmNick" maxlength="12" placeholder="닉네임 (랭킹에 표시)" autocomplete="off" value="${escHtml(guess)}" onkeydown="if(event.key==='Enter')document.getElementById('gmPin').focus()"/>
+      <input class="gm-input" id="gmPin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN 숫자 4~6자리" autocomplete="off" onkeydown="if(event.key==='Enter')gmStart()"/>
+      <div class="gm-login-msg" id="gmLoginMsg">처음 쓰는 닉네임이면 새로 입사, 이미 있는 닉네임이면 PIN으로 이어하기</div>
+      <button type="button" class="gm-btn primary" id="gmStartBtn" onclick="gmStart()">입사 / 이어하기</button>`;
   }
+  function setLoginMsg(text,err){ const m=el('gmLoginMsg'); if(m){ m.textContent=text; m.classList.toggle('err',!!err); } }
   function renderPlay(){
     el('gmBody').innerHTML=`
       <div class="gm-char"><span class="gm-avatar"><img src="assets/game/dongjun-face.png" alt=""/><i id="gmAvatar"></i></span>
@@ -276,7 +292,7 @@
       <div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div>
       <div class="gm-hint" id="gmFocusHint"></div>
       <div class="gm-ups" id="gmUps"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><span id="gmSave"></span></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
   }
   function renderKeys(){
@@ -362,7 +378,7 @@
     loadLocal();
     gmShow();
     await loadServer();
-    if(!nick){ renderNick(); el('gmNick')?.focus(); return; }
+    if(!pid||!token){ renderNick(); (nick?el('gmPin'):el('gmNick'))?.focus(); return; }
     startPlay();
   }
   function startPlay(){
@@ -379,10 +395,33 @@
     saver=setInterval(()=>saveServer(false),SAVE_INTERVAL);
   }
   function stopLoops(){ clearInterval(ticker); clearInterval(saver); ticker=saver=null; }
-  window.gmStart=function(){
-    const v=(el('gmNick').value||'').trim().slice(0,12);
+  window.gmStart=async function(){
+    const v=(el('gmNick').value||'').trim().slice(0,12), p=(el('gmPin').value||'').trim();
     if(!v){ el('gmNick').focus(); return; }
-    nick=v; dirty=true; saveServer(true); startPlay();
+    if(!/^\d{4,6}$/.test(p)){ setLoginMsg('PIN은 숫자 4~6자리로 입력해주세요.',true); el('gmPin').focus(); return; }
+    const btn=el('gmStartBtn'); btn.disabled=true; setLoginMsg('확인 중…');
+    let j;
+    try{ j=await gas({action:'gameLogin',nickname:v,pin:p}); }
+    catch(e){ j={success:false,error:'서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'}; }
+    if(!el('gmStartBtn')) return;
+    btn.disabled=false;
+    if(!j.success){ setLoginMsg(j.error||'로그인하지 못했습니다.',true); el('gmPin').value=''; el('gmPin').focus(); return; }
+    setAccount({pid:j.playerId,token:j.token,nick:j.nickname});
+    serverOk=true;
+    const local=lsGet(LS_STATE,null);
+    const localSt=local&&local.pid===pid&&local.state?local.state:null;
+    // 이 기기 저장과 서버 저장 중 더 최근 것으로 이어하기
+    const pick=[j.state,localSt].filter(Boolean).sort((a,b)=>(b.lastSave||0)-(a.lastSave||0))[0];
+    st=pick?Object.assign(st0(),pick):st0();
+    if(j.created) toast(`${j.nickname} 님, 입사를 환영합니다!`,3000);
+    else toast(`${j.nickname} 님, 이어서 플레이합니다`,2500);
+    dirty=true; saveServer(true); startPlay();
+  };
+  window.gmLogout=function(){
+    saveServer(true);
+    setAccount({pid:'',token:'',nick}); // 닉네임은 다음 로그인 칸에 채워 둠
+    stopLoops(); mon=null; st=st0();
+    renderNick(); el('gmPin')?.focus();
   };
   // 휴대폰은 키보드 대신 화면 탭으로 처리 (PC 마우스 클릭은 처리하지 않음 — 키보드로 플레이)
   // 휴대폰(터치 화면)은 키보드 대신 탭 — 업무 영역이나 키 표시를 탭하면 지금 눌러야 할 키를 맞게 누른 것으로 처리(콤보 포함).
