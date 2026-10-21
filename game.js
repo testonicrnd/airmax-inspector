@@ -14,7 +14,9 @@
    ===================================================================== */
 (function(){
   const LS_STATE='airmax_game_state', LS_PID='airmax_game_pid', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy';
-  const SAVE_INTERVAL=30000, OFFLINE_CAP=8*3600, BOSS_TIME=30, IDLE_HIDE=60000;
+  const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_HIDE=60000;
+  // 게임이 비활성(숨김/닫힘/페이지 닫힘)일 때 커피 수혈은 10% 효율로, 최대 누적 시간은 야근 강화로 10분부터 5분씩 늘어남
+  const OFFLINE_RATE=0.1, OFFLINE_BASE_MIN=10, OFFLINE_STEP_MIN=5;
   const TASKS=['📧','📊','📝','📞','🗂️','📎','🖨️','📑','💻','📋'];
   const TASK_NAMES={'📧':'메일 폭탄','📊':'엑셀 정리','📝':'주간 보고서','📞':'고객 전화','🗂️':'서류 더미','📎':'첨부 누락','🖨️':'프린터 고장','📑':'회의록','💻':'시스템 오류','📋':'점검표 취합'};
   const BOSSES=[['👔','팀장님 결재'],['🧐','부장님 검토'],['📈','분기 실적 보고'],['🏢','본부장 회의'],['💼','대표님 보고']];
@@ -27,8 +29,9 @@
     {key:'atkLv',  icon:'⌨️', name:'업무력',    desc:lv=>`키 1번에 ${fmt(atkOf(lv,st.lv))} 처리`, base:12, grow:1.19, max:999},
     {key:'autoLv', icon:'☕', name:'커피 수혈', desc:lv=>`가만히 있어도 초당 ${fmt(autoDps({...st,autoLv:lv}))} 처리`, base:40, grow:1.23, max:999},
     {key:'critLv', icon:'🔥', name:'몰입',      desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:90, grow:1.38, max:22},
+    {key:'offLv',  icon:'🌙', name:'야근',      desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(10%)`, base:60, grow:1.5, max:46},
   ];
-  const st0=()=>({v:2,lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,lastSave:Date.now(),created:Date.now()});
+  const st0=()=>({v:3,lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,offLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let st=st0(), pid='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
   let seq=[], seqPos=0, combo=0, lastInput=Date.now();
 
@@ -48,6 +51,8 @@
   function rewardOf(stage,boss){ const r=2*Math.pow(1.2,stage-1); return Math.ceil(boss?r*6:r); }
   function expNeed(lv){ return Math.round(8*Math.pow(lv,1.55)); }
   function costOf(u,lv){ return Math.ceil(u.base*Math.pow(u.grow,lv)); }
+  function offlineCapMin(offLv){ return OFFLINE_BASE_MIN+OFFLINE_STEP_MIN*offLv; }
+  function fmtMin(m){ return m>=60?`${Math.floor(m/60)}시간${m%60?' '+(m%60)+'분':''}`:`${m}분`; }
   function rankOf(lv){ let r=RANKS[0]; RANKS.forEach(x=>{ if(lv>=x[0]) r=x; }); return r; }
   function seqLen(){ return Math.min(4+Math.floor(st.stage/3),10)+(mon&&mon.boss?2:0); } // 단계가 오를수록 키 순서가 길어짐
 
@@ -114,12 +119,12 @@
     else st.kills++;
     spawn(st.kills>=10);
   }
-  function gainExp(n){
+  function gainExp(n,quiet){
     st.exp+=n;
     while(st.exp>=expNeed(st.lv)){
       st.exp-=expNeed(st.lv); st.lv++;
       const before=rankOf(st.lv-1), now=rankOf(st.lv);
-      if(before[2]!==now[2]) toast(`${now[1]} ${now[2]}(으)로 승진했습니다!`);
+      if(before[2]!==now[2]&&!quiet) toast(`${now[1]} ${now[2]}(으)로 승진했습니다!`);
     }
   }
   // 한 번 처리 — 키 입력 성공(콤보 배율) 또는 휴대폰 탭
@@ -146,9 +151,12 @@
     }
     return true;
   }
+  let lastTickAt=0;
   function tick(){
     if(!mon) return;
-    hit(autoDps(st)*0.1,false,false);
+    const now=Date.now(), dt=Math.min((now-(lastTickAt||now))/1000,5); // 너무 오래 멈췄던 경우는 자리 비움 계산이 처리
+    lastTickAt=now;
+    hit(autoDps(st)*dt,false,false);
     if(mon&&mon.boss&&Date.now()>mon.deadline){
       st.bossFails++; st.kills=0;
       toast(`⏰ ${mon.name} 실패… 실력을 더 쌓고 다시 도전`);
@@ -163,14 +171,32 @@
     if(lv>=u.max||st.gold<c) return;
     st.gold-=c; st[u.key]++; dirty=true; render();
   }
-  // 자리를 비운 동안 — 커피 수혈(자동 처리)로 쌓인 실적의 절반을 보상 (최대 8시간)
-  function offlineReward(){
-    const secs=Math.min((Date.now()-(st.lastSave||Date.now()))/1000,OFFLINE_CAP);
-    const dps=autoDps(st);
-    if(secs<60||dps<=0) return;
-    const done=dps*secs/hpOf(st.stage,false);
-    const g=Math.floor(done*rewardOf(st.stage,false)*0.5);
-    if(g>0){ st.gold+=g; st.totalGold+=g; dirty=true; toast(`☕ 자리를 비운 동안 커피 힘으로 실적 ${fmt(g)} 처리!`,4000); }
+  // 게임이 비활성이던 동안 — 커피 수혈이 10% 효율로 실제로 업무를 처리한 것처럼 계산 (최대 누적 시간은 야근 강화로 늘어남).
+  // 업무 건수·실적·경험치·단계까지 반영하고, 결재 보스는 커피만으로 30초 안에 처리될 때만 통과
+  function applyOffline(){
+    const since=st.inactiveAt||st.lastSave||Date.now();
+    st.inactiveAt=0;
+    const capMin=offlineCapMin(st.offLv);
+    const away=(Date.now()-since)/1000;
+    let t=Math.min(away,capMin*60);
+    const dps=autoDps(st)*OFFLINE_RATE;
+    if(t<10||dps<=0) return;
+    const startStage=st.stage, startLv=st.lv;
+    let gold=0, tasks=0, guard=0;
+    while(t>0&&guard++<200000){
+      const boss=st.kills>=10, need=hpOf(st.stage,boss)/dps;
+      if(boss&&need>BOSS_TIME){ t-=BOSS_TIME; st.kills=0; continue; } // 커피만으로는 결재를 못 넘김 → 다시 일반 업무
+      if(need>t) break;
+      t-=need;
+      const g=rewardOf(st.stage,boss); gold+=g; tasks++;
+      gainExp(boss?st.stage*6:st.stage,true);
+      if(boss){ st.stage++; st.kills=0; } else st.kills++;
+    }
+    if(!tasks) return;
+    st.gold+=gold; st.totalGold+=gold; dirty=true;
+    const awayText=away/60>capMin?`${fmtMin(Math.round(away/60))} 중 ${fmtMin(capMin)}`:fmtMin(Math.max(1,Math.round(away/60)));
+    const extra=(st.stage>startStage?` · ${startStage}→${st.stage}단계`:'')+(rankOf(st.lv)[2]!==rankOf(startLv)[2]?` · ${rankOf(st.lv)[2]} 승진!`:'');
+    toast(`☕ 자리 비운 ${awayText} 동안 커피 힘으로 업무 ${tasks.toLocaleString()}건 처리 · 실적 +${fmt(gold)}${extra}`,5000);
   }
 
   /* ---------- 화면 ---------- */
@@ -338,14 +364,19 @@
     startPlay();
   }
   function startPlay(){
-    offlineReward();
+    applyOffline();
     spawn(st.kills>=10);
     renderPlay();
     el('gmWidget').focus();
+    startLoops();
+  }
+  function startLoops(){
     clearInterval(ticker); clearInterval(saver);
+    lastTickAt=Date.now();
     ticker=setInterval(tick,100);
     saver=setInterval(()=>saveServer(false),SAVE_INTERVAL);
   }
+  function stopLoops(){ clearInterval(ticker); clearInterval(saver); ticker=saver=null; }
   window.gmStart=function(){
     const v=(el('gmNick').value||'').trim().slice(0,12);
     if(!v){ el('gmNick').focus(); return; }
@@ -356,15 +387,24 @@
   window.gmBuy=buy;
   window.gmShowRanking=gmShowRanking;
   window.gmBack=function(){ renderPlay(); el('gmWidget').focus(); };
-  window.gmShow=function(){ el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now(); if(el('gmKeys')) el('gmWidget').focus(); };
+  window.gmShow=function(){
+    el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
+    // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
+    if(mon&&!ticker){ applyOffline(); render(); startLoops(); }
+    if(el('gmKeys')) el('gmWidget').focus();
+  };
   window.gmHide=function(){
     const w=el('gmWidget'); if(!w) return;
     if(w.contains(document.activeElement)) document.activeElement.blur();
-    w.style.display='none'; el('gmChip').style.display=opened?'':'none'; combo=0; saveServer(true);
+    w.style.display='none'; el('gmChip').style.display=opened?'':'none'; combo=0;
+    // 숨기면 진행을 멈추고, 다시 열 때 비활성 시간만큼 10% 효율로 계산
+    if(mon){ stopLoops(); st.inactiveAt=Date.now(); }
+    saveServer(true);
   };
   window.gmClose=function(){
+    if(mon) st.inactiveAt=Date.now();
     saveServer(true);
-    clearInterval(ticker); clearInterval(saver); ticker=saver=null; opened=false; mon=null;
+    stopLoops(); opened=false; mon=null;
     el('gmWidget').remove(); el('gmChip').remove();
   };
   window.gmToggleDim=function(){ const w=el('gmWidget'); w.classList.toggle('dim'); lsSet(LS_POS,w.classList.contains('dim')); };
