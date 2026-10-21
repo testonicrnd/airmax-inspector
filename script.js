@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.15.1';
+const APP_VERSION = 'v2.16.0';
 const APP_DATE    = '2026.10.21';
 
 /* ===== 설정 ===== */
@@ -230,10 +230,12 @@ function overdueBadgeOverlayClick(e){
 }
 
 function updatePageTabsVisibility(){
-  // 점검/점검표 탭은 일반 유저도 항상 사용 가능 — 히스토리 탭만 관리자 인증 시에만 노출
+  // 점검/점검표 탭은 일반 유저도 항상 사용 가능 — 히스토리/QR 탭은 관리자 인증 시에만 노출
   const histTab=document.getElementById('pageTabHistory');
   if(histTab) histTab.style.display=adminAuthenticated?'':'none';
-  if(!adminAuthenticated && currentPage==='history') switchPage('inspection');
+  const qrTab=document.getElementById('pageTabQr');
+  if(qrTab) qrTab.style.display=adminAuthenticated?'':'none';
+  if(!adminAuthenticated && (currentPage==='history'||currentPage==='qr')) switchPage('inspection');
 }
 
 // 모바일에서는 관리자 인증(일반/슈퍼 모두 가능) 시 전체 기간 조회 가능 — 미인증(일반 유저)은 당일 데이터만
@@ -3023,16 +3025,19 @@ function switchPage(page){
   document.getElementById('pageTabInspection').classList.toggle('active', page==='inspection');
   document.getElementById('pageTabChecklist').classList.toggle('active', page==='checklist');
   document.getElementById('pageTabHistory').classList.toggle('active', page==='history');
+  document.getElementById('pageTabQr').classList.toggle('active', page==='qr');
   document.getElementById('inspectionPage').style.display = page==='inspection' ? '' : 'none';
   document.getElementById('checklistPage').style.display = page==='checklist' ? '' : 'none';
   document.getElementById('historyPage').style.display = page==='history' ? '' : 'none';
+  document.getElementById('qrPage').style.display = page==='qr' ? '' : 'none';
   // 히스토리/점검표 페이지는 모바일 고정 버튼이 없어 body의 넉넉한 padding-bottom(80px)이 불필요 —
   // 그대로 두면 그리드/폼 높이를 아무리 정확히 맞춰도 그 여유분만큼 페이지 자체 스크롤(더블 스크롤)이 남음
   document.body.classList.toggle('history-page-active', page==='history');
-  document.body.classList.toggle('checklist-page-active', page==='checklist');
+  document.body.classList.toggle('checklist-page-active', page==='checklist'||page==='qr');
   // 히스토리 탭에 들어올 때마다 최신 데이터로 동기화 (당일 점검 후 바로 확인 못했을 수 있으므로 캐시된 월도 강제 재조회)
   if(page==='history') loadHistoryMonths(true);
   if(page==='checklist') initChecklistDate();
+  if(page==='qr') initQrPage();
 }
 
 /* ===== 점검표 (현장 체크리스트 폼) =====
@@ -3158,7 +3163,7 @@ function clPickArea(name){
   clRenderAreaChips();
 }
 // 현장 QR 코드로 진입 — 주소가 ?loc=장소&area=구역 이면 점검표 탭을 열고 장소/세부 구역을 미리 채움.
-// 점검자/일자는 평소처럼 initChecklistDate가 이 기기에 저장된 값으로 채움. QR은 qr.html에서 만듦
+// 점검자/일자는 평소처럼 initChecklistDate가 이 기기에 저장된 값으로 채움. QR은 관리자 QR 탭(initQrPage)에서 만듦
 function clApplyQrParams(){
   const params=new URLSearchParams(location.search);
   const loc=clNormPlace(params.get('loc'));
@@ -4218,6 +4223,162 @@ async function removeInspectorFromModal(name){
     if(json.success) renderInspectorList(json.inspectors||[]);
     else alert(json.error||'삭제 실패');
   }catch(e){ alert('삭제 실패 — 네트워크를 확인해주세요.'); }
+}
+
+/* ===== QR 만들기 (관리자 전용 탭) =====
+   현장에 붙일 40×30mm QR 라벨 이미지를 만든다. QR을 찍으면 앱 주소에 ?loc=장소&area=구역이 붙어 점검표가 미리 채워짐
+   (clApplyQrParams). 장소/구역 목록은 점검표의 장소 목록(clPlaces)을 그대로 씀. QR 라이브러리는 탭을 처음 열 때만 불러옴 */
+const QR_NO_AREA='';
+let qrExtraAreas={};   // 장소별로 이 화면에서 직접 추가한 구역
+let qrUnchecked=new Set(); // 체크 해제한 "장소|구역"
+let qrGenerated=[];    // 지금 화면에 만들어진 QR — 전체 이미지 저장/인쇄에 사용
+async function initQrPage(){
+  qrRenderAreas();
+  const state=document.getElementById('qrLoadState');
+  try{ await clLoadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'); }
+  catch(e){ state.textContent='QR 라이브러리를 불러오지 못했습니다. 네트워크를 확인해주세요.'; return; }
+  await clLoadPlaces(true);
+  state.textContent=clPlaces.length?`이전에 점검한 장소 ${clPlaces.length}곳 — 입력란을 누르면 목록에서 고를 수 있습니다.`:'장소 목록이 없습니다. 직접 입력해도 됩니다.';
+  document.getElementById('qrLocList').innerHTML=clPlaces.map(p=>`<option value="${escHtml(p.name)}">`).join('');
+  qrRenderAreas();
+}
+function qrAreasFor(loc){
+  const p=clPlaces.find(x=>x.name===loc);
+  const list=[QR_NO_AREA].concat(p?p.areas:[],qrExtraAreas[loc]||[]);
+  return list.filter((a,i)=>list.indexOf(a)===i);
+}
+function qrRenderAreas(){
+  const loc=clNormPlace(document.getElementById('qrLoc').value);
+  const wrap=document.getElementById('qrAreas');
+  if(!loc){ wrap.innerHTML='<span class="qr-hint" style="margin:0">장소를 먼저 입력하세요.</span>'; return; }
+  wrap.innerHTML=qrAreasFor(loc).map(a=>{
+    const key=loc+'|'+a;
+    return `<label class="qr-area"><input type="checkbox" data-area="${escHtml(a)}" ${qrUnchecked.has(key)?'':'checked'} onchange="qrToggleArea(this)"/>${a?escHtml(a):'구역 없이 장소만'}</label>`;
+  }).join('');
+}
+function qrToggleArea(el){
+  const key=clNormPlace(document.getElementById('qrLoc').value)+'|'+el.dataset.area;
+  if(el.checked) qrUnchecked.delete(key); else qrUnchecked.add(key);
+}
+function qrAddArea(){
+  const loc=clNormPlace(document.getElementById('qrLoc').value);
+  const input=document.getElementById('qrNewArea');
+  const area=clNormPlace(input.value);
+  if(!loc){ alert('장소를 먼저 입력하세요.'); return; }
+  if(!area) return;
+  qrExtraAreas[loc]=(qrExtraAreas[loc]||[]).concat(area);
+  input.value='';
+  qrRenderAreas();
+}
+// QR 주소 — 이 앱 주소(쿼리 없이)에 장소/구역을 붙임
+function qrUrl(loc,area){
+  const url=new URL(location.origin+location.pathname);
+  url.searchParams.set('loc',loc);
+  if(area) url.searchParams.set('area',area);
+  return url.toString();
+}
+function qrGenerate(){
+  if(typeof QRCode==='undefined'){ alert('QR 라이브러리를 아직 불러오는 중입니다. 잠시 후 다시 눌러주세요.'); return; }
+  const loc=clNormPlace(document.getElementById('qrLoc').value);
+  if(!loc){ alert('점검 장소를 입력하세요.'); return; }
+  const areas=qrAreasFor(loc).filter(a=>!qrUnchecked.has(loc+'|'+a));
+  if(!areas.length){ alert('QR을 만들 구역을 하나 이상 체크하세요.'); return; }
+  const grid=document.getElementById('qrGrid');
+  grid.innerHTML='';
+  qrGenerated=[];
+  areas.forEach(area=>{
+    const card=document.createElement('div');
+    card.className='qr-card';
+    card.innerHTML=`<div class="qr-card-code"></div><img class="qr-card-label" alt=""/>
+      <div class="qr-card-name qr-no-print">${escHtml(loc)}${area?' / '+escHtml(area):''}</div>
+      <button type="button" class="qr-btn qr-card-save qr-no-print">이미지 저장 (40×30mm)</button>`;
+    grid.appendChild(card);
+    new QRCode(card.querySelector('.qr-card-code'),{text:qrUrl(loc,area),width:340,height:340,correctLevel:QRCode.CorrectLevel.M});
+    const item={card,loc,area};
+    // 화면에도 저장될 라벨 이미지를 그대로 보여줌 — 보이는 것과 출력물이 같도록
+    card.querySelector('.qr-card-label').src=qrMakeLabelCanvas(item).toDataURL('image/png');
+    card.querySelector('.qr-card-save').onclick=()=>qrSaveLabel(item);
+    qrGenerated.push(item);
+  });
+  document.getElementById('qrEmpty').style.display='none';
+}
+function qrSaveLabel(item){
+  const a=document.createElement('a');
+  a.href=qrMakeLabelCanvas(item).toDataURL('image/png');
+  a.download='QR_'+(item.loc+(item.area?'_'+item.area:'')).replace(/[\\/:*?"<>|\s]+/g,'_')+'.png';
+  a.click();
+}
+// 브라우저가 연속 다운로드를 막지 않도록 조금씩 간격을 두고 저장
+function qrSaveAllLabels(){
+  if(!qrGenerated.length){ alert('먼저 "QR 만들기"를 눌러 QR을 만드세요.'); return; }
+  qrGenerated.forEach((item,i)=>setTimeout(()=>qrSaveLabel(item),i*400));
+}
+// A4 인쇄 — 인쇄하는 동안만 QR 라벨 외 화면을 숨기는 인쇄 스타일을 적용(앱의 다른 화면 인쇄에는 영향 없음)
+function qrPrint(){
+  if(!qrGenerated.length){ alert('먼저 "QR 만들기"를 눌러 QR을 만드세요.'); return; }
+  document.body.classList.add('printing-qr');
+  const done=()=>{ document.body.classList.remove('printing-qr'); window.removeEventListener('afterprint',done); };
+  window.addEventListener('afterprint',done);
+  window.print();
+}
+// 300dpi 기준 472×354px 라벨. 가운데 QR, 왼쪽에 세로로 "Air Max 점검표", 오른쪽에 세로로 장소/구역(같은 방향)
+const QR_LABEL_DPMM=300/25.4;
+const QR_LABEL_W=Math.round(40*QR_LABEL_DPMM), QR_LABEL_H=Math.round(30*QR_LABEL_DPMM);
+function qrWrapText(g,text,maxW){
+  const lines=[];
+  let line='';
+  for(const ch of text){
+    if(line&&g.measureText(line+ch).width>maxW){ lines.push(line.trim()); line=ch.trim()?ch:''; }
+    else line+=ch;
+  }
+  if(line.trim()) lines.push(line.trim());
+  return lines;
+}
+function qrMakeLabelCanvas(item){
+  const qr=item.card.querySelector('.qr-card-code canvas');
+  const c=document.createElement('canvas');
+  c.width=QR_LABEL_W; c.height=QR_LABEL_H;
+  const g=c.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,QR_LABEL_W,QR_LABEL_H);
+  const mm=v=>Math.round(v*QR_LABEL_DPMM);
+  const qrSize=mm(25), leftW=mm(4.5);
+  const qrX=leftW, qrY=Math.round((QR_LABEL_H-qrSize)/2);
+  g.imageSmoothingEnabled=false;
+  g.drawImage(qr,qrX,qrY,qrSize,qrSize);
+  g.textBaseline='middle'; g.textAlign='center';
+  // 왼쪽 — 오른쪽 장소 글자와 같은 방향(위에서 아래로 읽음)
+  g.save();
+  g.translate(leftW/2+mm(0.3),QR_LABEL_H/2);
+  g.rotate(Math.PI/2);
+  g.fillStyle='#666'; g.font=`${mm(2.4)}px Pretendard, sans-serif`;
+  g.fillText('Air Max 점검표',0,0,qrSize);
+  g.restore();
+  // 오른쪽 — 장소(굵게)/구역. 칸에 다 들어갈 때까지 글씨를 줄임
+  const rightX0=qrX+qrSize+mm(0.8), rightW=QR_LABEL_W-rightX0-mm(1.2);
+  const maxLen=QR_LABEL_H-mm(3);
+  let size=mm(3.6), lines;
+  for(;size>=mm(1.6);size-=2){
+    const sub=Math.round(size*0.85);
+    g.font=`bold ${size}px Pretendard, sans-serif`;
+    const locLines=qrWrapText(g,item.loc,maxLen).map(t=>({t,size,bold:true}));
+    g.font=`${sub}px Pretendard, sans-serif`;
+    const areaLines=item.area?qrWrapText(g,item.area,maxLen).map(t=>({t,size:sub,bold:false})):[];
+    lines=locLines.concat(areaLines);
+    if(lines.reduce((sum,l)=>sum+l.size*1.15,0)<=rightW) break;
+  }
+  const total=lines.reduce((sum,l)=>sum+l.size*1.15,0);
+  g.save();
+  g.translate(rightX0+rightW/2,QR_LABEL_H/2);
+  g.rotate(Math.PI/2);
+  let y=-total/2;
+  lines.forEach(l=>{
+    g.font=`${l.bold?'bold ':''}${l.size}px Pretendard, sans-serif`;
+    g.fillStyle=l.bold?'#000':'#333';
+    g.fillText(l.t,0,y+l.size*1.15/2,maxLen);
+    y+=l.size*1.15;
+  });
+  g.restore();
+  return c;
 }
 
 /* ===== 점검 히스토리 ===== */

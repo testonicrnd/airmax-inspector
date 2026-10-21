@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.15.1"/>
+<link rel="stylesheet" href="style.css?v=2.16.0"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -45,6 +45,7 @@
     <button class="page-tab active" id="pageTabInspection" onclick="switchPage('inspection')">점검</button>
     <button class="page-tab" id="pageTabChecklist" onclick="switchPage('checklist')">점검표</button>
     <button class="page-tab" id="pageTabHistory" style="display:none" onclick="switchPage('history')">히스토리</button>
+    <button class="page-tab" id="pageTabQr" style="display:none" onclick="switchPage('qr')">QR</button>
   </div>
   <div class="header-actions">
     <button class="theme-toggle" id="adminToggle" onclick="toggleAdminRow()">관리자</button>
@@ -73,7 +74,7 @@
   <!-- 관리자 액션 버튼 (인증 후 표시) -->
   <div class="admin-actions-row" id="adminActionsRow" style="display:none">
     <button class="btn-admin-action" onclick="toggleProductEditor()"><span class="material-icons-round ico">inventory_2</span>제품 편집</button>
-    <a class="btn-admin-action" href="qr.html" target="_blank" rel="noopener" style="text-decoration:none"><span class="material-icons-round ico">qr_code_2</span>점검표 QR 만들기</a>
+    <button class="btn-admin-action" onclick="switchPage('qr')"><span class="material-icons-round ico">qr_code_2</span>점검표 QR 만들기</button>
     <button class="btn-admin-action" onclick="openInspectorModal()"><span class="material-icons-round ico">badge</span>점검자 관리</button>
     <button type="button" class="overdue-badge" id="overdueBadge" style="display:none" onclick="openOverdueBadgeModal()"></button>
   </div>
@@ -584,6 +585,39 @@
   </div>
 </div>
 
+<!-- ===== QR 만들기 페이지 (관리자 전용) — 현장에 붙일 점검표 QR 라벨 ===== -->
+<div id="qrPage" style="display:none">
+  <div class="qr-wrap">
+    <div class="qr-no-print">
+      <div class="qr-title">점검표 QR 만들기</div>
+      <p class="qr-desc">현장에 붙일 QR 코드를 만듭니다. QR을 찍으면 Air Max 점검표가 열리고 점검 장소와 세부 구역이 미리 채워집니다. 점검자 이름은 각자 휴대폰에 저장된 값이 그대로 들어갑니다.</p>
+      <div class="qr-panel">
+        <div class="qr-label">점검 장소</div>
+        <input type="text" class="checklist-input" id="qrLoc" list="qrLocList" autocomplete="off" placeholder="예: ○○초등학교" oninput="qrRenderAreas()"/>
+        <datalist id="qrLocList"></datalist>
+        <div class="qr-hint" id="qrLoadState">이전에 점검한 장소 목록을 불러오는 중…</div>
+
+        <div class="qr-label" style="margin-top:18px">세부 구역</div>
+        <div class="qr-areas" id="qrAreas"></div>
+        <div class="qr-add">
+          <input type="text" class="checklist-input" id="qrNewArea" placeholder="구역 추가 (예: 정문 출입구)" onkeydown="if(event.key==='Enter'){qrAddArea();}"/>
+          <button type="button" class="qr-btn" onclick="qrAddArea()"><span class="material-icons-round">add</span>추가</button>
+        </div>
+        <div class="qr-hint">체크한 구역마다 QR이 하나씩 만들어집니다. "구역 없이 장소만"은 세부 구역 칸을 비워둔 QR입니다.</div>
+
+        <div class="qr-actions">
+          <button type="button" class="qr-btn primary" onclick="qrGenerate()"><span class="material-icons-round">qr_code_2</span>QR 만들기</button>
+          <button type="button" class="qr-btn" onclick="qrSaveAllLabels()"><span class="material-icons-round">download</span>전체 이미지 저장</button>
+          <button type="button" class="qr-btn" onclick="qrPrint()"><span class="material-icons-round">print</span>A4 인쇄</button>
+        </div>
+        <div class="qr-hint">이미지는 40×30mm 라벨 크기(300dpi, 472×354px)로 저장됩니다. 라벨 프린터 프로그램에서 40×30mm 용지에 맞춰 출력하세요.</div>
+      </div>
+    </div>
+    <div class="qr-grid" id="qrGrid"></div>
+    <div class="qr-empty qr-no-print" id="qrEmpty">장소를 입력하고 "QR 만들기"를 누르세요.</div>
+  </div>
+</div>
+
 <!-- ===== 점검표 페이지 (매트/집진기/소모품 현장 점검 체크리스트) ===== -->
 <div id="checklistPage" style="display:none">
   <div class="checklist-wrap">
@@ -982,6 +1016,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.15.1"></script>
+<script defer src="script.js?v=2.16.0"></script>
 </body>
 </html>

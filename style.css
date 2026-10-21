@@ -1278,3 +1278,37 @@ body.checklist-page-active { padding-bottom:46px; }
 .cl-wizard-nav .cl-wizard-prev { flex:0 0 30%; padding:16px 0; font-size:16px; }
 .cl-wizard-nav .cl-wizard-next { flex:1; padding:16px 0; font-size:17px; }
 #checklistForm.cl-wizard .checklist-section { margin-bottom:8px; }
+
+/* ===== QR 만들기 탭 (관리자 전용) ===== */
+.qr-wrap { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
+.qr-title { font-size:22px; font-weight:700; margin:0 0 4px; color:var(--text); }
+.qr-desc { font-size:14px; color:var(--text2); line-height:1.6; margin:0 0 20px; }
+.qr-panel { background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius-lg); padding:18px; margin-bottom:20px; }
+.qr-label { font-size:15px; font-weight:600; margin:0 0 8px; color:var(--text); }
+.qr-hint { font-size:13px; color:var(--text3); margin:6px 0 0; }
+.qr-areas { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+.qr-area { display:flex; align-items:center; gap:6px; border:1.5px solid var(--border); border-radius:999px; padding:6px 12px; font-size:14px; cursor:pointer; background:var(--input-bg); color:var(--text); }
+.qr-area input { accent-color:var(--accent); width:16px; height:16px; margin:0; }
+.qr-add { display:flex; gap:8px; margin-top:10px; }
+.qr-add .checklist-input { flex:1; min-width:0; }
+.qr-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+.qr-btn { display:inline-flex; align-items:center; gap:6px; padding:10px 16px; border-radius:var(--radius); font-size:14px; font-family:inherit; cursor:pointer; border:1.5px solid var(--border); background:var(--input-bg); color:var(--text); }
+.qr-btn.primary { background:var(--btn-bg); color:var(--btn-text); border-color:var(--btn-bg); }
+.qr-btn .material-icons-round { font-size:18px; }
+.qr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+.qr-card { background:var(--surface); border:1.5px solid var(--border); border-radius:10px; padding:12px; text-align:center; break-inside:avoid; }
+.qr-card-code { display:none; } /* QR 원본(라벨 이미지를 그릴 때만 사용) */
+.qr-card-label { display:block; width:100%; aspect-ratio:40/30; border:1px solid #ddd; background:#fff; }
+.qr-card-name { font-size:13px; color:var(--text2); margin-top:8px; word-break:keep-all; }
+.qr-card-save { margin-top:8px; font-size:12px; padding:6px 10px; }
+.qr-empty { color:var(--text3); font-size:14px; padding:20px 0; text-align:center; }
+/* A4 인쇄 — QR 탭의 [A4 인쇄]를 누른 동안(body.printing-qr)만 QR 라벨만 남기고 나머지 화면은 숨김 */
+@media print {
+  body.printing-qr > *:not(#qrPage) { display:none !important; }
+  body.printing-qr { background:#fff; padding:0 !important; }
+  body.printing-qr .qr-wrap { padding:0; max-width:none; }
+  body.printing-qr .qr-no-print { display:none !important; }
+  body.printing-qr .qr-grid { grid-template-columns:repeat(3,1fr); gap:10px; }
+  body.printing-qr .qr-card { border:none; padding:0; background:#fff; }
+  body.printing-qr .qr-card-label { width:40mm; height:30mm; margin:0 auto; border:1px dashed #999; }
+}
