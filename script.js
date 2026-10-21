@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.17.1';
+const APP_VERSION = 'v2.17.2';
 const APP_DATE    = '2026.10.21';
 
 /* ===== 설정 ===== */
@@ -3596,6 +3596,7 @@ function clUpdateWizardMode(){
   const on=clSignModeEnabled(); // 서명 시범과 같은 점검자 목록 사용
   if(on===clWizardOn()) return;
   form.classList.toggle('cl-wizard',on);
+  clUpdateAppHeaderHeight();
   document.getElementById('clWizardBar').style.display=on?'':'none';
   document.getElementById('clWizardNav').style.display=on?'':'none';
   if(on) clWizardShow(clWizardStep);
@@ -3625,9 +3626,9 @@ function clWizardShow(step){
   document.getElementById('clWizardNext').style.display=last?'none':'';
   // 마지막 단계에서만 제출하기 버튼
   document.querySelector('#checklistForm .checklist-submit-bar').style.display=last?'':'none';
-  // 단계 표시가 화면 맨 위에 오도록 — 위에 고정된 헤더 높이만큼 비켜서 스크롤
-  const bar=document.getElementById('clWizardBar'), header=document.querySelector('.header');
-  window.scrollTo({top:bar.getBoundingClientRect().top+window.scrollY-(header?header.offsetHeight:0)-8});
+  // 제목/단계 표시(고정 영역)가 처음 위치에 오도록 점검표 맨 위로 — 위에 고정된 앱 헤더 높이만큼 비켜서 스크롤
+  const form=document.getElementById('checklistForm'), header=document.querySelector('.header');
+  window.scrollTo({top:Math.max(0,form.getBoundingClientRect().top+window.scrollY-(header?header.offsetHeight:0)-8)});
 }
 function clWizardGo(dir){
   if(dir<0) return clWizardShow(clWizardStep-1);
@@ -3644,6 +3645,12 @@ function clWizardGo(dir){
   clWizardShow(clWizardStep+1);
 }
 // 지금 단계에서 after(누른 항목) 다음으로 아직 답하지 않은 항목으로 부드럽게 이동 — 없으면 [다음] 버튼으로
+function clUpdateAppHeaderHeight(){
+  const h=document.querySelector('.header');
+  if(h) document.documentElement.style.setProperty('--app-header-h',h.offsetHeight+'px');
+}
+window.addEventListener('resize',clUpdateAppHeaderHeight);
+document.addEventListener('DOMContentLoaded',clUpdateAppHeaderHeight);
 function clWizardScrollToNext(after){
   const sec=clWizardSections()[clWizardStep];
   if(!sec) return;

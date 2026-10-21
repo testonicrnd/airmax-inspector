@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=2.17.1"/>
+<link rel="stylesheet" href="style.css?v=2.17.2"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -632,12 +632,11 @@
           <button type="button" class="cl-records-btn" id="clRecordsBtn" style="display:none" onclick="openChecklistRecords()"><span class="material-icons-round">history</span>점검 기록</button>
         </div>
         <div class="checklist-desc">매트 / 집진기 / 소모품 점검 — 현장에서 작성 후 제출하면 바로 저장됩니다.</div>
-      </div>
-
-      <!-- 단계 진행 표시 (시범: 지정된 점검자만) — 한 화면에 한 섹션씩 -->
-      <div class="cl-wizard-bar" id="clWizardBar" style="display:none">
-        <div class="cl-wizard-label" id="clWizardLabel"></div>
-        <div class="cl-wizard-steps" id="clWizardSteps"></div>
+        <!-- 단계 진행 표시 (시범: 지정된 점검자만) — 한 화면에 한 섹션씩. 단계 방식일 때 제목과 함께 화면 위에 고정 -->
+        <div class="cl-wizard-bar" id="clWizardBar" style="display:none">
+          <div class="cl-wizard-label" id="clWizardLabel"></div>
+          <div class="cl-wizard-steps" id="clWizardSteps"></div>
+        </div>
       </div>
 
       <div class="checklist-section">
@@ -1043,6 +1042,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=2.17.1"></script>
+<script defer src="script.js?v=2.17.2"></script>
 </body>
 </html>
