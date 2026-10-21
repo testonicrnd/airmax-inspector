@@ -612,7 +612,108 @@ function refreshChecklistStats(ss) {
         row++;
     }
 
-    // ── 1) 장소별 현황판 ──────────────────────────────────────
+    // 차트가 있는 요약 표(이상 발생 항목/월별 현황)를 위에, 계속 길어지는 장소별 현황판을 맨 아래에 둠 —
+    // 길어지는 표 아래에 차트를 두면 현황판 길이가 바뀔 때 차트가 표 위로 떠서 점검 항목을 덮는 문제가 있었음
+    var CHART_ROWS = 16; // 차트(높이 300px)가 다음 표를 가리지 않도록 확보하는 행 수
+    var CHART_COL = 5;
+    var placeLabel = function(s) { return s.area ? s.location + ' / ' + s.area : s.location; };
+    // 숫자 칸 메모 — 어느 장소에서 생긴 이상인지 최근 것부터 보여줌. 메모가 너무 길어지지 않게 개수 제한
+    var NOTE_LIMIT = 30;
+    var noteLines = function(lines) {
+        var shown = lines.slice(0, NOTE_LIMIT);
+        if (lines.length > NOTE_LIMIT) shown.push('… 외 ' + (lines.length - NOTE_LIMIT) + '건');
+        return shown.join('\n');
+    };
+    var byRecent = function(a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; };
+
+    // ── 1) 이상 발생 항목 (누적) — 이상이 한 번이라도 나온 항목만 ────────────
+    var badMap = {}, badOrder = [];
+    subs.forEach(function(s) {
+        badItemsOf(s).forEach(function(it) {
+            var k = it.section + ' ' + it.item;
+            var m = badMap[k];
+            if (!m) { m = badMap[k] = { key: k, count: 0, locs: {}, entries: [] }; badOrder.push(m); }
+            m.count++;
+            var pl = placeLabel(s);
+            m.locs[pl] = (m.locs[pl] || 0) + 1;
+            m.entries.push({ date: s.date, text: s.date + '  ' + pl + (it.note ? ' — ' + it.note : '') });
+        });
+    });
+    badOrder.sort(function(a, b) { return b.count - a.count; });
+    writeTitle('이상 발생 항목 (누적)', '숫자 칸에 마우스를 올리면 장소와 이상 내용이 보입니다');
+    var badHeader = ['항목', '이상 건수', '발생 장소 수'];
+    var blockStart = row;
+    writeHeader(badHeader);
+    if (badOrder.length) {
+        var badRows = badOrder.map(function(m) { return [m.key, m.count, Object.keys(m.locs).length]; });
+        sheet.getRange(row, 1, badRows.length, badHeader.length).setValues(badRows)
+            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+        sheet.getRange(row, 2, badRows.length, 2).setHorizontalAlignment('center');
+        sheet.getRange(row, 2, badRows.length, 2).setNotes(badOrder.map(function(m) {
+            var countNote = noteLines(m.entries.sort(byRecent).map(function(e) { return e.text; }));
+            var locNote = noteLines(Object.keys(m.locs).sort(function(a, b) { return m.locs[b] - m.locs[a]; })
+                .map(function(pl) { return pl + ' (' + m.locs[pl] + '건)'; }));
+            return [countNote, locNote];
+        }));
+        sheet.insertChart(sheet.newChart().setChartType(Charts.ChartType.BAR)
+            .addRange(sheet.getRange(row - 1, 1, badRows.length + 1, 2))
+            .setNumHeaders(1)
+            .setPosition(blockStart, CHART_COL, 0, 0)
+            .setOption('title', '항목별 이상 건수')
+            .setOption('legend', { position: 'none' })
+            .setOption('colors', ['#d93025'])
+            .setOption('width', 560).setOption('height', 300)
+            .build());
+        row += Math.max(badRows.length, CHART_ROWS - 1);
+    } else {
+        sheet.getRange(row, 1).setValue('이상 항목 없음').setFontColor(STATS_COLOR.okText);
+        row++;
+    }
+    row += 2;
+
+    // ── 2) 월별 점검 현황 ────────────────────────────────────
+    var monthMap = {}, monthOrder = [];
+    subs.forEach(function(s) {
+        var ym = s.date.substring(0, 7);
+        var m = monthMap[ym];
+        if (!m) { m = monthMap[ym] = { ym: ym, count: 0, withBad: 0, entries: [] }; monthOrder.push(m); }
+        m.count++;
+        var bad = badItemsOf(s);
+        if (bad.length) {
+            m.withBad++;
+            m.entries.push({ date: s.date, text: s.date.substring(5) + '  ' + placeLabel(s) + ': ' +
+                bad.map(function(it) { return it.section + ' ' + it.item; }).join(', ') });
+        }
+    });
+    writeTitle('월별 점검 현황', '이상 발견 건수 칸에 마우스를 올리면 장소가 보입니다');
+    var monthHeader = ['월', '점검 건수', '이상 발견 건수'];
+    blockStart = row;
+    writeHeader(monthHeader);
+    if (monthOrder.length) {
+        var monthRows = monthOrder.map(function(m) { return [m.ym, m.count, m.withBad]; });
+        sheet.getRange(row, 1, monthRows.length, 1).setNumberFormat('@'); // '2026-10'이 날짜로 자동 변환되지 않게
+        sheet.getRange(row, 1, monthRows.length, monthHeader.length).setValues(monthRows)
+            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+        sheet.getRange(row, 1, monthRows.length, monthHeader.length).setHorizontalAlignment('center');
+        sheet.getRange(row, 3, monthRows.length, 1).setNotes(monthOrder.map(function(m) {
+            return [noteLines(m.entries.sort(byRecent).map(function(e) { return e.text; }))];
+        }));
+        sheet.insertChart(sheet.newChart().setChartType(Charts.ChartType.COLUMN)
+            .addRange(sheet.getRange(row - 1, 1, monthRows.length + 1, monthHeader.length))
+            .setNumHeaders(1)
+            .setPosition(blockStart, CHART_COL, 0, 0)
+            .setOption('title', '월별 점검 / 이상 발견 건수')
+            .setOption('legend', { position: 'bottom' })
+            .setOption('colors', ['#1a73e8', '#d93025'])
+            .setOption('width', 560).setOption('height', 300)
+            .build());
+        row += Math.max(monthRows.length, CHART_ROWS - 1);
+    } else {
+        sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
+    }
+    row += 2;
+
+    // ── 3) 장소별 현황판 ──────────────────────────────────────
     // 장소 1곳 = 1줄. 최근 점검 결과를 항목마다 ✓/✗로 보여주고, ✗ 칸에 마우스를 올리면 이상 내용(메모)이 보임
     writeTitle('장소·구역별 현황 (최근 점검 기준)', '✗ 칸에 마우스를 올리면 이상 내용이 보입니다 · 장소명을 누르면 장소 시트로 이동');
     var infoHeader = ['점검장소 / 세부구역', '상태', '최근 점검일', '최근 점검자', '제품 종류', '누적 점검'];
@@ -678,104 +779,6 @@ function refreshChecklistStats(ss) {
         row++;
     }
     row += 2;
-
-    var CHART_ROWS = 16; // 차트(높이 300px)가 다음 표를 가리지 않도록 확보하는 행 수
-    var CHART_COL = 5;
-    var placeLabel = function(s) { return s.area ? s.location + ' / ' + s.area : s.location; };
-    // 숫자 칸 메모 — 어느 장소에서 생긴 이상인지 최근 것부터 보여줌. 메모가 너무 길어지지 않게 개수 제한
-    var NOTE_LIMIT = 30;
-    var noteLines = function(lines) {
-        var shown = lines.slice(0, NOTE_LIMIT);
-        if (lines.length > NOTE_LIMIT) shown.push('… 외 ' + (lines.length - NOTE_LIMIT) + '건');
-        return shown.join('\n');
-    };
-    var byRecent = function(a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; };
-
-    // ── 2) 이상 발생 항목 (누적) — 이상이 한 번이라도 나온 항목만 ────────────
-    var badMap = {}, badOrder = [];
-    subs.forEach(function(s) {
-        badItemsOf(s).forEach(function(it) {
-            var k = it.section + ' ' + it.item;
-            var m = badMap[k];
-            if (!m) { m = badMap[k] = { key: k, count: 0, locs: {}, entries: [] }; badOrder.push(m); }
-            m.count++;
-            var pl = placeLabel(s);
-            m.locs[pl] = (m.locs[pl] || 0) + 1;
-            m.entries.push({ date: s.date, text: s.date + '  ' + pl + (it.note ? ' — ' + it.note : '') });
-        });
-    });
-    badOrder.sort(function(a, b) { return b.count - a.count; });
-    writeTitle('이상 발생 항목 (누적)', '숫자 칸에 마우스를 올리면 장소와 이상 내용이 보입니다');
-    var badHeader = ['항목', '이상 건수', '발생 장소 수'];
-    var blockStart = row;
-    writeHeader(badHeader);
-    if (badOrder.length) {
-        var badRows = badOrder.map(function(m) { return [m.key, m.count, Object.keys(m.locs).length]; });
-        sheet.getRange(row, 1, badRows.length, badHeader.length).setValues(badRows)
-            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
-        sheet.getRange(row, 2, badRows.length, 2).setHorizontalAlignment('center');
-        sheet.getRange(row, 2, badRows.length, 2).setNotes(badOrder.map(function(m) {
-            var countNote = noteLines(m.entries.sort(byRecent).map(function(e) { return e.text; }));
-            var locNote = noteLines(Object.keys(m.locs).sort(function(a, b) { return m.locs[b] - m.locs[a]; })
-                .map(function(pl) { return pl + ' (' + m.locs[pl] + '건)'; }));
-            return [countNote, locNote];
-        }));
-        sheet.insertChart(sheet.newChart().setChartType(Charts.ChartType.BAR)
-            .addRange(sheet.getRange(row - 1, 1, badRows.length + 1, 2))
-            .setNumHeaders(1)
-            .setPosition(blockStart, CHART_COL, 0, 0)
-            .setOption('title', '항목별 이상 건수')
-            .setOption('legend', { position: 'none' })
-            .setOption('colors', ['#d93025'])
-            .setOption('width', 560).setOption('height', 300)
-            .build());
-        row += Math.max(badRows.length, CHART_ROWS - 1);
-    } else {
-        sheet.getRange(row, 1).setValue('이상 항목 없음').setFontColor(STATS_COLOR.okText);
-        row++;
-    }
-    row += 2;
-
-    // ── 3) 월별 점검 현황 ────────────────────────────────────
-    var monthMap = {}, monthOrder = [];
-    subs.forEach(function(s) {
-        var ym = s.date.substring(0, 7);
-        var m = monthMap[ym];
-        if (!m) { m = monthMap[ym] = { ym: ym, count: 0, withBad: 0, entries: [] }; monthOrder.push(m); }
-        m.count++;
-        var bad = badItemsOf(s);
-        if (bad.length) {
-            m.withBad++;
-            m.entries.push({ date: s.date, text: s.date.substring(5) + '  ' + placeLabel(s) + ': ' +
-                bad.map(function(it) { return it.section + ' ' + it.item; }).join(', ') });
-        }
-    });
-    writeTitle('월별 점검 현황', '이상 발견 건수 칸에 마우스를 올리면 장소가 보입니다');
-    var monthHeader = ['월', '점검 건수', '이상 발견 건수'];
-    blockStart = row;
-    writeHeader(monthHeader);
-    if (monthOrder.length) {
-        var monthRows = monthOrder.map(function(m) { return [m.ym, m.count, m.withBad]; });
-        sheet.getRange(row, 1, monthRows.length, 1).setNumberFormat('@'); // '2026-10'이 날짜로 자동 변환되지 않게
-        sheet.getRange(row, 1, monthRows.length, monthHeader.length).setValues(monthRows)
-            .setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
-        sheet.getRange(row, 1, monthRows.length, monthHeader.length).setHorizontalAlignment('center');
-        sheet.getRange(row, 3, monthRows.length, 1).setNotes(monthOrder.map(function(m) {
-            return [noteLines(m.entries.sort(byRecent).map(function(e) { return e.text; }))];
-        }));
-        sheet.insertChart(sheet.newChart().setChartType(Charts.ChartType.COLUMN)
-            .addRange(sheet.getRange(row - 1, 1, monthRows.length + 1, monthHeader.length))
-            .setNumHeaders(1)
-            .setPosition(blockStart, CHART_COL, 0, 0)
-            .setOption('title', '월별 점검 / 이상 발견 건수')
-            .setOption('legend', { position: 'bottom' })
-            .setOption('colors', ['#1a73e8', '#d93025'])
-            .setOption('width', 560).setOption('height', 300)
-            .build());
-        row += Math.max(monthRows.length, CHART_ROWS - 1);
-    } else {
-        sheet.getRange(row, 1).setValue('데이터 없음').setFontColor(STATS_COLOR.naText);
-    }
 
     // 헤더 필터 아이콘(약 24px)이 글자를 가리지 않도록 여유 있게 잡음
     sheet.setColumnWidth(1, 240);
