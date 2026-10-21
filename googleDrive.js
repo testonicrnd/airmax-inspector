@@ -81,6 +81,7 @@ try {
     if (action === 'submitChecklist')     return handleSubmitChecklist(data);
     if (action === 'getChecklistPlaces')  return getChecklistPlaces();
     if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
+    if (action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
     if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
@@ -935,6 +936,84 @@ function authorizeDrive() {
     var folder = getChecklistSignatureFolder(getOrCreateChecklistSpreadsheet());
     Logger.log('드라이브 권한 확인 완료 — 서명 폴더: ' + folder.getUrl());
     Logger.log('이제 [배포 관리 → 편집 → 새 버전]으로 재배포하세요.');
+}
+
+// ===== 숨은 미니 게임 "신동준 키우기" 저장소 =====
+// 점검표와 완전히 분리된 "Air Max 게임 DB" 스프레드시트를 처음 저장할 때 만들고, players 시트에 플레이어 1명 = 1행으로 저장.
+// 플레이어 ID는 앱이 기기마다 만든 무작위 값. 진행 데이터는 JSON 문자열로 한 칸에 저장(크기 제한)
+var GAME_SHEET_ID_PROP = 'GAME_SHEET_ID';
+var GAME_HEADERS = ['플레이어ID', '닉네임', '스테이지', '레벨', '누적 실적', '저장 데이터', '최근 저장', '처음 시작'];
+function getGameSheet() {
+    var props = PropertiesService.getScriptProperties();
+    var id = props.getProperty(GAME_SHEET_ID_PROP);
+    var ss = null;
+    if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+    if (!ss) {
+        ss = SpreadsheetApp.create('Air Max 게임 DB');
+        props.setProperty(GAME_SHEET_ID_PROP, ss.getId());
+    }
+    var sheet = ss.getSheetByName('players');
+    if (!sheet) {
+        sheet = ss.getSheets()[0];
+        sheet.setName('players');
+        sheet.getRange(1, 1, 1, GAME_HEADERS.length).setValues([GAME_HEADERS]).setFontWeight('bold').setBackground('#434343').setFontColor('#ffffff');
+        sheet.setFrozenRows(1);
+        sheet.getRange('A:A').setNumberFormat('@');
+    }
+    return sheet;
+}
+function gameFindRow(values, playerId) {
+    for (var i = 0; i < values.length; i++) if (String(values[i][0]) === playerId) return i;
+    return -1;
+}
+function handleGameAction(data) {
+    try {
+        var sheet = getGameSheet();
+        var lastRow = sheet.getLastRow();
+        var values = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, GAME_HEADERS.length).getValues() : [];
+        var playerId = String(data.playerId || '');
+
+        if (data.action === 'gameRanking') {
+            var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
+                return { nickname: String(r[1]), stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, me: String(r[0]) === playerId };
+            });
+            list.sort(function(a, b) { return (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
+            var myRank = 0;
+            list.forEach(function(x, i) { if (x.me) myRank = i + 1; });
+            return buildJson({ success: true, top: list.slice(0, 10), myRank: myRank, players: list.length });
+        }
+
+        if (!/^[A-Za-z0-9-]{16,64}$/.test(playerId)) return buildJson({ success: false, error: '플레이어 정보가 올바르지 않습니다.' });
+        var idx = gameFindRow(values, playerId);
+
+        if (data.action === 'gameLoad') {
+            if (idx < 0) return buildJson({ success: true, found: false });
+            var saved = null;
+            try { saved = JSON.parse(String(values[idx][5] || 'null')); } catch (e) { saved = null; }
+            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved });
+        }
+
+        // gameSave
+        var stateStr = String(data.state || '');
+        if (stateStr.length > 8000) return buildJson({ success: false, error: '저장 데이터가 너무 큽니다.' });
+        var state;
+        try { state = JSON.parse(stateStr); } catch (e) { return buildJson({ success: false, error: '저장 데이터 형식 오류' }); }
+        var nickname = normalizeChecklistLocation(data.nickname).substring(0, 12) || '플레이어';
+        var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
+        var row = [playerId, nickname, Number(state.stage) || 1, Number(state.lv) || 1, Math.floor(Number(state.totalDust) || 0), stateStr, now,
+            idx >= 0 ? values[idx][7] : now];
+        var lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        try {
+            if (idx >= 0) sheet.getRange(idx + 2, 1, 1, GAME_HEADERS.length).setValues([row]);
+            else sheet.getRange(sheet.getLastRow() + 1, 1, 1, GAME_HEADERS.length).setValues([row]);
+        } finally {
+            lock.releaseLock();
+        }
+        return buildJson({ success: true, savedAt: now });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
 }
 
 // ===== 점검표 조회 / PDF / 메일 다시 보내기 =====

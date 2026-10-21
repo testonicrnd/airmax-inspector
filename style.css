@@ -1359,3 +1359,61 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .checklist-desc { display:none; }
 #checklistForm.cl-wizard .checklist-title { margin-bottom:0; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
+
+/* ===== 숨은 미니 게임 "신동준 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
+.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:300px; max-width:calc(100vw - 32px);
+  background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
+.gm-widget.dim { opacity:0.35; }
+.gm-widget.dim:hover { opacity:1; }
+.gm-head { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:var(--input-bg); border-bottom:1px solid var(--border); }
+.gm-title { font-weight:700; font-size:13px; }
+.gm-head-btns button { background:none; border:none; color:var(--text3); font-size:15px; width:24px; height:22px; cursor:pointer; border-radius:4px; font-family:inherit; }
+.gm-head-btns button:hover { background:var(--border2); color:var(--text); }
+.gm-body { padding:10px 12px 10px; }
+.gm-chip { position:fixed; right:16px; bottom:48px; z-index:900; width:34px; height:34px; border-radius:50%; border:1.5px solid var(--border);
+  background:var(--surface); font-size:16px; cursor:pointer; opacity:0.6; display:none; }
+.gm-chip:hover { opacity:1; }
+.gm-intro { line-height:1.6; color:var(--text2); margin-bottom:10px; }
+.gm-input { width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--border); border-radius:8px; background:var(--input-bg); color:var(--text); font-size:14px; font-family:inherit; margin-bottom:8px; }
+.gm-btn { width:100%; padding:10px; border:1.5px solid var(--border); border-radius:8px; background:var(--input-bg); color:var(--text); font-family:inherit; font-size:14px; cursor:pointer; margin-top:8px; }
+.gm-btn.primary { background:var(--btn-bg); color:var(--btn-text); border-color:var(--btn-bg); }
+.gm-char { display:flex; align-items:center; gap:10px; }
+.gm-avatar { font-size:30px; line-height:1; }
+.gm-char-info { flex:1; min-width:0; }
+.gm-nick { color:var(--text4); font-size:11px; }
+.gm-bar { height:6px; border-radius:3px; background:var(--border2); overflow:hidden; margin-top:4px; }
+.gm-bar i { display:block; height:100%; width:0; background:var(--accent); transition:width 0.15s; }
+.gm-bar.hp i { background:#d93025; }
+.gm-stats { display:flex; justify-content:space-between; gap:6px; margin:8px 0; color:var(--text2); font-size:12px; }
+.gm-arena { position:relative; display:block; width:100%; padding:8px 10px 10px; border:1.5px dashed var(--border); border-radius:10px;
+  background:var(--bg); color:var(--text); font-family:inherit; cursor:pointer; touch-action:manipulation; overflow:hidden; }
+.gm-arena.boss { border-color:#d93025; border-style:solid; }
+.gm-mon-name { font-size:12px; color:var(--text2); }
+.gm-monster { font-size:44px; line-height:1.25; }
+.gm-monster.hit { animation:gmHit 0.12s; }
+@keyframes gmHit { 50% { transform:scale(0.85) rotate(-6deg); } }
+.gm-timer { font-size:11px; color:#d93025; min-height:14px; margin-top:3px; }
+.gm-float-layer { position:absolute; inset:0; pointer-events:none; }
+.gm-float { position:absolute; top:40%; font-weight:700; color:var(--accent); animation:gmFloat 0.7s forwards; }
+.gm-float.crit { color:#d93025; font-size:16px; }
+@keyframes gmFloat { to { transform:translateY(-36px); opacity:0; } }
+.gm-ups { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
+.gm-up { display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border:1.5px solid var(--border); border-radius:8px;
+  background:var(--input-bg); color:var(--text); font-family:inherit; text-align:left; cursor:pointer; }
+.gm-up:disabled { opacity:0.45; cursor:default; }
+.gm-up:not(:disabled):hover { border-color:var(--accent); }
+.gm-up-icon { font-size:18px; }
+.gm-up-text { flex:1; min-width:0; display:flex; flex-direction:column; }
+.gm-up-text small { color:var(--text3); font-size:11px; }
+.gm-up-cost { font-size:12px; font-weight:600; white-space:nowrap; }
+.gm-foot { display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:11px; color:var(--text4); }
+.gm-link { background:none; border:none; color:var(--text2); font-family:inherit; font-size:12px; cursor:pointer; padding:0; }
+.gm-toast { position:absolute; left:10px; right:10px; top:40px; padding:7px 10px; border-radius:8px; background:var(--btn-bg); color:var(--btn-text);
+  font-size:12px; text-align:center; animation:gmToast 0.25s; pointer-events:none; }
+@keyframes gmToast { from { opacity:0; transform:translateY(-6px); } }
+.gm-rank-title { font-weight:700; margin-bottom:6px; }
+.gm-rank-row { display:flex; gap:8px; padding:5px 4px; border-bottom:1px solid var(--border2); font-size:12px; }
+.gm-rank-row span:first-child { width:18px; color:var(--text3); }
+.gm-rank-row b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-rank-row.me { background:var(--accent-bg); }
