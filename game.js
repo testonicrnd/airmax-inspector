@@ -358,19 +358,23 @@
     }
   }
   let enterPending=false;
-  function checkTyped(submit){
+  // 단어와 똑같아지면 Space/Enter 없이 바로 처리.
+  // 한글 마지막 글자가 아직 조합 중일 수 있어 입력칸을 바로 비우지 않고(비우면 이어 친 다음 글자가 날아감)
+  // 쓴 부분 길이(typedBase)만 기억 → 다음 단어는 그 뒤 글자로 비교하고, 조합이 끝나는 순간 앞부분을 잘라냄
+  let typedBase=0;
+  function checkTyped(submit,composing){
     const t=el('gmType'); if(!t) return;
-    const v=t.value, clean=v.replace(/\s/g,'');
-    if(!clean){ if(/\s/.test(v)) t.value=''; return; }
-    // 단어와 똑같아지면 Space/Enter 없이 바로 처리. 한글 마지막 글자가 조합 중이어도 넘어가므로,
-    // 입력칸을 잠깐 놓았다 다시 잡아 조합을 끝낸 뒤 비움(안 그러면 조합 중이던 글자가 다음 칸에 남음)
-    if(clean===seq[seqPos]){ wordInput(clean); clearTyped(t); return; }
-    if(submit||/\s/.test(v)){ wordInput(clean); t.value=''; }
+    if(typedBase>t.value.length) typedBase=0;
+    const v=t.value.slice(typedBase), clean=v.replace(/\s/g,'');
+    if(!clean){ if(/\s/.test(v)){ t.value=''; typedBase=0; } return; }
+    if(clean===seq[seqPos]){
+      wordInput(clean);
+      if(composing) typedBase=t.value.length; else { t.value=''; typedBase=0; }
+      return;
+    }
+    if(submit||/\s/.test(v)){ wordInput(clean); t.value=''; typedBase=0; }
   }
-  function clearTyped(t){
-    t.blur(); t.value='';
-    setTimeout(()=>{ t.value=''; if(isVisible()) t.focus(); },0);
-  }
+  function trimTyped(){ const t=el('gmType'); if(t&&typedBase>0){ t.value=t.value.slice(typedBase); typedBase=0; } }
   function keyInput(code){
     const want=seq[seqPos];
     if(!want) return false;
@@ -605,9 +609,10 @@
           if(e.isComposing||e.keyCode===229){ enterPending=true; setTimeout(()=>{ if(enterPending){ enterPending=false; checkTyped(true); } },80); } else checkTyped(true);
         }
       });
-      t.addEventListener('input',()=>{ lastInput=Date.now(); checkTyped(false); }); // 조합 중이어도 단어가 똑같아지면 바로 처리
+      t.addEventListener('input',e=>{ lastInput=Date.now(); if(!e.isComposing) trimTyped(); checkTyped(false,e.isComposing); }); // 조합 중이어도 단어가 똑같아지면 바로 처리
       // 한글 조합이 끝난 뒤(Space/Enter로 마지막 글자 확정) — 값이 반영된 다음에 확인
-      t.addEventListener('compositionend',()=>setTimeout(()=>{ const sub=enterPending; enterPending=false; checkTyped(sub); },0));
+      // 조합이 끝나는 순간(다음 글자를 치기 시작할 때) 이미 처리한 앞부분을 잘라냄 — 바로 이어 들어올 글자는 빈칸 뒤에 붙음
+      t.addEventListener('compositionend',()=>{ trimTyped(); setTimeout(()=>{ const sub=enterPending; enterPending=false; checkTyped(sub); },0); });
     }
   }
   function focusPlay(){ const t=el('gmType'); (t||el('gmWidget')).focus(); }
