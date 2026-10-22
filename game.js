@@ -928,9 +928,9 @@
           <span>${rankOf(x.level)[2]} Lv.${x.level} · ${x.stage}단계</span>
           <span>${x.done}/${x.hired}</span>
           <span class="gm-adm-acts">
-            <button type="button" title="PIN 잠금 해제" onclick="gmAdminDo('gameAdminUnlock',${i})">🔓</button>
-            <button type="button" title="진행 초기화" onclick="gmAdminDo('gameAdminReset',${i})">↺</button>
-            <button type="button" class="danger" title="계정 삭제" onclick="gmAdminDo('gameAdminDelete',${i})">✕</button>
+            <button type="button" title="PIN 잠금 해제" onclick="gmAdminDo('gameAdminUnlock',${i})"><img src="${UI}adm-unlock.png" alt="잠금 해제"/></button>
+            <button type="button" title="진행 초기화" onclick="gmAdminDo('gameAdminReset',${i})"><img src="${UI}adm-reset.png" alt="초기화"/></button>
+            <button type="button" class="danger" title="계정 삭제" onclick="gmAdminDo('gameAdminDelete',${i})"><img src="${UI}adm-delete.png" alt="삭제"/></button>
           </span></div>`).join('')
         :'<div class="gm-intro">등록된 플레이어가 없습니다.</div>';
       inner=`<div class="gm-adm-list">${inner}</div><div class="gm-adm-note">${adminList.length}명 · 최근 저장순이 아니라 성장순입니다</div>`;

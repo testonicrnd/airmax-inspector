@@ -1740,6 +1740,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-adm-acts { display:flex; gap:3px; justify-content:flex-end; }
 .gm-adm-acts button { border:1px solid var(--border); background:var(--surface); border-radius:6px; width:22px; height:22px;
   font-size:11px; cursor:pointer; color:var(--text2); font-family:inherit; padding:0; }
+.gm-adm-acts button img { height:14px; width:auto; display:block; margin:0 auto; opacity:0.85; }
+.gm-adm-acts button:hover img { opacity:1; }
 .gm-adm-acts button:hover { border-color:var(--accent); color:var(--text); }
 .gm-adm-acts button.danger:hover { border-color:#d93025; color:#d93025; }
 /* 랭킹 — 몇 번째로 키우는 직원인지(입사 차수). 2기부터는 난이도가 달라 구분이 필요 */
