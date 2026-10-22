@@ -78,15 +78,15 @@
     '회식 자리 예약':'beer','회식 2차 노래방':'mic','주말 출근':'calendar','행사 의자 나르기':'chairs','회사 블로그 사진':'camera',
     '사장님 강아지 산책':'collar','법인카드 영수증 풀칠':'receipts','고장 난 의자 수리':'chair','에어컨 필터 청소':'filter','팩스 보내기':'fax',
     '사장님 휴대폰 설정':'phone2','거래처 접대 운전':'sedan',
-    // 중간 관리·임원 업무 — 전용 그림이 나오기 전까지 뜻이 가까운 기존 아이콘을 돌려 씀
-    '월말 실적 집계':'chart','신입 교육':'notebook','클레임 수습':'phone','안전 점검':'clipboard','팀 주간 회의':'meeting',
-    '결재 서류 검토':'binder','예산안 작성':'excel','품의서 결재':'papers','거래처 미팅':'briefcase','인사 평가':'review',
-    '연봉 협상':'bank','계약서 검토':'papers','이사회 자료 준비':'meeting','임원 결재':'binder','경영 실적 보고':'chart',
-    '주요 거래처 접대':'beer','해외 출장':'sedan','노동청 실사 대응':'clipboard',
-    '신년사 작성':'report','자금 결재':'bank','시상식 참석':'party','회장님 의전':'cane',
-    '감사 대응':'clipboard','이사회 안건':'meeting','주주총회':'party',
+    // 중간 관리·임원 업무
+    '월말 실적 집계':'tally','신입 교육':'teach','클레임 수습':'claim','안전 점검':'safety','팀 주간 회의':'teamtalk',
+    '결재 서류 검토':'approve','예산안 작성':'budget','품의서 결재':'request','거래처 미팅':'handshake','인사 평가':'rating',
+    '연봉 협상':'salary','계약서 검토':'contract','이사회 자료 준비':'boardprep','임원 결재':'execsign','경영 실적 보고':'bizreport',
+    '주요 거래처 접대':'dinner','해외 출장':'trip','노동청 실사 대응':'labor',
+    '신년사 작성':'speech','자금 결재':'funds','시상식 참석':'award','회장님 의전':'escort',
+    '감사 대응':'inspect','이사회 안건':'boardroom','주주총회':'shareholders',
     // 지시 업무 — 시키는 그 잡일의 아이콘을 그대로 씀(본인이 하던 일을 넘기는 거라서)
-    '신입에게 떠넘기기':'papers','어항 청소 시키기':'fishbowl','커피 심부름 시키기':'coffee2','사무실 청소 시키기':'broom',
+    '신입에게 떠넘기기':'delegate','어항 청소 시키기':'fishbowl','커피 심부름 시키기':'coffee2','사무실 청소 시키기':'broom',
     '택배 상하차 시키기':'boxes','보고서 대신 쓰게 하기':'report','회의록 작성 지시':'notebook',
     '주차 대신 시키기':'carkey','회식 2차 예약 시키기':'mic','경조사 대리 참석 시키기':'flowers',
     '팀장님 결재':'binder','부장님 검토':'review','분기 실적 보고':'chart','본부장 회의':'meeting','사장님 가족 행사':'party','회장님 방문':'cane','사장님 보고':'briefcase'};
