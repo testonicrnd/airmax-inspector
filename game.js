@@ -68,7 +68,8 @@
   const BOSS_LV=RANKS[RANKS.length-1][0];
   // 그림 리소스(assets/game/ui) — 스킬·업무·아이템 아이콘, 월드 지도, 계단 배경·발판
   const UI='assets/game/ui/';
-  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay'};
+  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay',
+    bossLv:'ext',preLv:'proj',vetLv:'mast',critPowLv:'crit',orgLv:'caf',signLv:'focus'};
   const TASK_IMG={'메일 폭탄':'mail','엑셀 정리':'excel','주간 보고서':'report','고객 전화':'phone','서류 더미':'papers','첨부 누락':'clip',
     '프린터 고장':'printer','회의록':'notebook','시스템 오류':'laptop','점검표 취합':'clipboard',
     '어항 청소':'fishbowl','어항 물갈기':'fishbowl','사장님 차 세차':'bucket','사장님 개인 심부름':'shopping','손님 커피 타기':'coffee2',
@@ -158,9 +159,16 @@
     {key:'awakeLv', icon:'⚡', name:'각성',        desc:lv=>`커피 수혈도 ${lv}% 확률로 3배 처리`, base:50000000, grow:1.6, max:10, req:35},
     {key:'projLv',  icon:'🏆', name:'프로젝트 달성', desc:lv=>`${(projChance(lv)*100).toFixed(1)}% 확률로 20배 처리 (크리티컬 상위)`, base:1500000000, grow:1.35, max:20, req:50},
     {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:1000000000, grow:1.35, max:20, req:50},
+    // 임원 강화 — 과장부터 직급마다 하나씩 열림. 보스(결재)가 8배 단단해서 고직급에서 막히던 걸 푸는 게 목적
+    {key:'bossLv',    icon:'🎯', name:'결재 집중', desc:lv=>`보스(결재)에게 주는 처리량 ×${(1+0.25*lv).toFixed(2)}`, base:40000000, grow:1.32, max:20, req:35},
+    {key:'preLv',     icon:'📌', name:'선결재',    desc:lv=>`보스(결재)를 ${(2.5*lv).toFixed(1)}% 처리된 상태로 시작`, base:1200000000, grow:1.38, max:12, req:50},
+    {key:'vetLv',     icon:'🏋️', name:'관록',      desc:lv=>`업무력 ×${(1+0.2*lv).toFixed(1)} (숙련과 곱해짐)`, base:20000000000, grow:1.35, max:15, req:70},
+    {key:'critPowLv', icon:'💥', name:'과몰입',    desc:lv=>`몰입이 터질 때 ${(3+0.5*lv).toFixed(1)}배 처리`, base:80000000000, grow:1.38, max:14, req:95},
+    {key:'orgLv',     icon:'🏢', name:'조직력',    desc:lv=>`커피 수혈 ×${(1+0.3*lv).toFixed(1)} (카페인 중독과 곱해짐)`, base:200000000000, grow:1.35, max:15, req:112},
+    {key:'signLv',    icon:'👑', name:'전결권',    desc:lv=>`보스(결재) 중에는 콤보 한계 ×${(1+0.3*lv).toFixed(1)}`, base:400000000000, grow:1.4, max:15, req:130},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -205,16 +213,24 @@
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
   function evChance(kind){ const e=currentEvent(); return e&&e[kind]||0; }
 
-  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*evMult('power'); } // 업무력 × 숙련 × 이벤트
+  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*vetMult(s)*evMult('power'); } // 업무력 × 숙련 × 관록 × 이벤트
+  // 임원 강화 — 기존 강화를 한 번 더 곱해서 올림. 보스(결재)가 일반 업무보다 8배 단단해서 고직급에서 막히던 걸 푼다
+  function vetMult(s){ return 1+0.2*((s||st).vetLv||0); }            // 관록 — 업무력 자체를 배수로
+  function orgMult(s){ return 1+0.3*((s||st).orgLv||0); }            // 조직력 — 커피 수혈을 배수로
+  function bossMult(){ return 1+0.25*(st.bossLv||0); }               // 결재 집중 — 보스에게 주는 처리량만
+  function preRate(){ return Math.min(0.025*(st.preLv||0),0.9); }    // 선결재 — 보스를 일부 처리된 상태로 시작
+  function critMult(){ return 3+0.5*(st.critPowLv||0); }             // 과몰입 — 크리티컬 배수
+  function signMult(){ return 1+0.3*(st.signLv||0); }                // 전결권 — 보스 중 콤보 한계
   // 커피 수혈 — +0.3: 강화 전에도 아주 천천히 자동 처리. 카페인 중독으로 증가.
   // 각성은 커피 전용 크리티컬(레벨당 1%, 최대 10%) — 방치만으로 너무 강해지지 않게 직접 플레이 몰입(최대 100%)과 따로 둠
-  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0))*evMult('auto'); }
+  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0))*orgMult(s)*evMult('auto'); }
   function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
   function projChance(projLv){ return Math.min(0.005*projLv,0.1); }
   function offRate(payLv){ return OFFLINE_RATE+0.02*(payLv||0); }
   function bossTime(){ return BOSS_TIME+2*(st.extLv||0); }
   function goldMult(bonusLv){ return 1+bonusLv*0.15; }
-  function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),2+0.1*(st.focusLv||0)); } // 연속 성공마다 +5%(단어는 +10%), 최대 2배(집중력으로 증가)
+  // 연속 성공마다 +5%(단어는 +10%), 최대 2배(집중력으로 증가). 보스 중에는 전결권만큼 한계가 더 올라감
+  function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),(2+0.1*(st.focusLv||0))*(mon&&mon.boss?signMult():1)); }
   function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
   function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv)*evMult('gold'); return Math.ceil(boss?r*8:r); }
   function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
@@ -319,7 +335,8 @@
     const t=boss?b:tp[Math.floor(Math.random()*tp.length)];
     const max=hpOf(st.stage,boss);
     const golden=!boss&&Math.random()<evChance('golden');
-    mon={boss,emoji:t[0],name:t[1],hp:max,max,deadline:boss?Date.now()+bossTime()*1000:0,golden};
+    // 선결재 — 보스는 일부가 이미 처리된 상태로 시작(막대는 그만큼 줄어 보임)
+    mon={boss,emoji:t[0],name:t[1],hp:boss?Math.ceil(max*(1-preRate())):max,max,deadline:boss?Date.now()+bossTime()*1000:0,golden};
     newSeq();
     renderMonster();
   }
@@ -339,6 +356,7 @@
   }
   function hit(dmg,crit,show){
     if(!mon) return;
+    if(mon.boss) dmg*=bossMult(); // 결재 집중 — 직접 입력이든 커피 수혈이든 보스에게는 더 세게
     mon.hp-=dmg;
     if(show) floatText((crit?'💥':'')+fmt(dmg),crit);
     if(mon.hp<=0) defeat();
@@ -383,7 +401,7 @@
     if(Math.random()<projChance(st.projLv||0)){ floatText('🏆 프로젝트 달성!',true,true); fxPop('fx-project',{cls:'big',ms:1200}); hit(base*20,true,true); return; }
     const crit=Math.random()<critChance(st.critLv);
     if(crit) fxPop('fx-crit',{gap:120});
-    hit(base*(crit?3:1),crit,true);
+    hit(base*(crit?critMult():1),crit,true);
   }
   function afterWork(){
     for(const id of ['gmMonster','gmHero']){ const m=el(id); if(m){ m.classList.remove('hit'); void m.offsetWidth; m.classList.add('hit'); } }
@@ -525,7 +543,7 @@
     const startStage=st.stage, startLv=st.lv;
     let gold=0, tasks=0, guard=0;
     while(t>0&&guard++<200000){
-      const boss=st.kills>=10, need=hpOf(st.stage,boss)/dps;
+      const boss=st.kills>=10, need=hpOf(st.stage,boss)*(1-(boss?preRate():0))/(dps*(boss?bossMult():1));
       if(boss&&need>bossTime()){ t-=bossTime(); st.kills=0; continue; } // 커피만으로는 결재를 못 넘김 → 다시 일반 업무
       if(need>t) break;
       t-=need;
@@ -967,7 +985,11 @@
     // 배경 — 세로로 긴 그림을 폭에 맞춰, 300층까지 오를수록 위쪽(하늘 → 우주)이 보이게
     const bg=art('stairs-bg.jpg');
     if(artReady(bg)){ const bh=bg.naturalHeight*W/bg.naturalWidth, prog=Math.min(1,stairs.count/300), sy=(bh-H)*(1-prog);
-      g.drawImage(bg,0,-sy,W,bh); }
+      g.drawImage(bg,0,-sy,W,bh);
+      // 발판이 배경(하늘·우주)에 묻히지 않도록 가운데를 살짝 어둡게 깔아줌
+      const sc=g.createLinearGradient(0,0,W,0);
+      sc.addColorStop(0,'rgba(0,0,0,0)'); sc.addColorStop(0.5,'rgba(0,0,0,0.42)'); sc.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=sc; g.fillRect(0,0,W,H); }
     const step=art('step.png'), stepOk=artReady(step);
     // 카메라 위치 f — 평소엔 지금 층, 로켓 비행 중엔 출발 층→도착 층으로 부드럽게
     let f=stairs.count, flyK=0;
@@ -977,10 +999,36 @@
     for(let i=Math.max(0,fi-6);i<Math.min(stairs.xs.length,fi+18);i++){
       const x=cx+(stairs.xs[i]-px)*SW, y=cy-(i-f)*SH;
       if(y<-40) break;
-      if(stairs.grace&&i===stairs.count+1){ g.save(); g.shadowColor='#ffcf4a'; g.shadowBlur=24; g.fillStyle='#ffcf4a'; g.fillRect(x-BW/2-4,y-12,BW+8,18); g.restore(); }
-      if(stepOk){ const sw=BW*1.12, sh=sw*step.naturalHeight/step.naturalWidth; g.globalAlpha=i<stairs.count?0.55:1; g.drawImage(step,x-sw/2,y-10,sw,sh); g.globalAlpha=1; }
-      else { g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
-        g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1; }
+      const next=i===stairs.count+1;              // 바로 다음에 밟을 발판
+      if(stairs.grace&&next){ g.save(); g.shadowColor='#ffcf4a'; g.shadowBlur=24; g.fillStyle='#ffcf4a'; g.fillRect(x-BW/2-4,y-12,BW+8,18); g.restore(); }
+      // 다음 발판 — 밟을 자리가 한눈에 보이게 밝은 받침을 깔고 테두리를 두름
+      if(next&&!stairs.over){
+        const pulse=0.5+0.5*Math.sin(performance.now()/300);
+        g.save();
+        g.fillStyle='rgba(0,0,0,0.5)'; g.fillRect(x-BW/2-9,y-15,BW+18,28);
+        g.globalAlpha=0.55+0.45*pulse; g.strokeStyle='#ffe07a'; g.lineWidth=3;
+        g.strokeRect(x-BW/2-9,y-15,BW+18,28);
+        g.restore();
+      }
+      g.save();
+      // 배경(도시·하늘·우주)이 복잡해도 발판이 떠 보이게 — 어두운 테두리를 두른 뒤 그림자까지
+      const dim=i<stairs.count?0.45:1;
+      if(stepOk){
+        const sw=BW*1.12, sh=sw*step.naturalHeight/step.naturalWidth;
+        g.globalAlpha=dim;
+        g.shadowColor='rgba(0,0,0,0.85)'; g.shadowBlur=6; g.shadowOffsetX=0; g.shadowOffsetY=0;
+        for(let k=0;k<3;k++) g.drawImage(step,x-sw/2,y-10,sw,sh); // 같은 자리에 겹쳐 그려 테두리를 진하게
+        g.shadowBlur=12; g.shadowOffsetY=5;
+        g.drawImage(step,x-sw/2,y-10,sw,sh);
+        g.globalAlpha=1;
+      } else {
+        g.shadowColor='rgba(0,0,0,0.7)'; g.shadowBlur=10; g.shadowOffsetY=4;
+        g.globalAlpha=dim;
+        g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
+        g.fillStyle=i<stairs.count?side:top; g.fillRect(x-BW/2,y-8,BW,10);
+        g.globalAlpha=1;
+      }
+      g.restore();
       if(stairs.items[i]&&i>stairs.count){ const it=art('item-'+stairs.items[i]+'.png');
         if(artReady(it)){ const ih=46, iw=ih*it.naturalWidth/it.naturalHeight; g.drawImage(it,x-iw/2,y-10-ih,iw,ih); }
         else { g.font='34px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.fillText(STAIR_ITEMS[stairs.items[i]],x,y-10); } }
@@ -1052,8 +1100,17 @@
     el('gmWidget').focus();
   }
   function skR(t){ return SK_R[t]*suika.W; }
+  // 넘침 판정 — 선을 완전히 벗어나(공 아래쪽까지 선 위로 올라가) 멈춘 공이 있는지.
+  // 떨어지는 중이거나 튕기는 중인 공은 제외(새로 놓은 공은 항상 선 위에서 출발하므로).
+  function skOverflow(){
+    if(!suika) return false;
+    const line=suika.T, rest=suika.H*0.06;
+    return suika.balls.some(b=>b.age>0.8&&Math.abs(b.vy)<rest&&b.y+b.r<line);
+  }
   function skDrop(){
     if(!suika||suika.over||suika.cool>0) return;
+    // 선을 완전히 넘은 공이 아직 남아 있으면 다음 공을 놓는 순간 끝 — 합쳐서 치울 시간을 한 번 더 준 셈
+    if(skOverflow()){ skEnd('공이 넘쳤습니다!'); return; }
     const r=skR(suika.cur), x=Math.min(suika.R-r,Math.max(suika.L+r,suika.dropX));
     suika.balls.push({id:++suika.id,x,y:r+6,vx:0,vy:0,r,t:suika.cur,age:0});
     suika.cur=suika.next; suika.next=skNextTier(); suika.cool=0.45;
@@ -1066,11 +1123,8 @@
       suika.cool=Math.max(0,suika.cool-dt);
       const mv=(suika.keys.L?-1:0)+(suika.keys.R?1:0); if(mv) suika.dropX=Math.min(suika.W,Math.max(0,suika.dropX+mv*suika.W*0.9*dt));
       for(let k=0;k<4;k++) skStep(dt/4);
-      // 위쪽 선을 넘은 공이 1.5초 넘게 머물면 끝
-      const line=suika.T;
-      const above=suika.balls.some(b=>b.age>1.2&&b.y-b.r<line);
-      suika.danger=above?suika.danger+dt:0;
-      if(suika.danger>1.5) skEnd('공이 넘쳤습니다!');
+      // 선을 완전히 넘은 공이 있으면 경고만 — 실제로 끝나는 건 다음 공을 놓는 순간(skDrop)
+      suika.danger=skOverflow()?suika.danger+dt:0;
     }
     skDraw();
     suika.raf=requestAnimationFrame(skLoop);
@@ -1170,6 +1224,12 @@
       g.strokeText('다음',S.W-nr*2-22,nr+12); g.fillStyle='#fff'; g.fillText('다음',S.W-nr*2-22,nr+12); skBall(g,null,S.next,S.W-nr-10,nr+12,nr,0.9);
     }
     for(const b of S.balls) skBall(g,b,b.t,b.x,b.y,b.r,S.over?0.5:1);
+    // 넘친 상태 — 다음 공을 놓으면 끝난다는 걸 알려줌
+    if(!S.over&&S.danger>0){
+      g.font='bold 26px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.lineWidth=6;
+      g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText('공을 놓으면 끝!',S.W/2,line-12);
+      g.fillStyle=warn?'#ff6b60':'#ffd166'; g.fillText('공을 놓으면 끝!',S.W/2,line-12);
+    }
     if(S.flash){ if(performance.now()>S.flash.until) S.flash=null;
       else { g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)'; g.strokeText(S.flash.text,S.W/2,line+14); g.fillStyle='#ffcf4a'; g.fillText(S.flash.text,S.W/2,line+14); } }
   }
