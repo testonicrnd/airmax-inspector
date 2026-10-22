@@ -1723,3 +1723,13 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-maxchip { width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:6px; cursor:help; }
 .gm-maxchip:hover { background:rgba(217,162,58,0.25); }
 .gm-maxchip img { height:20px; width:auto; }
+
+/* 창 최소 높이(550px)를 채울 때 남는 공간은 메뉴 줄 위로 */
+.gm-body.padded { display:flex; flex-direction:column; box-sizing:border-box; }
+.gm-body.padded > * { flex-shrink:0; }
+.gm-body.padded > .gm-foot { margin-top:auto; }
+
+/* 제목줄 버튼(고정·투명도·숨기기·닫기) — 같은 크기 칸에 가운데 정렬 */
+.gm-head-btns { display:flex; align-items:center; gap:2px; }
+.gm-head-btns button { display:flex; align-items:center; justify-content:center; width:26px; height:24px; padding:0; line-height:1; font-size:16px; }
+.gm-head-btns button img, .gm-head-btns .gm-pin-ic { width:16px; height:16px; object-fit:contain; margin:0; }

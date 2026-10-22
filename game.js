@@ -362,8 +362,14 @@
     const t=el('gmType'); if(!t) return;
     const v=t.value, clean=v.replace(/\s/g,'');
     if(!clean){ if(/\s/.test(v)) t.value=''; return; }
-    // Space/Enter를 눌렀을 때만 처리 (단어와 같아졌다고 바로 처리하지 않음 — IME에 따라 조합 중 글자가 확정돼 엔터 없이 넘어가던 문제)
+    // 단어와 똑같아지면 Space/Enter 없이 바로 처리. 한글 마지막 글자가 조합 중이어도 넘어가므로,
+    // 입력칸을 잠깐 놓았다 다시 잡아 조합을 끝낸 뒤 비움(안 그러면 조합 중이던 글자가 다음 칸에 남음)
+    if(clean===seq[seqPos]){ wordInput(clean); clearTyped(t); return; }
     if(submit||/\s/.test(v)){ wordInput(clean); t.value=''; }
+  }
+  function clearTyped(t){
+    t.blur(); t.value='';
+    setTimeout(()=>{ t.value=''; if(isVisible()) t.focus(); },0);
   }
   function keyInput(code){
     const want=seq[seqPos];
@@ -557,11 +563,11 @@
   }
   function setLoginMsg(text,err){ const m=el('gmLoginMsg'); if(m){ m.textContent=text; m.classList.toggle('err',!!err); } }
   // 창 크기 고정 — 플레이 화면 높이를 기억해 두고 계단·랭킹·직원 화면도 같은 높이(넘치면 안에서 스크롤)
-  let playH=0;
+  let playH=0; const GM_MIN_H=550;
   function lockBodySize(){ const b=el('gmBody'); if(!b||!playH) return; b.style.height=playH+'px'; b.classList.add('fixed'); }
   function renderPlay(){
     tipIdx=-1; tipSticky=false;
-    { const b=el('gmBody'); b.style.height=''; b.classList.remove('fixed'); }
+    { const b=el('gmBody'); b.style.height=''; b.style.minHeight=''; b.classList.remove('fixed','padded'); }
     el('gmBody').innerHTML=`
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
@@ -585,6 +591,8 @@
       <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}미니게임 월드</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
+    { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
+      if(short>0){ b.style.minHeight=(b.offsetHeight+short)+'px'; b.classList.add('padded'); } }
     playH=el('gmBody').offsetHeight;
     bindUpgradeHold(el('gmUps'));
     const t=el('gmType');
@@ -597,7 +605,7 @@
           if(e.isComposing||e.keyCode===229){ enterPending=true; setTimeout(()=>{ if(enterPending){ enterPending=false; checkTyped(true); } },80); } else checkTyped(true);
         }
       });
-      t.addEventListener('input',e=>{ lastInput=Date.now(); if(!e.isComposing) checkTyped(false); });
+      t.addEventListener('input',()=>{ lastInput=Date.now(); checkTyped(false); }); // 조합 중이어도 단어가 똑같아지면 바로 처리
       // 한글 조합이 끝난 뒤(Space/Enter로 마지막 글자 확정) — 값이 반영된 다음에 확인
       t.addEventListener('compositionend',()=>setTimeout(()=>{ const sub=enterPending; enterPending=false; checkTyped(sub); },0));
     }
