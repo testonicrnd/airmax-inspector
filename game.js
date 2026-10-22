@@ -1670,7 +1670,15 @@
     if(!pid||!token){ renderNick(); (nick?el('gmPin'):el('gmNick'))?.focus(); return; }
     // 이 기기 저장으로 바로 시작 — 서버 확인은 뒤에서(느린 서버 때문에 기다리지 않게). 다른 기기 진행이 더 최신이면 바꿔서 이어감
     startPlay();
+    prefetchRank();
     if(await loadServer()&&mon){ combo=0; spawn(st.kills>=10); renderPlay(); focusPlay(); toast('다른 기기의 최신 진행을 불러왔습니다',2500); }
+  }
+  // 서버가 2초쯤 걸리므로, 게임을 켠 직후 조용히 한 번 받아 둔다. 눌렀을 때 바로 뜬다.
+  function prefetchRank(){
+    if(!pid||rankCache.promo) return;
+    gas({action:'gameRanking',playerId:pid,board:'promo'})
+      .then(j=>{ if(j&&j.success) rankCache.promo=j; })
+      .catch(()=>{});
   }
   function startPlay(){
     applyOffline();
