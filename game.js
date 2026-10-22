@@ -214,6 +214,15 @@
   ];
   const EVENT_HOURS=[10,11,12,13,14,15,16,17], EVENTS_PER_DAY=3;
   let evOff=false, lastEventId='';
+  // 돌발 이벤트 — 슈퍼 관리자가 켜면 서버가 저장하고, 로그인·불러오기·저장 응답으로 모두에게 전달된다
+  let forcedEv=null;
+  function setForced(f){ forcedEv=(f&&f.ev&&f.until&&Date.now()<f.until)?f:null; }
+  function forcedEvent(){
+    if(!forcedEv) return null;
+    if(Date.now()>=forcedEv.until){ forcedEv=null; return null; }
+    const e=EVENTS.find(x=>x.id===forcedEv.ev);
+    return e?{...e,left:Math.ceil((forcedEv.until-Date.now())/1000),forced:true}:null;
+  }
   function kst(){ const d=new Date(Date.now()+9*3600e3); return {key:d.toISOString().slice(0,10),h:d.getUTCHours(),m:d.getUTCMinutes(),s:d.getUTCSeconds(),wd:d.getUTCDay()}; }
   function seeded(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
     return ()=>{ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); h^=h>>>16; return (h>>>0)/4294967296; }; }
@@ -224,12 +233,26 @@
   }
   function currentEvent(){
     if(evOff) return null;
+    const f=forcedEvent(); if(f) return f; // 돌발 이벤트가 정규 일정보다 우선
     const k=kst();
     if(k.wd===0||k.wd===6) return null; // 이벤트는 평일만
     const slot=eventsOn(k.key).find(x=>x.h===k.h);
     return slot?{...slot.ev,left:(59-k.m)*60+(60-k.s)}:null;
   }
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
+  const EV_DAYS=['일','월','화','수','목','금','토'];
+  // 다음 이벤트 — 이벤트 줄은 늘 한 줄을 차지하므로, 쉬는 동안에는 다음 시각을 보여준다(빈 줄 낭비 방지)
+  function nextEvent(){
+    const k=kst();
+    for(let d=0;d<8;d++){
+      const day=new Date(Date.now()+9*3600e3+d*86400e3), wd=day.getUTCDay();
+      if(wd===0||wd===6) continue;
+      const key=day.toISOString().slice(0,10);
+      const slot=eventsOn(key).find(x=>d>0||x.h>k.h);
+      if(slot) return {h:slot.h,ev:slot.ev,today:d===0,days:d,wd:wd};
+    }
+    return null;
+  }
   /* ---------- 사장까지 키운 선배의 격려 ---------- */
   // 사장을 달성한 다른 직원이 있으면, 업무를 끝낼 때 가끔 그 직원이 격려를 보낸다. 직원마다 효과가 다름.
   // 여러 명이 동시에 격려할 수 있다. 같은 사장은 겹치지 않고 남은 시간만 늘어난다.
@@ -238,6 +261,16 @@
   function cheerMult(kind){ let m=1; cheerOn().forEach(c=>{ if(c.def.kind===kind) m*=c.def.v; }); return m; }
   function cheerAdd(kind){ let a=0; cheerOn().forEach(c=>{ if(c.def.kind===kind) a+=c.def.v; }); return a; }
   function cheerHas(kind){ return cheerOn().some(c=>c.def.kind===kind); }
+  // 격려가 터질 때 선배가 잠깐 등장해 한마디 — 버프 이름을 대사처럼 씀
+  function cheerFx(ch,c){
+    const arena=el('gmArena'); if(!arena||!c||!c.body) return;
+    const d=document.createElement('div');
+    d.className='gm-cheer-fx';
+    d.innerHTML=`<div class="gm-cheer-say"><b>${escHtml(c.name)} 사장님</b>${escHtml(c.cheer.name)}!</div>`+
+      `<img src="${escHtml(c.body)}" alt=""/>`;
+    arena.appendChild(d);
+    setTimeout(()=>d.remove(),2300);
+  }
   // 지금 키우는 직원 말고, 사장까지 키워 둔 선배들
   function seniors(){ return acc.runs.map((r,i)=>r&&r.done&&i!==acc.ch?i:-1).filter(i=>i>=0); }
   function tryCheer(){
@@ -248,6 +281,7 @@
     const ch=list[Math.floor(Math.random()*list.length)], c=CHARS[ch];
     if(!c||!c.cheer) return;
     cheers.push({ch,def:c.cheer,until:Date.now()+c.cheer.sec*1000});
+    cheerFx(ch,c);
     toast(`${c.cheer.icon} ${c.name} 사장님의 격려 — ${c.cheer.desc} (${c.cheer.sec}초)`,3200);
     fxPop('fx-cheer',{x:3,cls:'lvup',gap:260,ms:1300});
     // 키워 둔 선배가 전원 동시에 격려 — 흔치 않으니 따로 알려줌
@@ -352,6 +386,7 @@
     try{
       const j=await gas({action:'gameSave',playerId:pid,token,state:JSON.stringify(acc)});
       if(j.auth===false){ authLost(); return; }
+      setForced(j.forcedEvent);
       serverOk=!!j.success;
     }catch(e){ serverOk=false; }
     renderSaveState();
@@ -363,6 +398,7 @@
       if(j.auth===false){ authLost(); return false; }
       if(!j.success){ serverOk=false; return false; }
       serverOk=true;
+      setForced(j.forcedEvent);
       // 서버 쪽이 더 최근에 저장됐으면(다른 기기에서 플레이) 서버 진행을 사용
       if(j.found&&j.state&&(j.state.lastSave||0)>(acc.lastSave||0)){ useAcc(hydrate(j.state)); saveLocal(); return true; }
     }catch(e){ serverOk=false; }
@@ -825,10 +861,22 @@
       }
     }
     const ev=currentEvent(), eb=el('gmEvent');
-    if(eb){ if(ev){ eb.style.display='';
+    if(eb){
+      eb.style.display=''; // 늘 한 줄을 차지 — 이벤트가 켜지고 꺼질 때 창 높이가 바뀌지 않게
+      eb.classList.toggle('on',!!ev);
+      if(ev){
         if(eb.dataset.id!==ev.id){ eb.innerHTML=`<img class="gm-ev-ic" src="${UI}${ev.img}.png" alt=""/><span class="gm-ev-txt"><b>${ev.name}</b> · ${ev.desc}</span><span class="gm-ev-left" id="gmEvLeft"></span>`; eb.dataset.id=ev.id; }
-        el('gmEvLeft').textContent=`${Math.ceil(ev.left/60)}분`; }
-      else { eb.style.display='none'; eb.dataset.id=''; } }
+        el('gmEvLeft').textContent=`${Math.ceil(ev.left/60)}분`;
+      } else {
+        const nx=nextEvent(), id='next'+(nx?nx.days+'-'+nx.h:'');
+        if(eb.dataset.id!==id){
+          eb.innerHTML=nx
+            ?`<img class="gm-ev-ic" src="${UI}${nx.ev.img}.png" alt=""/><span class="gm-ev-txt">다음 깜짝 이벤트 <b>${nx.today?'오늘':nx.days===1?'내일':EV_DAYS[nx.wd]+'요일'} ${nx.h}:00</b></span><span class="gm-ev-left">대기</span>`
+            :`<span class="gm-ev-txt">깜짝 이벤트는 평일에만 열립니다</span>`;
+          eb.dataset.id=id;
+        }
+      }
+    }
     if(mon){
       el('gmHpBar').style.width=Math.max(0,mon.hp/mon.max*100)+'%';
       el('gmHpBar').parentElement.classList.toggle('boss',!!mon.boss);
@@ -945,6 +993,9 @@
   async function gas2(action,extra){ return gas(Object.assign({action,adminToken:gameAdminToken()},extra||{})); }
   function admWrap(inner){
     return `<div class="gm-adm-title">${menuIcon('rank')} 게임 관리 <small>슈퍼 관리자</small></div>`+inner+
+      `<div class="gm-adm-sec">돌발 이벤트 <small>누르면 모두에게 30분 동안 걸립니다</small></div>`+
+      `<div class="gm-adm-evs">${EVENTS.map(e=>`<button type="button" title="${escHtml(e.name)} — ${escHtml(e.desc)}" onclick="gmAdminEvent('${e.id}')"><img src="${UI}${e.img}.png" alt=""/><span>${escHtml(e.name)}</span></button>`).join('')}`+
+      `<button type="button" class="off" title="돌발 이벤트 끄기" onclick="gmAdminEvent('')"><span>끄기</span></button></div>`+
       `<div class="gm-adm-btns"><button type="button" class="gm-btn" onclick="gmAdminBackup()">지금 백업</button>`+
       `<button type="button" class="gm-btn danger" onclick="gmAdminResetAll()">랭킹 전체 초기화</button></div>`+
       `<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
@@ -984,6 +1035,14 @@
       toast(j.success?`✅ ${j.message||'완료'}`:`⚠ ${j.error||'실패'}`,3200);
     }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
     gmShowAdmin();
+  };
+  window.gmAdminEvent=async function(ev){
+    try{
+      const j=await gas2('gameAdminEvent',{ev,minutes:30});
+      if(j.success) setForced(j.forcedEvent||null);
+      toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500);
+      render();
+    }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
   };
   window.gmAdminBackup=async function(){
     try{ const j=await gas2('gameAdminBackup'); toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500); }
@@ -1653,7 +1712,7 @@
   if(window.__GM_TEST) window.__gmCheer=function(ch){ // 자동 테스트에서 격려를 강제로 걸어봄(누적)
     const i=ch||0, c=CHARS[i]; if(!c||!c.cheer) return null;
     if(cheers.some(x=>x.ch===i)) return cheers;
-    cheers.push({ch:i,def:c.cheer,until:Date.now()+c.cheer.sec*1000}); render(); return cheers;
+    cheers.push({ch:i,def:c.cheer,until:Date.now()+c.cheer.sec*1000}); if(!window.__GM_NOFX) cheerFx(i,c); render(); return cheers;
   };
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;

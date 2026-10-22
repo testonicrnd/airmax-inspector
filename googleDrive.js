@@ -1150,6 +1150,17 @@ function gameReadState(row) {
 }
 // ===== 관리 기능 (슈퍼 관리자 전용) =====
 // 목록 조회 / 한 사람 진행 초기화 / 삭제 / PIN 잠금 해제 / 지금 백업 / 전체 랭킹 초기화
+// 돌발 이벤트 — 슈퍼 관리자가 켜면 모두에게 같은 이벤트가 걸린다. 스크립트 속성에 {ev, until}로 보관.
+var GAME_EVENT_PROP = 'GAME_FORCED_EVENT';
+function readForcedEvent() {
+    try {
+        var raw = PropertiesService.getScriptProperties().getProperty(GAME_EVENT_PROP);
+        if (!raw) return null;
+        var o = JSON.parse(raw);
+        if (!o || !o.ev || !o.until || Date.now() > o.until) return null;
+        return o;
+    } catch (e) { return null; }
+}
 function handleGameAdmin(data) {
     try {
         if (getAdminLevel(data.adminToken) !== 'super') {
@@ -1160,6 +1171,14 @@ function handleGameAdmin(data) {
         var values = last >= 2 ? sheet.getRange(2, 1, last - 1, GAME_HEADERS.length).getValues() : [];
         var act = data.action;
 
+        if (act === 'gameAdminEvent') {
+            var props = PropertiesService.getScriptProperties();
+            if (!data.ev) { props.deleteProperty(GAME_EVENT_PROP); return buildJson({ success: true, message: '돌발 이벤트를 껐습니다.' }); }
+            var mins = Math.min(Math.max(Number(data.minutes) || 30, 1), 240);
+            var rec = { ev: String(data.ev), until: Date.now() + mins * 60000 };
+            props.setProperty(GAME_EVENT_PROP, JSON.stringify(rec));
+            return buildJson({ success: true, message: '돌발 이벤트를 ' + mins + '분 동안 켰습니다.', forcedEvent: rec });
+        }
         if (act === 'gameAdminBackup') return buildJson({ success: true, message: backupGameRanking() });
 
         if (act === 'gameAdminResetAll') {
@@ -1295,9 +1314,9 @@ function handleGameAction(data) {
         if (idx < 0 && token) return buildJson({ success: false, auth: false, error: '계정을 찾을 수 없습니다. 다시 로그인해주세요.' });
 
         if (data.action === 'gameLoad') {
-            if (idx < 0) return buildJson({ success: true, found: false });
+            if (idx < 0) return buildJson({ success: true, found: false, forcedEvent: readForcedEvent() });
             var saved = gameReadState(values[idx]);
-            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved });
+            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved, forcedEvent: readForcedEvent() });
         }
 
         // gameSave — 새 행은 로그인(gameLogin)으로만 만들어짐. 닉네임은 가입할 때 정한 것을 유지
@@ -1314,7 +1333,7 @@ function handleGameAction(data) {
         } finally {
             saveLock.releaseLock();
         }
-        return buildJson({ success: true, savedAt: saveNow });
+        return buildJson({ success: true, savedAt: saveNow, forcedEvent: readForcedEvent() });
     } catch (err) {
         return buildJson({ success: false, error: err.message });
     }
@@ -1433,12 +1452,12 @@ var ADMIN_ONLY_ACTIONS = {
     saveResults: true, getMonthGrid: true, getWeeklyReportDraft: true, saveWeeklyReport: true,
     getInspectors: true, addInspector: true, removeInspector: true,
     gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
-    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true
 };
 // 아래 관리 기능은 슈퍼 관리자만 — 남의 기록을 지우는 일이라 일반 관리자에게는 열지 않음
 var GAME_ADMIN_ACTIONS = {
     gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
-    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true
 };
 var ADMIN_TOKENS_PROP = 'ADMIN_TOKENS';
 var ADMIN_TOKEN_LIMIT = 50;          // 저장해 둘 최대 토큰 수 (넘으면 오래된 것부터 정리)
