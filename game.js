@@ -190,9 +190,11 @@
   }
   function newSeq(){
     if(usingWords()){
-      // 일반 업무는 단어 1개, 보스는 여러 개(같은 단어 연속은 피함)
+      // 일반 업무는 단어 1개, 보스는 여러 개(같은 단어 연속은 피함).
+      // 커피 수혈(자동 처리)로 업무가 먼저 끝나도 치고 있던 단어는 바뀌지 않게 — 안 끝난 단어를 새 업무의 첫 단어로 이어감
       const n=mon&&mon.boss?BOSS_WORDS:1;
-      seq=[];
+      const carry=typeof seq[seqPos]==='string'?seq[seqPos]:null;
+      seq=carry?[carry]:[];
       while(seq.length<n){ const w=words[Math.floor(Math.random()*words.length)]; if(w!==seq[seq.length-1]||words.length<2) seq.push(w); }
     } else {
       seq=Array.from({length:seqLen()},()=>KEYS[Math.floor(Math.random()*KEYS.length)]);
