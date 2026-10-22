@@ -1387,6 +1387,15 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-bar { height:6px; border-radius:3px; background:var(--border2); overflow:hidden; margin-top:4px; }
 .gm-bar i { display:block; height:100%; width:0; background:var(--accent); transition:width 0.15s; }
 .gm-bar.hp i { background:#d93025; }
+/* 선배 사장님의 격려 — 버프가 걸려 있는 동안만 보임 */
+.gm-cheer { display:flex; align-items:center; gap:7px; margin:6px 0 0; padding:6px 9px; border-radius:10px;
+  background:linear-gradient(90deg, rgba(255,207,74,0.22), rgba(255,207,74,0.06)); border:1px solid rgba(255,183,0,0.45);
+  font-size:11px; line-height:1.25; animation:gmCheerIn 0.25s ease-out; }
+.gm-cheer img { width:22px; height:22px; border-radius:50%; object-fit:cover; flex:none; background:#fff; }
+.gm-cheer b { color:var(--text1); font-weight:700; white-space:nowrap; }
+.gm-cheer span { color:var(--text2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-cheer em { font-style:normal; font-weight:700; color:#c47b00; flex:none; }
+@keyframes gmCheerIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
 .gm-stats { display:flex; justify-content:space-between; gap:6px; margin:8px 0; color:var(--text2); font-size:12px; }
 .gm-arena { position:relative; display:block; width:100%; padding:8px 10px 10px; border:1.5px dashed var(--border); border-radius:10px;
   background:var(--bg); color:var(--text); font-family:inherit; cursor:pointer; touch-action:manipulation; overflow:hidden; }

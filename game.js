@@ -69,7 +69,7 @@
   // 그림 리소스(assets/game/ui) — 스킬·업무·아이템 아이콘, 월드 지도, 계단 배경·발판
   const UI='assets/game/ui/';
   const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay',
-    bossLv:'ext',preLv:'proj',vetLv:'mast',critPowLv:'crit',orgLv:'caf',signLv:'focus'};
+    bossLv:'boss',preLv:'pre',vetLv:'vet',critPowLv:'critpow',orgLv:'org',signLv:'sign'};
   const TASK_IMG={'메일 폭탄':'mail','엑셀 정리':'excel','주간 보고서':'report','고객 전화':'phone','서류 더미':'papers','첨부 누락':'clip',
     '프린터 고장':'printer','회의록':'notebook','시스템 오류':'laptop','점검표 취합':'clipboard',
     '어항 청소':'fishbowl','어항 물갈기':'fishbowl','사장님 차 세차':'bucket','사장님 개인 심부름':'shopping','손님 커피 타기':'coffee2',
@@ -103,7 +103,26 @@
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
   function drawCover(g,im,W,H){ const k=Math.max(W/im.naturalWidth,H/im.naturalHeight), w=im.naturalWidth*k, h=im.naturalHeight*k; g.drawImage(im,(W-w)/2,(H-h)/2,w,h); } // 사장 = 만렙(150)
   // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
-  const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png?v=2'},{name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png?v=2'},{name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png'},{name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png'},{name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png?v=2'},{name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png'},{name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png'}];
+  // 사장까지 키운 직원은 회사에 남아, 지금 키우는 직원에게 가끔 '격려'를 보낸다 — 직원마다 효과가 다름.
+  // kind: power 업무력 / auto 커피 수혈 / gold 실적 / exp 경험치 / boss 보스 처리량 / crit 몰입 확률(+%p) / combo 콤보 유지 / golden 황금 업무
+  const CHARS=[
+    {name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png',
+      cheer:{icon:'⌨️',name:'직접 뛰는 사장',kind:'power',v:3,sec:10,desc:'처리량 ×3'}},
+    {name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png?v=2',
+      cheer:{icon:'☕',name:'커피 한 잔 하자',kind:'auto',v:5,sec:12,desc:'커피 수혈 ×5'}},
+    {name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png?v=2',
+      cheer:{icon:'💸',name:'이번 달 성과금',kind:'gold',v:3,sec:12,desc:'실적 ×3'}},
+    {name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png',
+      cheer:{icon:'🔥',name:'집중해서 가자',kind:'crit',v:0.5,sec:10,desc:'몰입 확률 +50%p'}},
+    {name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png',
+      cheer:{icon:'📋',name:'결재는 내가 본다',kind:'boss',v:2.5,sec:15,desc:'보스 처리량 ×2.5'}},
+    {name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png?v=2',
+      cheer:{icon:'📈',name:'배우면서 해라',kind:'exp',v:3,sec:15,desc:'경험치 ×3'}},
+    {name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png',
+      cheer:{icon:'🔗',name:'흐름 끊지 마라',kind:'combo',v:1,sec:10,desc:'틀려도 콤보 유지'}},
+    {name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png',
+      cheer:{icon:'🌟',name:'오늘은 다 황금이다',kind:'golden',v:1,sec:8,desc:'모든 업무가 황금 업무'}},
+  ];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
   // PC 단어 입력 — 점검표에서 쓰는 짧은 단어 + 점검 장소/세부구역을 잘게 나눈 단어(2~6글자)를 섞어서 사용
   const WORD_BASE=['매트','집진기','소모품','흡입력','풍속계','풍속','호스','브라켓','연결부','센서','전원','동작상태','표시상태','통신상태','모뎀',
@@ -146,9 +165,9 @@
   const UPGRADES=[
     {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'키 1번에'} ${fmt(power({...st,atkLv:lv})*(usingWords()?1.3:1))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
     {key:'autoLv',  icon:'☕', name:'커피 수혈',   desc:lv=>`가만히 있어도 초당 ${fmt(autoDps({...st,autoLv:lv}))} 처리`, base:30, grow:1.09, max:9999},
-    {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
+    {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>lv?`${Math.round(critChance(lv)*100)}% 확률로 ${critMult().toFixed(1)}배 처리`:'아직 효과 없음 — 1레벨부터 1%씩', base:60, grow:1.11, max:100},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
-    {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
+    {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>lv?`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`:'아직 효과 없음 — 1레벨부터 10분', base:60, grow:1.3, max:47},
     {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
     {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
     {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
@@ -160,7 +179,7 @@
     {key:'projLv',  icon:'🏆', name:'프로젝트 달성', desc:lv=>`${(projChance(lv)*100).toFixed(1)}% 확률로 20배 처리 (크리티컬 상위)`, base:1500000000, grow:1.35, max:20, req:50},
     {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:1000000000, grow:1.35, max:20, req:50},
     // 임원 강화 — 과장부터 직급마다 하나씩 열림. 보스(결재)가 8배 단단해서 고직급에서 막히던 걸 푸는 게 목적
-    {key:'bossLv',    icon:'🎯', name:'결재 집중', desc:lv=>`보스(결재)에게 주는 처리량 ×${(1+0.25*lv).toFixed(2)}`, base:40000000, grow:1.32, max:20, req:35},
+    {key:'bossLv',    icon:'🎯', name:'결재 집중', desc:lv=>`보스(결재)에게 주는 처리량 ×${(1+0.2*lv).toFixed(2)}`, base:40000000, grow:1.32, max:20, req:35},
     {key:'preLv',     icon:'📌', name:'선결재',    desc:lv=>`보스(결재)를 ${(2.5*lv).toFixed(1)}% 처리된 상태로 시작`, base:1200000000, grow:1.38, max:12, req:50},
     {key:'vetLv',     icon:'🏋️', name:'관록',      desc:lv=>`업무력 ×${(1+0.2*lv).toFixed(1)} (숙련과 곱해짐)`, base:20000000000, grow:1.35, max:15, req:70},
     {key:'critPowLv', icon:'💥', name:'과몰입',    desc:lv=>`몰입이 터질 때 ${(3+0.5*lv).toFixed(1)}배 처리`, base:80000000000, grow:1.38, max:14, req:95},
@@ -211,20 +230,40 @@
     return slot?{...slot.ev,left:(59-k.m)*60+(60-k.s)}:null;
   }
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
+  /* ---------- 사장까지 키운 선배의 격려 ---------- */
+  // 사장을 달성한 다른 직원이 있으면, 업무를 끝낼 때 가끔 그 직원이 격려를 보낸다. 직원마다 효과가 다름.
+  let cheer=null; // {ch, def, until}
+  function cheerOn(){ if(cheer&&Date.now()>cheer.until) cheer=null; return cheer; }
+  function cheerMult(kind){ const c=cheerOn(); return c&&c.def.kind===kind?c.def.v:1; }
+  function cheerAdd(kind){ const c=cheerOn(); return c&&c.def.kind===kind?c.def.v:0; }
+  function cheerHas(kind){ const c=cheerOn(); return !!(c&&c.def.kind===kind); }
+  // 지금 키우는 직원 말고, 사장까지 키워 둔 선배들
+  function seniors(){ return acc.runs.map((r,i)=>r&&r.done&&i!==acc.ch?i:-1).filter(i=>i>=0); }
+  function tryCheer(){
+    if(cheerOn()) return;
+    const list=seniors(); if(!list.length) return;
+    if(Math.random()>=Math.min(0.02*list.length,0.1)) return; // 선배 1명당 2%, 최대 10%
+    const ch=list[Math.floor(Math.random()*list.length)], c=CHARS[ch];
+    if(!c||!c.cheer) return;
+    cheer={ch,def:c.cheer,until:Date.now()+c.cheer.sec*1000};
+    toast(`${c.cheer.icon} ${c.name} 사장님의 격려 — ${c.cheer.desc} (${c.cheer.sec}초)`,3200);
+    fxPop('fx-levelup',{x:3,cls:'lvup',gap:260,ms:1100});
+    render();
+  }
   function evChance(kind){ const e=currentEvent(); return e&&e[kind]||0; }
 
-  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*vetMult(s)*evMult('power'); } // 업무력 × 숙련 × 관록 × 이벤트
+  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*vetMult(s)*evMult('power')*cheerMult('power'); } // 업무력 × 숙련 × 관록 × 이벤트
   // 임원 강화 — 기존 강화를 한 번 더 곱해서 올림. 보스(결재)가 일반 업무보다 8배 단단해서 고직급에서 막히던 걸 푼다
   function vetMult(s){ return 1+0.2*((s||st).vetLv||0); }            // 관록 — 업무력 자체를 배수로
   function orgMult(s){ return 1+0.3*((s||st).orgLv||0); }            // 조직력 — 커피 수혈을 배수로
-  function bossMult(){ return 1+0.25*(st.bossLv||0); }               // 결재 집중 — 보스에게 주는 처리량만
+  function bossMult(){ return (1+0.2*(st.bossLv||0))*cheerMult('boss'); }                // 결재 집중 — 보스에게 주는 처리량만(만렙 ×5 — 선결재와 합쳐도 보스가 일반 업무보다 조금 단단하게 남도록)
   function preRate(){ return Math.min(0.025*(st.preLv||0),0.9); }    // 선결재 — 보스를 일부 처리된 상태로 시작
   function critMult(){ return 3+0.5*(st.critPowLv||0); }             // 과몰입 — 크리티컬 배수
   function signMult(){ return 1+0.3*(st.signLv||0); }                // 전결권 — 보스 중 콤보 한계
   // 커피 수혈 — +0.3: 강화 전에도 아주 천천히 자동 처리. 카페인 중독으로 증가.
   // 각성은 커피 전용 크리티컬(레벨당 1%, 최대 10%) — 방치만으로 너무 강해지지 않게 직접 플레이 몰입(최대 100%)과 따로 둠
-  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0))*orgMult(s)*evMult('auto'); }
-  function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
+  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0))*orgMult(s)*evMult('auto')*cheerMult('auto'); }
+  function critChance(critLv){ return Math.min(critLv*0.01,1); } // Lv.0은 효과 없음, 레벨당 +1% — Lv.100에서 100%
   function projChance(projLv){ return Math.min(0.005*projLv,0.1); }
   function offRate(payLv){ return OFFLINE_RATE+0.02*(payLv||0); }
   function bossTime(){ return BOSS_TIME+2*(st.extLv||0); }
@@ -232,10 +271,11 @@
   // 연속 성공마다 +5%(단어는 +10%), 최대 2배(집중력으로 증가). 보스 중에는 전결권만큼 한계가 더 올라감
   function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),(2+0.1*(st.focusLv||0))*(mon&&mon.boss?signMult():1)); }
   function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
-  function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv)*evMult('gold'); return Math.ceil(boss?r*8:r); }
+  function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv)*evMult('gold')*cheerMult('gold'); return Math.ceil(boss?r*8:r); }
   function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
   function costOf(u,lv){ return Math.ceil(u.base*Math.pow(u.grow,lv)); }
-  function offlineCapMin(offLv){ return OFFLINE_BASE_MIN+OFFLINE_STEP_MIN*offLv; }
+  // Lv.0은 효과 없음(자리를 비우면 아무것도 처리되지 않음). 1레벨이 기존 기본값인 10분, 이후 레벨당 +5분
+  function offlineCapMin(offLv){ return offLv>0?OFFLINE_BASE_MIN+OFFLINE_STEP_MIN*(offLv-1):0; }
   function fmtMin(m){ return m>=60?`${Math.floor(m/60)}시간${m%60?' '+(m%60)+'분':''}`:`${m}분`; }
   function rankOf(lv){ let r=RANKS[0]; RANKS.forEach(x=>{ if(lv>=x[0]) r=x; }); return r; }
   function seqLen(){ return Math.min(4+Math.floor(st.stage/3),10)+(mon&&mon.boss?2:0); } // (휴대폰 탭) 단계가 오를수록 키 순서가 길어짐
@@ -334,7 +374,7 @@
     const tp=poolFor(TASKS,rk);
     const t=boss?b:tp[Math.floor(Math.random()*tp.length)];
     const max=hpOf(st.stage,boss);
-    const golden=!boss&&Math.random()<evChance('golden');
+    const golden=!boss&&(cheerHas('golden')||Math.random()<evChance('golden'));
     // 선결재 — 보스는 일부가 이미 처리된 상태로 시작(막대는 그만큼 줄어 보임)
     mon={boss,emoji:t[0],name:t[1],hp:boss?Math.ceil(max*(1-preRate())):max,max,deadline:boss?Date.now()+bossTime()*1000:0,golden};
     newSeq();
@@ -370,10 +410,11 @@
     gainExp(mon.boss?st.stage*6:st.stage);
     if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); }
     else st.kills++;
+    tryCheer();
     spawn(st.kills>=10);
   }
   function gainExp(n,quiet){
-    st.exp+=n*evMult('exp');
+    st.exp+=n*evMult('exp')*cheerMult('exp');
     if(st.lv>=BOSS_LV){ st.lv=BOSS_LV; st.exp=0; } // 만렙 — 경험치는 더 쌓지 않음
     while(st.lv<BOSS_LV&&st.exp>=expNeed(st.lv)){
       st.exp-=expNeed(st.lv); st.lv++;
@@ -399,7 +440,7 @@
   // 직접 처리 한 번 — 프로젝트 달성(20배)이 먼저, 아니면 몰입(3배) 판정
   function strike(base){
     if(Math.random()<projChance(st.projLv||0)){ floatText('🏆 프로젝트 달성!',true,true); fxPop('fx-project',{cls:'big',ms:1200}); hit(base*20,true,true); return; }
-    const crit=Math.random()<critChance(st.critLv);
+    const crit=Math.random()<Math.min(critChance(st.critLv)+cheerAdd('crit'),1);
     if(crit) fxPop('fx-crit',{gap:120});
     hit(base*(crit?critMult():1),crit,true);
   }
@@ -420,7 +461,7 @@
       wordPop(want);
       if(mon&&seqPos>=seq.length){ if(seq.length>1) floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
-      combo=0;
+      if(!cheerHas('combo')) combo=0; // 천병석 사장님의 격려 중에는 틀려도 콤보가 안 풀림
       const k=el('gmKeys'); if(k){ k.classList.remove('miss'); void k.offsetWidth; k.classList.add('miss'); }
       renderKeys();
     }
@@ -471,7 +512,7 @@
       work(comboMult());
       if(mon&&seqPos>=seq.length){ floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
-      combo=0;
+      if(!cheerHas('combo')) combo=0; // 천병석 사장님의 격려 중에는 틀려도 콤보가 안 풀림
       const k=el('gmKeys'); if(k){ k.classList.remove('miss'); void k.offsetWidth; k.classList.add('miss'); }
       renderKeys();
     }
@@ -664,6 +705,7 @@
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
       <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
+      <div class="gm-cheer" id="gmCheer" style="display:none"></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         ${bodyHtml(acc.ch)}
         <div class="gm-task">
@@ -738,6 +780,14 @@
     el('gmGold').textContent=fmt(st.gold);
     el('gmStage').textContent=`${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
     el('gmDps').textContent=`초당 ${fmt(autoDps(st))}`;
+    // 선배 사장님의 격려가 걸려 있으면 남은 시간과 함께 보여줌
+    const cb=el('gmCheer'), cz=cheerOn();
+    if(cb){
+      if(cz){ const left=Math.max(0,Math.ceil((cz.until-Date.now())/1000)), c=CHARS[cz.ch]||{};
+        cb.style.display='';
+        cb.innerHTML=`<img src="${escHtml(c.face||'')}" alt=""/><b>${escHtml(c.name||'')} 사장님의 격려</b><span>${cz.def.icon} ${escHtml(cz.def.desc)}</span><em>${left}초</em>`;
+      } else cb.style.display='none';
+    }
     const ev=currentEvent(), eb=el('gmEvent');
     if(eb){ if(ev){ eb.style.display='';
         if(eb.dataset.id!==ev.id){ eb.innerHTML=`<img class="gm-ev-ic" src="${UI}${ev.img}.png" alt=""/><span class="gm-ev-txt"><b>${ev.name}</b> · ${ev.desc}</span><span class="gm-ev-left" id="gmEvLeft"></span>`; eb.dataset.id=ev.id; }
@@ -1493,6 +1543,10 @@
     if(seq[seqPos]) keyInput(seq[seqPos][0]);
   };
   window.gmBuy=buy;
+  if(window.__GM_TEST) window.__gmCheer=function(ch){ // 자동 테스트에서 격려를 강제로 걸어봄
+    const c=CHARS[ch||0]; if(!c||!c.cheer) return null;
+    cheer={ch:ch||0,def:c.cheer,until:Date.now()+c.cheer.sec*1000}; render(); return cheer;
+  };
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
