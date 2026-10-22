@@ -33,7 +33,7 @@
   const RANKS=[[1,'🧑‍🎓','인턴'],[5,'🧑‍💻','사원'],[12,'🧑‍💼','주임'],[22,'👨‍💼','대리'],[35,'🕴️','과장'],[50,'🎩','차장'],[70,'👑','부장'],[95,'🦸','이사'],[130,'🚀','사장']];
   const BOSS_LV=RANKS[RANKS.length-1][0];
   // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
-  const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png'},{name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png'},{name:'이용훈'},{name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png'},{name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png'},{name:'천병석'},{name:'오찬근'}];
+  const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png'},{name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png'},{name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png'},{name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png'},{name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png'},{name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png'},{name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png'}];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
   // PC 단어 입력 — 점검표에서 쓰는 짧은 단어 + 점검 장소/세부구역을 잘게 나눈 단어(2~6글자)를 섞어서 사용
   const WORD_BASE=['매트','집진기','소모품','흡입력','풍속계','풍속','호스','브라켓','연결부','센서','전원','동작상태','표시상태','통신상태','모뎀',
