@@ -1481,3 +1481,24 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-ups::-webkit-scrollbar { width:5px; }
 .gm-ups::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
 .gm-ups .gm-up { flex-shrink:0; }
+
+/* 테스토닉 키우기 — 강화 타일(4칸) + ? 설명 말풍선 */
+.gm-ups { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; max-height:none; overflow:visible; padding-right:0; }
+.gm-tile { position:relative; display:flex; flex-direction:column; align-items:center; gap:1px; min-width:0; padding:7px 2px 5px; border:1.5px solid var(--border); border-radius:9px;
+  background:var(--input-bg); color:var(--text); font-family:inherit; cursor:pointer; transition:transform 0.08s, border-color 0.15s; }
+.gm-tile:hover { border-color:var(--accent); }
+.gm-tile:active { transform:scale(0.95); }
+.gm-tile.off { opacity:0.5; }
+.gm-tile.locked { opacity:0.4; cursor:default; filter:grayscale(1); }
+.gm-tile.maxed { border-color:#d9a23a; }
+.gm-tile-icon { font-size:18px; line-height:1.1; }
+.gm-tile-name { font-size:10.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.gm-tile-lv { font-size:10px; color:var(--text3); }
+.gm-tile-cost { font-size:10px; font-weight:600; min-height:13px; white-space:nowrap; }
+.gm-tile-q { position:absolute; top:2px; right:3px; width:14px; height:14px; border-radius:50%; font-size:9.5px; line-height:14px; text-align:center;
+  background:var(--border2); color:var(--text3); cursor:help; }
+.gm-tile-q:hover { background:var(--accent); color:#fff; }
+.gm-tip { position:absolute; left:10px; right:10px; z-index:6; padding:8px 10px; border-radius:8px; background:var(--btn-bg); color:var(--btn-text);
+  font-size:11.5px; line-height:1.55; box-shadow:0 4px 14px rgba(0,0,0,0.25); pointer-events:none; word-break:keep-all; }
+.gm-tip span { opacity:0.7; font-size:10.5px; }
+.gm-float.project { font-size:15px; color:#d9a23a; font-weight:800; }

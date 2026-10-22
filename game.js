@@ -71,16 +71,24 @@
   // 휴대폰 탭용 키 — 방향키 + 알파벳
   const KEYS=[['ArrowUp','↑'],['ArrowDown','↓'],['ArrowLeft','←'],['ArrowRight','→'],
     ...'ASDFJKLEIRUWO'.split('').map(c=>['Key'+c,c])];
-  // 강화 — 비용은 완만하게 오르고, 업무력은 25레벨마다 2배 보너스. 몰입은 97레벨에 크리티컬 100%
+  // 강화 — 비용은 완만하게 오르고, 업무력은 25레벨마다 2배 보너스. 몰입은 97레벨에 크리티컬 100%.
+  // req: 이 레벨(직급)이 되어야 열리는 스킬. 화면은 4칸 타일, 설명은 타일의 ?에 마우스를 올리면(휴대폰은 탭) 표시
   const UPGRADES=[
-    {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'키 1번에'} ${fmt(atkOf(lv,st.lv)*(usingWords()?1.3:1))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
+    {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'키 1번에'} ${fmt(power({...st,atkLv:lv})*(usingWords()?1.3:1))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
     {key:'autoLv',  icon:'☕', name:'커피 수혈',   desc:lv=>`가만히 있어도 초당 ${fmt(autoDps({...st,autoLv:lv}))} 처리`, base:30, grow:1.09, max:9999},
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
-    {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(10%)`, base:60, grow:1.3, max:46},
+    {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
+    {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:300, grow:1.4, max:15, req:12},
+    {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:500, grow:1.25, max:9999, req:22},
+    {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:500, grow:1.25, max:9999, req:22},
+    {key:'focusLv', icon:'🔗', name:'집중력',      desc:lv=>`콤보 최대 ×${(2+0.1*lv).toFixed(1)}`, base:1500, grow:1.3, max:20, req:35},
+    {key:'awakeLv', icon:'⚡', name:'각성',        desc:lv=>`커피 수혈에도 몰입(크리티컬) ${lv*20}% 적용`, base:2000, grow:2, max:5, req:35},
+    {key:'projLv',  icon:'🏆', name:'프로젝트 달성', desc:lv=>`${(projChance(lv)*100).toFixed(1)}% 확률로 20배 처리 (크리티컬 상위)`, base:5000, grow:1.35, max:20, req:50},
+    {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:3000, grow:1.35, max:20, req:50},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -95,10 +103,15 @@
     return Math.floor(n).toLocaleString();
   }
   function atkOf(atkLv,lv){ return (1+atkLv)*Math.pow(2,Math.floor(atkLv/25))*(1+(lv-1)*0.03); }
-  function autoDps(s){ return (s.autoLv+0.3)*atkOf(s.atkLv,s.lv)*0.3; } // +0.3 — 커피 수혈 전에도 아주 천천히 자동 처리
+  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0)); } // 업무력 × 숙련
+  // 커피 수혈 — +0.3: 강화 전에도 아주 천천히 자동 처리. 카페인 중독으로 증가, 각성하면 몰입(크리티컬) 기대값 일부 적용
+  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*critChance(s.critLv)*0.2*(s.awakeLv||0)); }
   function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
+  function projChance(projLv){ return Math.min(0.005*projLv,0.1); }
+  function offRate(payLv){ return OFFLINE_RATE+0.02*(payLv||0); }
+  function bossTime(){ return BOSS_TIME+2*(st.extLv||0); }
   function goldMult(bonusLv){ return 1+bonusLv*0.15; }
-  function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),2); } // 연속 성공마다 +5%(단어는 +10%), 최대 2배
+  function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),2+0.1*(st.focusLv||0)); } // 연속 성공마다 +5%(단어는 +10%), 최대 2배(집중력으로 증가)
   function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
   function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv); return Math.ceil(boss?r*8:r); }
   function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
@@ -191,7 +204,7 @@
     const b=BOSSES[(st.stage-1)%BOSSES.length];
     const t=boss?b:TASKS[Math.floor(Math.random()*TASKS.length)];
     const max=hpOf(st.stage,boss);
-    mon={boss,emoji:t[0],name:t[1],hp:max,max,deadline:boss?Date.now()+BOSS_TIME*1000:0};
+    mon={boss,emoji:t[0],name:t[1],hp:max,max,deadline:boss?Date.now()+bossTime()*1000:0};
     newSeq();
     renderMonster();
   }
@@ -243,9 +256,14 @@
   function work(mult){
     if(!mon) return;
     st.keys++;
-    const crit=Math.random()<critChance(st.critLv);
-    hit(atkOf(st.atkLv,st.lv)*(crit?3:1)*mult,crit,true);
+    strike(power(st)*mult);
     afterWork();
+  }
+  // 직접 처리 한 번 — 프로젝트 달성(20배)이 먼저, 아니면 몰입(3배) 판정
+  function strike(base){
+    if(Math.random()<projChance(st.projLv||0)){ floatText('🏆 프로젝트 달성!',true,true); hit(base*20,true,true); return; }
+    const crit=Math.random()<critChance(st.critLv);
+    hit(base*(crit?3:1),crit,true);
   }
   function afterWork(){
     for(const id of ['gmMonster','gmHero']){ const m=el(id); if(m){ m.classList.remove('hit'); void m.offsetWidth; m.classList.add('hit'); } }
@@ -259,8 +277,7 @@
       combo++; if(combo>st.bestCombo) st.bestCombo=combo;
       seqPos++;
       st.keys++;
-      const crit=Math.random()<critChance(st.critLv);
-      hit(atkOf(st.atkLv,st.lv)*want.length*1.3*comboMult()*(crit?3:1),crit,true);
+      strike(power(st)*want.length*1.3*comboMult());
       afterWork();
       if(mon&&seqPos>=seq.length){ if(seq.length>1) floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
@@ -308,8 +325,8 @@
     if(Date.now()-lastRender>200) render();
   }
   function buy(i){
-    const u=UPGRADES[i], lv=st[u.key], c=costOf(u,lv);
-    if(lv>=u.max||st.gold<c) return;
+    const u=UPGRADES[i], lv=st[u.key]||0, c=costOf(u,lv);
+    if(lv>=u.max||st.gold<c||(u.req&&st.lv<u.req)) return;
     st.gold-=c; st[u.key]++; dirty=true; render();
   }
   // 게임이 비활성이던 동안 — 커피 수혈이 10% 효율로 실제로 업무를 처리한 것처럼 계산 (최대 누적 시간은 야근 강화로 늘어남).
@@ -320,13 +337,13 @@
     const capMin=offlineCapMin(st.offLv);
     const away=(Date.now()-since)/1000;
     let t=Math.min(away,capMin*60);
-    const dps=autoDps(st)*OFFLINE_RATE;
+    const dps=autoDps(st)*offRate(st.payLv);
     if(t<10||dps<=0) return;
     const startStage=st.stage, startLv=st.lv;
     let gold=0, tasks=0, guard=0;
     while(t>0&&guard++<200000){
       const boss=st.kills>=10, need=hpOf(st.stage,boss)/dps;
-      if(boss&&need>BOSS_TIME){ t-=BOSS_TIME; st.kills=0; continue; } // 커피만으로는 결재를 못 넘김 → 다시 일반 업무
+      if(boss&&need>bossTime()){ t-=bossTime(); st.kills=0; continue; } // 커피만으로는 결재를 못 넘김 → 다시 일반 업무
       if(need>t) break;
       t-=need;
       const g=rewardOf(st.stage,boss); gold+=g; tasks++;
@@ -447,7 +464,8 @@
       <div class="gm-keys${usingWords()?' words':''}" id="gmKeys" onpointerdown="gmTouchTap(event)"></div>
       ${usingWords()?'<input class="gm-type" id="gmType" autocomplete="off" spellcheck="false" placeholder="위 단어를 입력하고 Space 또는 Enter"/>':''}
       <div class="gm-hint" id="gmFocusHint"></div>
-      <div class="gm-ups" id="gmUps"></div>
+      <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
+      <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
     const t=el('gmType');
@@ -501,26 +519,48 @@
       el('gmHpText').textContent=`남은 업무 ${fmt(Math.max(0,Math.ceil(mon.hp)))} / ${fmt(mon.max)}`;
       el('gmTimer').textContent=mon.boss?`⏱ ${Math.max(0,Math.ceil((mon.deadline-Date.now())/1000))}초`:'';
     }
-    // 강화 목록 — 바뀐 게 있을 때만 다시 그림(누르는 도중에 버튼이 새로 그려져 클릭이 씹히지 않게)
+    // 강화 타일 — 바뀐 게 있을 때만 다시 그림(누르는 도중에 버튼이 새로 그려져 클릭이 씹히지 않게)
     const ups=UPGRADES.map((u,i)=>{
-      const lv=st[u.key], c=costOf(u,lv), maxed=lv>=u.max;
-      return `<button type="button" class="gm-up" ${maxed||st.gold<c?'disabled':''} onclick="gmBuy(${i})">
-        <span class="gm-up-icon">${u.icon}</span>
-        <span class="gm-up-text"><b>${u.name} Lv.${lv}</b><small>${maxed?'':'다음: '}${u.desc(lv+(maxed?0:1))}</small></span>
-        <span class="gm-up-cost">${maxed?'MAX':'💰'+fmt(c)}</span></button>`;
+      const lv=st[u.key]||0, c=costOf(u,lv), maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
+      const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
+      return `<button type="button" class="gm-tile${cls}" onclick="gmBuy(${i})">
+        <span class="gm-tile-q" onmouseenter="gmTip(event,${i},true)" onclick="gmTip(event,${i})">?</span>
+        <span class="gm-tile-icon">${locked?'🔒':u.icon}</span>
+        <span class="gm-tile-name">${u.name}</span>
+        <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
+        <span class="gm-tile-cost">${locked?'':maxed?'MAX':'💰'+fmt(c)}</span></button>`;
     }).join('');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }
+    if(tipIdx>=0) renderTip();
     renderSaveState();
   }
+  // 스킬 설명 말풍선 — 타일 줄 바로 위에 표시
+  let tipIdx=-1;
+  function renderTip(){
+    const tip=el('gmTip'), box=el('gmUps'), w=el('gmWidget');
+    if(!tip||!box||tipIdx<0){ if(tip) tip.style.display='none'; return; }
+    const u=UPGRADES[tipIdx], lv=st[u.key]||0, maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
+    tip.innerHTML=`<b>${u.icon} ${u.name}</b> <span>Lv.${lv}${maxed?' (MAX)':''}</span><br>`+
+      (locked?`🔒 ${rankOf(u.req)[2]}(Lv.${u.req}) 달성 시 열림<br>`:'')+
+      `현재: ${u.desc(lv)}`+(maxed?'':`<br>다음: ${u.desc(lv+1)}`);
+    tip.style.display='';
+    const wr=w.getBoundingClientRect(), br=box.getBoundingClientRect();
+    tip.style.top=Math.max(4,br.top-wr.top-tip.offsetHeight-6)+'px';
+  }
+  window.gmTip=function(e,i,hover){
+    e.stopPropagation(); if(!hover) e.preventDefault();
+    tipIdx=(!hover&&tipIdx===i)?-1:i; renderTip();
+  };
+  window.gmTipHide=function(){ tipIdx=-1; renderTip(); };
   function renderSaveState(){
     const s=el('gmSave'); if(!s) return;
     s.textContent=serverOk===false?'기기에만 저장 중':(serverOk?'자동 저장됨':'');
   }
-  function floatText(text,crit){
+  function floatText(text,crit,big){
     const layer=el('gmFloat'); if(!layer) return;
     const d=document.createElement('span');
-    d.className='gm-float'+(crit?' crit':'');
+    d.className='gm-float'+(crit?' crit':'')+(big?' project':'');
     d.textContent=text;
     d.style.left=(45+Math.random()*35)+'%';
     layer.appendChild(d);
