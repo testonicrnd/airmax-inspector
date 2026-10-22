@@ -873,9 +873,12 @@
   }
   function skStep(dt){
     const S=suika, G=S.H*3.2, B=S.balls;
-    for(const b of B){ b.age+=dt; b.vy+=G*dt; b.vx*=0.995; b.x+=b.vx*dt; b.y+=b.vy*dt;
-      if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.3; } if(b.x>S.W-b.r){ b.x=S.W-b.r; b.vx=-Math.abs(b.vx)*0.3; }
-      if(b.y>S.H-b.r){ b.y=S.H-b.r; b.vy=-Math.abs(b.vy)*0.15; b.vx*=0.97; } }
+    // 회전: 공(원판)의 각속도 w, 각도 a. 바닥·벽·다른 공과 닿은 면의 미끄러짐을 마찰로 줄이면서 구르게 함 (관성모멘트 = 질량·r²/2)
+    for(const b of B){ b.age+=dt; b.vy+=G*dt; b.vx*=0.995; b.w=(b.w||0)*0.995; b.x+=b.vx*dt; b.y+=b.vy*dt; b.a=(b.a||0)+b.w*dt;
+      if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.3; b.w*=0.8; } if(b.x>S.W-b.r){ b.x=S.W-b.r; b.vx=-Math.abs(b.vx)*0.3; b.w*=0.8; }
+      if(b.y>S.H-b.r){ b.y=S.H-b.r; b.vy=-Math.abs(b.vy)*0.15;
+        const slip=b.vx-b.w*b.r, jt=-slip/3*0.6; // 바닥 마찰 — 미끄러짐을 줄이고 그만큼 회전
+        b.vx+=jt; b.w-=2*jt/b.r; b.vx*=0.985; } }
     for(let it=0;it<3;it++){
       for(let i=0;i<B.length;i++){ const a=B[i]; if(a.dead) continue;
         for(let j=i+1;j<B.length;j++){ const b=B[j]; if(b.dead) continue;
@@ -886,6 +889,11 @@
           a.x-=nx*ov*mb/(ma+mb); a.y-=ny*ov*mb/(ma+mb); b.x+=nx*ov*ma/(ma+mb); b.y+=ny*ov*ma/(ma+mb);
           const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
           if(rv<0){ const jj=-(1.15)*rv/(1/ma+1/mb); a.vx-=jj/ma*nx; a.vy-=jj/ma*ny; b.vx+=jj/mb*nx; b.vy+=jj/mb*ny; }
+          // 맞닿은 면의 마찰 — 접선 방향 상대 속도(회전 포함)를 일부 줄이며 서로 돌림
+          const tx=-ny, ty=nx, vt=(b.vx-a.vx)*tx+(b.vy-a.vy)*ty-(a.w||0)*a.r-(b.w||0)*b.r;
+          const jt=-vt/(3*(1/ma+1/mb))*0.3;
+          a.vx-=jt/ma*tx; a.vy-=jt/ma*ty; b.vx+=jt/mb*tx; b.vy+=jt/mb*ty;
+          a.w=(a.w||0)-2*jt/(ma*a.r); b.w=(b.w||0)-2*jt/(mb*b.r);
         } }
       S.balls=S.balls.filter(b=>!b.dead);
     }
@@ -894,7 +902,7 @@
     a.dead=b.dead=true;
     const t=a.t+1, x=(a.x+b.x)/2, y=(a.y+b.y)/2;
     if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 신동준 합체! +100',until:performance.now()+1500}; }
-    else { suika.score+=t*(t+1)/2; suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:skR(t),t,age:1.3});
+    else { suika.score+=t*(t+1)/2; suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:skR(t),t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
       if(t>=5) suika.flash={text:`${SK_NAMES[t]} 등장!`,until:performance.now()+1200}; }
     const sc=el('gmSkScore'); if(sc) sc.textContent=suika.score.toLocaleString();
   }
@@ -912,9 +920,10 @@
   function skBall(g,b,t,x,y,r,alpha){
     const im=suika.imgs[t];
     g.save(); g.globalAlpha=alpha;
-    g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.closePath(); g.fillStyle='#f1ede8'; g.fill();
-    if(im&&im.complete&&im.naturalWidth){ g.save(); g.clip(); g.drawImage(im,x-r,y-r,r*2,r*2); g.restore(); }
-    else { g.fillStyle=SK_COLORS[t]; g.fill(); g.fillStyle='#fff'; g.font=`bold ${Math.round(r*0.55)}px sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(SK_NAMES[t].slice(1),x,y); }
+    g.translate(x,y); g.rotate(b&&b.a||0); // 굴러간 만큼 얼굴도 회전
+    g.beginPath(); g.arc(0,0,r,0,Math.PI*2); g.closePath(); g.fillStyle='#f1ede8'; g.fill();
+    if(im&&im.complete&&im.naturalWidth){ g.save(); g.clip(); g.drawImage(im,-r,-r,r*2,r*2); g.restore(); }
+    else { g.fillStyle=SK_COLORS[t]; g.fill(); g.fillStyle='#fff'; g.font=`bold ${Math.round(r*0.55)}px sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(SK_NAMES[t].slice(1),0,0); }
     g.lineWidth=Math.max(3,r*0.09); g.strokeStyle=SK_COLORS[t]; g.stroke();
     g.restore();
   }
