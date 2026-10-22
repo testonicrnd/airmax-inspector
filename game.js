@@ -691,7 +691,7 @@
   let stairs=null, stairsFace=null;
   function stairsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=STAIRS_REQ); }
   function stairsNew(){
-    stairs={xs:[0],dirs:[],items:{},shield:0,count:0,time:1,running:false,over:false,lastT:0,raf:0,flash:null};
+    stairs={xs:[0],dirs:[],items:{},shield:0,count:0,time:1,running:false,over:false,lastT:0,raf:0,flash:null,fly:null,grace:false};
     stairsGrow();
   }
   function stairsGrow(){
@@ -711,6 +711,7 @@
   function stairsItem(it){
     if(it==='rocket'){
       for(let k=1;k<=10;k++) delete stairs.items[stairs.count+k];
+      stairs.fly={from:stairs.count,t0:performance.now(),dur:700};
       stairs.count+=10; stairs.time=1; stairsGrow(); stairsFlash('🚀 로켓! +10층');
     } else if(it==='clock'){ stairs.time=1; stairsFlash('⏰ 시간 충전!'); }
     else if(it==='shield'){ stairs.shield++; stairsFlash('🛡️ 방패 획득!'); }
@@ -744,17 +745,24 @@
     lastInput=Date.now();
     if(stairs.over){ gmShowStairs(); return; } // 끝난 뒤 누르면 다시 시작
     if(!stairs.running){ stairs.running=true; stairs.lastT=performance.now(); stairs.raf=requestAnimationFrame(stairsLoop); el('gmStInfo').textContent='오르는 중…'; }
+    if(stairs.fly) return; // 로켓 비행 중 입력은 무시(실패로 치지 않음)
     if(d===stairs.dirs[stairs.count]){
+      stairs.grace=false;
       stairs.count++; stairs.time=Math.min(1,stairs.time+0.11);
       stairsGrow();
       const it=stairs.items[stairs.count]; if(it){ delete stairs.items[stairs.count]; stairsItem(it); }
       stairsInfo(); drawStairs();
-    } else if(stairs.shield>0){ stairs.shield--; stairsFlash('🛡️ 방패가 막아줬습니다!'); stairsInfo(); drawStairs(); }
+    } else if(stairs.grace){ stairsFlash('🚀 착지! 다음 방향을 확인하세요'); drawStairs(); } // 착지 직후 첫 걸음은 보호
+    else if(stairs.shield>0){ stairs.shield--; stairsFlash('🛡️ 방패가 막아줬습니다!'); stairsInfo(); drawStairs(); }
     else stairsEnd('발을 헛디뎠습니다!');
   }
   function stairsLoop(t){
     if(!stairs||!stairs.running) return;
-    const dt=Math.max(0,Math.min(0.1,(t-stairs.lastT)/1000)); stairs.lastT=t;
+    const now=performance.now(), dt=Math.max(0,Math.min(0.1,(now-stairs.lastT)/1000)); stairs.lastT=now;
+    if(stairs.fly){ // 로켓 비행 중 — 시간은 그대로, 끝나면 착지 보호
+      if(now-stairs.fly.t0>=stairs.fly.dur){ stairs.fly=null; stairs.grace=true; }
+      drawStairs(); stairs.raf=requestAnimationFrame(stairsLoop); return;
+    }
     stairs.time-=(0.28+Math.min(stairs.count,400)*0.0018)*dt; // 오를수록 빨리 줄어듦
     const bar=el('gmStTime'); if(bar) bar.style.width=Math.max(0,stairs.time*100)+'%';
     if(stairs.flash) drawStairs(); // 아이템 문구가 사라질 때까지 다시 그림
@@ -780,10 +788,15 @@
     g.clearRect(0,0,W,H);
     const cs=getComputedStyle(el('gmWidget'));
     const top=cs.getPropertyValue('--accent').trim()||'#e8732a', side=cs.getPropertyValue('--border').trim()||'#888';
-    const cx=W/2, cy=H*0.68, px=stairs.xs[stairs.count];
-    for(let i=Math.max(0,stairs.count-6);i<Math.min(stairs.xs.length,stairs.count+16);i++){
-      const x=cx+(stairs.xs[i]-px)*SW, y=cy-(i-stairs.count)*SH;
+    // 카메라 위치 f — 평소엔 지금 층, 로켓 비행 중엔 출발 층→도착 층으로 부드럽게
+    let f=stairs.count, flyK=0;
+    if(stairs.fly){ flyK=Math.min(1,(performance.now()-stairs.fly.t0)/stairs.fly.dur); const e=1-Math.pow(1-flyK,3); f=stairs.fly.from+(stairs.count-stairs.fly.from)*e; }
+    const fi=Math.floor(f), px=stairs.xs[fi]+(stairs.xs[Math.min(fi+1,stairs.xs.length-1)]-stairs.xs[fi])*(f-fi);
+    const cx=W/2, cy=H*0.68;
+    for(let i=Math.max(0,fi-6);i<Math.min(stairs.xs.length,fi+18);i++){
+      const x=cx+(stairs.xs[i]-px)*SW, y=cy-(i-f)*SH;
       if(y<-40) break;
+      if(stairs.grace&&i===stairs.count+1){ g.save(); g.shadowColor='#ffcf4a'; g.shadowBlur=24; g.fillStyle='#ffcf4a'; g.fillRect(x-BW/2-4,y-12,BW+8,18); g.restore(); }
       g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
       g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1;
       if(stairs.items[i]&&i>stairs.count){ g.font='34px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.fillText(STAIR_ITEMS[stairs.items[i]],x,y-10); }
@@ -795,7 +808,9 @@
     if(img&&CHARS[acc.ch]&&CHARS[acc.ch].body){
       const h=96, w=Math.min(110,h*img.naturalWidth/img.naturalHeight), footY=cy-8;
       const face=stairs.count>0?stairs.dirs[stairs.count-1]:1;
-      g.translate(cx,footY); if(face<0) g.scale(-1,1);
+      g.translate(cx,footY-(stairs.fly?Math.sin(flyK*Math.PI)*30:0)); // 비행 중엔 살짝 떠오름
+      if(stairs.fly){ g.font='40px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.fillText('🚀',0,-6); }
+      if(face<0) g.scale(-1,1);
       g.drawImage(img,-w/2,-h,w,h);
     } else {
       const r=23, hx=cx, hy=cy-8-r;
