@@ -985,14 +985,101 @@ var GAME_PIN_MAX_FAIL = 5, GAME_PIN_LOCK_SEC = 600;
 function getGameSpreadsheet() {
     var props = PropertiesService.getScriptProperties();
     var id = props.getProperty(GAME_SHEET_ID_PROP);
-    var ss = null;
-    if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
-    if (!ss) {
-        ss = SpreadsheetApp.create('Air Max 게임 DB');
-        props.setProperty(GAME_SHEET_ID_PROP, ss.getId());
+    // 열기에 실패해도 새 시트를 만들지 않음 — 속성이 빈 시트 ID로 덮여서 기존 기록을 어디서도 찾지 못하게 됨(랭킹이 통째 비는 원인)
+    if (id) {
+        try { return SpreadsheetApp.openById(id); } catch (e) {
+            throw new Error('게임 DB 시트를 열 수 없습니다 (ID ' + id + '). 시트가 휴지통에 있거나 공유 권한이 해제되지 않았는지 확인해주세요.');
+        }
     }
-    return ss;
+    // 속성이 비어있어도 자동으로 만들지 않음 — 속성이 지워지거나 다른 프로젝트에 배포되었을 때 빈 DB가 조용히 생기는 것을 막기 위해
+    throw new Error('게임 DB가 지정되지 않았습니다. 스크립트 속성 ' + GAME_SHEET_ID_PROP + '에 시트 ID를 넣거나, 처음 만들 때만 편집기에서 initGameDb()를 실행해주세요.');
 }
+// 처음 한 번만 — 게임 DB를 새로 만들어 속성에 기억. 이미 속성이 있으면 거부함(실수로 기록을 분리시키는 사고 방지)
+function initGameDb() {
+    var props = PropertiesService.getScriptProperties();
+    var id = props.getProperty(GAME_SHEET_ID_PROP);
+    if (id) throw new Error('이미 게임 DB가 지정되어 있습니다 (ID ' + id + '). 바꾸려면 스크립트 속성을 직접 수정해주세요.');
+    var ss = SpreadsheetApp.create('Air Max 게임 DB');
+    props.setProperty(GAME_SHEET_ID_PROP, ss.getId());
+    setupGameSheet(getGameSheet());
+    var msg = '게임 DB 생성 — ' + ss.getUrl();
+    Logger.log(msg);
+    return msg;
+}
+// 편집기에서 직접 실행 — Drive에서 '게임 DB' 후보를 모두 찾아 ID·만든 날짜·인원수를 찍어줌.
+// 새 환경에서 빈 DB가 생기는 사고가 나서 원본 ID를 모를 때 사용. 인원수가 가장 많은 것이 원본이다
+function findGameDb() {
+    var inUse = PropertiesService.getScriptProperties().getProperty(GAME_SHEET_ID_PROP) || '';
+    var NL = String.fromCharCode(10);
+    var seen = {}, rows = [];
+    var add = function(file) {
+        var id = file.getId();
+        if (seen[id]) return;
+        seen[id] = true;
+        var players = -1, sheets = '';
+        try {
+            var ss = SpreadsheetApp.openById(id);
+            var sh = ss.getSheetByName('players');
+            players = sh ? Math.max(0, sh.getLastRow() - 1) : -1;
+            sheets = ss.getSheets().map(function(x) { return x.getName(); }).join(', ');
+        } catch (e) { sheets = '열기 실패: ' + e.message; }
+        rows.push({
+            id: id, name: file.getName(), players: players,
+            created: Utilities.formatDate(file.getDateCreated(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'),
+            updated: Utilities.formatDate(file.getLastUpdated(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'),
+            trashed: file.isTrashed(), sheets: sheets, inUse: id === inUse
+        });
+    };
+    // 이름이 바띀을 수도 있으니 '게임'이 들어간 스프레드시트를 모두 후보로 봄
+    var it = DriveApp.getFilesByName('Air Max 게임 DB');
+    while (it.hasNext()) add(it.next());
+    var it2 = DriveApp.searchFiles('mimeType = "application/vnd.google-apps.spreadsheet" and title contains "게임"');
+    while (it2.hasNext()) add(it2.next());
+
+    // 인원이 많은 순 — 맨 위가 원본일 가능성이 가장 높다
+    rows.sort(function(a, b) { return b.players - a.players; });
+    var out = ['현재 사용 중인 ID: ' + (inUse || '(지정 없음)'), '후보 ' + rows.length + '개 — 인원 많은 순:', ''];
+    rows.forEach(function(r) {
+        out.push((r.inUse ? '▶ [사용 중] ' : '  ') + r.name + (r.trashed ? ' (휴지통)' : ''));
+        out.push('    ID: ' + r.id);
+        out.push('    players: ' + (r.players < 0 ? '시트 없음' : r.players + '명') + ' / 시트: ' + r.sheets);
+        out.push('    만들어짐: ' + r.created + ' / 마지막 수정: ' + r.updated);
+        out.push('');
+    });
+    var msg = out.join(NL);
+    Logger.log(msg);
+    return msg;
+}
+// 편집기에서 직접 실행 — 지금 어떤 게임 DB를 사용하고 있고 몇 명이 들어있는지, 백업 시트가 있는지 확인
+function gameDbInfo() {
+    var ss = getGameSpreadsheet(), out = ['게임 DB: ' + ss.getName(), 'ID: ' + ss.getId(), 'URL: ' + ss.getUrl(), '시트 목록:'];
+    ss.getSheets().forEach(function(sh) {
+        out.push('  - ' + sh.getName() + ' — ' + Math.max(0, sh.getLastRow() - 1) + '명');
+    });
+    var msg = out.join(String.fromCharCode(10));
+    Logger.log(msg);
+    return msg;
+}
+// 백업 시트를 다시 players로 되돌림 — gameDbInfo가 찍어주는 '백업 …' 시트 이름을 그대로 넣어 실행.
+// 지금 players 시트는 '밀려난 players …'로 이름만 바꿔 두므로 되돌리기도 가능
+function restoreGameRanking(backupSheetName) {
+    var ss = getGameSpreadsheet();
+    var backup = ss.getSheetByName(backupSheetName);
+    if (!backup) throw new Error('그런 시트가 없습니다: ' + backupSheetName + ' — gameDbInfo()로 시트 이름을 확인해주세요.');
+    if (backup.getName() === 'players') throw new Error('이미 players 시트입니다.');
+    var cur = ss.getSheetByName('players');
+    // 백업은 이름만 바꾸지 않고 복사해서 올림 — 백업 시트는 그대로 남아있어야 함.
+    // 지금 players는 '밀려난 players …'로 보존하므로 되돌리기도 가능
+    if (cur) cur.setName('밀려난 players ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HHmm'));
+    var restored = backup.copyTo(ss).setName('players');
+    ss.setActiveSheet(restored);
+    ss.moveActiveSheet(1);
+    setupGameSheet(restored);
+    var msg = '랭킹 복원 완료 — ' + Math.max(0, restored.getLastRow() - 1) + '명 (' + ss.getUrl() + ')';
+    Logger.log(msg);
+    return msg;
+}
+
 function setupGameSheet(sheet) {
     sheet.getRange(1, 1, 1, GAME_HEADERS.length).setValues([GAME_HEADERS]).setFontWeight('bold').setBackground('#434343').setFontColor('#ffffff');
     sheet.setFrozenRows(1);
@@ -1020,6 +1107,32 @@ function resetGameRanking() {
     var sheet = ss.insertSheet('players', 0);
     setupGameSheet(sheet);
     Logger.log('랭킹 초기화 완료 — ' + ss.getUrl());
+}
+// players 시트를 '백업 늠짜' 시트로 복사해 남김. setupGameBackupTrigger로 하루 1회 자동 실행.
+// 기록이 통째 사라지는 사고가 한 번 있었으므로, 되돌릴 지점을 항상 남게 둔다
+var GAME_BACKUP_KEEP = 14;
+function backupGameRanking() {
+    var ss = getGameSpreadsheet();
+    var players = ss.getSheetByName('players');
+    if (!players || players.getLastRow() < 2) return '백업할 기록이 없습니다.';
+    var name = '백업 ' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+    var old = ss.getSheetByName(name);
+    if (old) ss.deleteSheet(old);
+    players.copyTo(ss).setName(name);
+    // 오래된 백업은 GAME_BACKUP_KEEP개만 남김
+    var backups = ss.getSheets().filter(function(sh) { return sh.getName().indexOf('백업 ') === 0; })
+        .sort(function(a, b) { return a.getName() < b.getName() ? -1 : 1; });
+    while (backups.length > GAME_BACKUP_KEEP) ss.deleteSheet(backups.shift());
+    var msg = name + ' — ' + (players.getLastRow() - 1) + '명 백업';
+    Logger.log(msg);
+    return msg;
+}
+function setupGameBackupTrigger() {
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+        if (t.getHandlerFunction() === 'backupGameRanking') ScriptApp.deleteTrigger(t);
+    });
+    ScriptApp.newTrigger('backupGameRanking').timeBased().atHour(4).everyDays(1).create();
+    Logger.log('게임 랭킹 하루 1회 백업 트리거 설치 완료 (새벽 4시대)');
 }
 function gameFindRow(values, playerId) {
     for (var i = 0; i < values.length; i++) if (String(values[i][0]) === playerId) return i;
