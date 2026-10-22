@@ -378,12 +378,23 @@
     if(!clean){ if(/\s/.test(v)){ t.value=''; typedBase=0; } return; }
     if(clean===seq[seqPos]){
       wordInput(clean);
-      if(composing) typedBase=t.value.length; else { t.value=''; typedBase=0; }
+      if(composing){ typedBase=t.value.length; scheduleIdleClear(); } else { t.value=''; typedBase=0; }
       return;
     }
     if(submit||/\s/.test(v)){ wordInput(clean); t.value=''; typedBase=0; }
   }
   function trimTyped(){ const t=el('gmType'); if(t&&typedBase>0){ t.value=t.value.slice(typedBase); typedBase=0; } }
+  // 맞힌 뒤 손을 멈추면(0.35초) 조합을 끝내고 칸을 비움 — 이어 치는 중이 아니라 날아갈 글자가 없음
+  let idleClearT=0;
+  function scheduleIdleClear(){
+    clearTimeout(idleClearT);
+    idleClearT=setTimeout(()=>{
+      const t=el('gmType'); if(!t||typedBase<=0) return;
+      if(t.value.length>typedBase){ scheduleIdleClear(); return; } // 다음 단어를 치는 중 — 조합이 끝날 때 앞부분만 잘림
+      typedBase=0; t.blur(); t.value='';
+      setTimeout(()=>{ t.value=''; if(isVisible()&&!document.querySelector('.gm-scene')) t.focus(); },0);
+    },350);
+  }
   function keyInput(code){
     const want=seq[seqPos];
     if(!want) return false;
@@ -618,7 +629,7 @@
           if(e.isComposing||e.keyCode===229){ enterPending=true; setTimeout(()=>{ if(enterPending){ enterPending=false; checkTyped(true); } },80); } else checkTyped(true);
         }
       });
-      t.addEventListener('input',e=>{ lastInput=Date.now(); if(!e.isComposing) trimTyped(); checkTyped(false,e.isComposing); }); // 조합 중이어도 단어가 똑같아지면 바로 처리
+      t.addEventListener('input',e=>{ lastInput=Date.now(); if(!e.isComposing) trimTyped(); if(typedBase>0) scheduleIdleClear(); checkTyped(false,e.isComposing); }); // 조합 중이어도 단어가 똑같아지면 바로 처리
       // 한글 조합이 끝난 뒤(Space/Enter로 마지막 글자 확정) — 값이 반영된 다음에 확인
       // 조합이 끝나는 순간(다음 글자를 치기 시작할 때) 이미 처리한 앞부분을 잘라냄 — 바로 이어 들어올 글자는 빈칸 뒤에 붙음
       t.addEventListener('compositionend',()=>{ trimTyped(); setTimeout(()=>{ const sub=enterPending; enterPending=false; checkTyped(sub); },0); });
