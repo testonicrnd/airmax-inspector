@@ -695,7 +695,7 @@
   /* ---------- 무한의 계단 ---------- */
   // 다음 계단이 왼쪽/오른쪽 어느 쪽인지 맞춰 누르며 오르기. 시간 막대는 오를수록 빨리 줄고, 맞게 누르면 조금 회복.
   // 틀리거나 시간이 다 되면 끝 → 층수 × 지금 단계 × 0.05 경험치 (단어 입력의 약 30% 효율)
-  // 아이템: 앞쪽 계단 몇 군데에 놓이고 밟으면 발동 — 🚀 로켓 +10층 / ⏰ 시계 시간 가득 / 🛡️ 방패 실수 1번 막음
+  // 아이템: 앞쪽 계단 몇 군데에 놓이고 밟으면 발동 — 🚀 로켓 +10층 / ⏰ 시계 시간 가득 / 🛡️ 방패 실수·시간 초과 1번 막음
   const STAIRS_REQ=12, STAIRS_EXP=0.05;
   let stairs=null, stairsFace=null;
   function stairsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=STAIRS_REQ); }
@@ -775,7 +775,10 @@
     stairs.time-=(0.28+Math.min(stairs.count,400)*0.0018)*dt; // 오를수록 빨리 줄어듦
     const bar=el('gmStTime'); if(bar) bar.style.width=Math.max(0,stairs.time*100)+'%';
     if(stairs.flash) drawStairs(); // 아이템 문구가 사라질 때까지 다시 그림
-    if(stairs.time<=0){ stairsEnd('시간 초과!'); return; }
+    if(stairs.time<=0){
+      if(stairs.shield>0){ stairs.shield--; stairs.time=0.5; stairsFlash('🛡️ 방패가 시간 초과를 막았습니다!'); stairsInfo(); } // 방패는 시간 초과도 1번 막음
+      else { stairsEnd('시간 초과!'); return; }
+    }
     stairs.raf=requestAnimationFrame(stairsLoop);
   }
   function stairsEnd(why){
@@ -819,6 +822,7 @@
       const face=stairs.count>0?stairs.dirs[stairs.count-1]:1;
       g.translate(cx,footY-(stairs.fly?Math.sin(flyK*Math.PI)*30:0)); // 비행 중엔 살짝 떠오름
       if(stairs.fly){ g.font='40px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.fillText('🚀',0,-6); }
+      if(stairs.shield>0&&!stairs.over){ g.font='30px sans-serif'; g.textAlign='left'; g.textBaseline='middle'; g.fillText('🛡️'+(stairs.shield>1?'×'+stairs.shield:''),w/2+2,-h*0.55); } // 방패 보유 표시
       if(face<0) g.scale(-1,1);
       g.drawImage(img,-w/2,-h,w,h);
     } else {
@@ -838,6 +842,7 @@
     g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
   }
   window.gmShowStairs=gmShowStairs;
+  if(window.__GM_TEST) window.__gmStairs=()=>stairs; // 자동 테스트에서만 내부 상태 확인용
 
   /* ---------- 수박 게임 ---------- */
   // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 오찬근 이용훈 천병석 하문숙 신원옥 강옥남 신원철 신동준.
