@@ -535,9 +535,9 @@
         </div>
         <div class="gm-float-layer" id="gmFloat"></div>
       </div>
-      <div class="gm-keys${usingWords()?' words':''}" id="gmKeys" onpointerdown="gmTouchTap(event)"></div>
-      ${usingWords()?'<input class="gm-type" id="gmType" autocomplete="off" spellcheck="false" placeholder="위 단어를 입력하고 Space 또는 Enter"/>':''}
-      <div class="gm-hint" id="gmFocusHint"></div>
+      ${usingWords()
+        ?'<div class="gm-typerow"><div class="gm-keys words" id="gmKeys"></div><input class="gm-type" id="gmType" autocomplete="off" spellcheck="false" placeholder="단어 입력 후 Space·Enter"/></div>'
+        :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link${stairsUnlocked()?'':' locked'}" onclick="gmShowStairs()">🪜 계단</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
@@ -604,10 +604,9 @@
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
       return `<button type="button" class="gm-tile${cls}" data-i="${i}">
         <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
-        <span class="gm-tile-icon">${locked?'🔒':u.icon}</span>
+        <span class="gm-tile-top"><span class="gm-tile-icon">${locked?'🔒':u.icon}</span><span class="gm-tile-lv">${locked?'':'Lv.'+lv}</span></span>
         <span class="gm-tile-name">${u.name}</span>
-        <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
-        <span class="gm-tile-cost">${locked?'':maxed?'MAX':'💸'+fmt(c)}</span></button>`;
+        <span class="gm-tile-cost">${locked?rankOf(u.req)[2]+' 달성':maxed?'MAX':'💸'+fmt(c)}</span></button>`;
     }).join('');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }

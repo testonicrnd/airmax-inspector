@@ -1535,3 +1535,18 @@ body.checklist-page-active { padding-bottom:46px; }
 
 /* 테스토닉 키우기 — 창을 가로로 넓혀 강화 타일 한 줄 5칸 */
 .gm-ups { grid-template-columns:repeat(5,1fr); }
+
+/* 테스토닉 키우기 — 세로 줄이기: 단어+입력칸 한 줄, 타일 3줄, 업무 영역 조금 작게 */
+.gm-typerow { display:flex; align-items:center; gap:6px; margin-top:8px; }
+.gm-typerow .gm-keys { margin-top:0; flex:0 1 auto; justify-content:flex-start; min-height:0; }
+.gm-typerow .gm-type { flex:1 1 120px; min-width:110px; margin-top:0; padding:7px 10px; font-size:14px; }
+.gm-arena { min-height:100px; }
+.gm-hero { height:94px; }
+.gm-tile { padding:5px 2px 4px; gap:0; }
+.gm-tile-top { display:flex; align-items:center; gap:3px; line-height:1; }
+.gm-tile-top .gm-tile-icon { font-size:15px; }
+.gm-tile-top .gm-tile-lv { font-size:9.5px; }
+.gm-tile-name { margin-top:2px; }
+.gm-tile.locked .gm-tile-cost { font-size:9.5px; font-weight:500; color:var(--text3); }
+.gm-tile-top { padding:0 11px 0 2px; max-width:100%; box-sizing:border-box; }
+.gm-tile-q { width:12px; height:12px; line-height:12px; font-size:8.5px; top:3px; right:3px; }
