@@ -9,7 +9,7 @@
    휴대폰: 화면 탭(지금 키를 맞게 누른 것으로 처리).
    🪜 무한의 계단: 주임을 달성한 직원이 있으면 열림. ←/→(A/D)로 다음 계단 방향을 맞춰 오르기, 끝나면 층수만큼 경험치(단어 입력보다 낮은 효율).
    최고 층수는 계정별로 저장하고 랭킹을 따로 집계.
-   ⚡ 깜짝 이벤트: 하루 3번, 10~17시 중 무작위 정시에 시작해 1시간 진행(한국 시간). 날짜로 정해지므로 모두 같은 시간에 같은 이벤트.
+   ⚡ 깜짝 이벤트: 평일 하루 3번, 10~17시 중 무작위 정시에 시작해 1시간 진행(한국 시간). 날짜로 정해지므로 모두 같은 시간에 같은 이벤트.
    📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
    캐릭터: 신동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
@@ -82,6 +82,7 @@
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
+    {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -91,7 +92,7 @@
     {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:1000000000, grow:1.35, max:20, req:50},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -118,7 +119,7 @@
   ];
   const EVENT_HOURS=[10,11,12,13,14,15,16,17], EVENTS_PER_DAY=3;
   let evOff=false, lastEventId='';
-  function kst(){ const d=new Date(Date.now()+9*3600e3); return {key:d.toISOString().slice(0,10),h:d.getUTCHours(),m:d.getUTCMinutes(),s:d.getUTCSeconds()}; }
+  function kst(){ const d=new Date(Date.now()+9*3600e3); return {key:d.toISOString().slice(0,10),h:d.getUTCHours(),m:d.getUTCMinutes(),s:d.getUTCSeconds(),wd:d.getUTCDay()}; }
   function seeded(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
     return ()=>{ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); h^=h>>>16; return (h>>>0)/4294967296; }; }
   function eventsOn(key){
@@ -128,7 +129,9 @@
   }
   function currentEvent(){
     if(evOff) return null;
-    const k=kst(), slot=eventsOn(k.key).find(x=>x.h===k.h);
+    const k=kst();
+    if(k.wd===0||k.wd===6) return null; // 이벤트는 평일만
+    const slot=eventsOn(k.key).find(x=>x.h===k.h);
     return slot?{...slot.ev,left:(59-k.m)*60+(60-k.s)}:null;
   }
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
@@ -755,7 +758,7 @@
   function stairsEnd(why){
     if(!stairs||stairs.over) return;
     stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
-    const n=stairs.count, exp=Math.round(n*Math.max(1,st.stage)*STAIRS_EXP);
+    const n=stairs.count, exp=Math.round(n*Math.max(1,st.stage)*STAIRS_EXP*(1+0.2*(st.stairLv||0))); // 계단 단련으로 증가
     const best=n>(acc.stairsBest||0);
     if(best) acc.stairsBest=n;
     if(exp>0) gainExp(exp);

@@ -1361,7 +1361,7 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
 
 /* ===== 숨은 미니 게임 "테스토닉 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
-.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:300px; max-width:calc(100vw - 32px);
+.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:360px; max-width:calc(100vw - 32px);
   background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
 .gm-widget.dim { opacity:0.35; }
@@ -1532,3 +1532,6 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-body.fixed > * { flex-shrink:0; }
 .gm-body.fixed .gm-st-cv { flex-shrink:1; }
 .gm-body.fixed { box-sizing:border-box; }
+
+/* 테스토닉 키우기 — 창을 가로로 넓혀 강화 타일 한 줄 5칸 */
+.gm-ups { grid-template-columns:repeat(5,1fr); }
