@@ -987,13 +987,16 @@
   }
   /* ---------- 관리 (슈퍼 관리자 전용) ---------- */
   // 제목을 누르면 열림. 일반 관리자·미인증에게는 아무 일도 일어나지 않음.
-  let adminList=null;
+  let adminList=null, rankCache={}; // rankCache: 판별로 마지막 성공 결과(창을 다시 열 때 바로 보여줌)
   const NL2=String.fromCharCode(10,10);
   window.gmTitleClick=function(){ if(gameSuper()) gmShowAdmin(); };
   async function gas2(action,extra){ return gas(Object.assign({action,adminToken:gameAdminToken()},extra||{})); }
   function admWrap(inner){
     return `<div class="gm-adm-title">${menuIcon('rank')} 게임 관리 <small>슈퍼 관리자</small></div>`+inner+
       `<div class="gm-adm-sec">돌발 이벤트 <small>누르면 모두에게 30분 동안 걸립니다</small></div>`+
+      (()=>{ const f=forcedEvent();
+        return f?`<div class="gm-adm-evnow"><img src="${UI}${f.img}.png" alt=""/><span><b>${escHtml(f.name)}</b> · ${escHtml(f.desc)}</span><em>${Math.ceil(f.left/60)}분 남음</em></div>`
+                :`<div class="gm-adm-evnow off">지금 걸린 돌발 이벤트가 없습니다</div>`; })()+
       `<div class="gm-adm-evs">${EVENTS.map(e=>`<button type="button" title="${escHtml(e.name)} — ${escHtml(e.desc)}" onclick="gmAdminEvent('${e.id}')"><img src="${UI}${e.img}.png" alt=""/><span>${escHtml(e.name)}</span></button>`).join('')}`+
       `<button type="button" class="off" title="돌발 이벤트 끄기" onclick="gmAdminEvent('')"><span>끄기</span></button></div>`+
       `<div class="gm-adm-btns"><button type="button" class="gm-btn" onclick="gmAdminBackup()">지금 백업</button>`+
@@ -1008,6 +1011,7 @@
       const j=await gas2('gameAdminList');
       if(!j.success) throw new Error(j.error||'실패');
       adminList=j.players||[];
+      setForced(j.forcedEvent||null);
       inner=adminList.length?`<div class="gm-adm-head"><span>닉네임</span><span>직급/단계</span><span>사장</span><span></span></div>`+
         adminList.map((x,i)=>`<div class="gm-adm-row">
           <b title="${escHtml(x.playerId)}">${escHtml(x.nickname)}</b>
@@ -1058,24 +1062,34 @@
   async function gmShowRanking(board){
     board=['stairs','suika','tetris'].includes(board)?board:'promo';
     const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button></div>`;
-    el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>'; lockBodySize();
-    let html='';
-    try{
-      const j=await gas({action:'gameRanking',playerId:pid,board});
-      if(!j.success) throw new Error(j.error);
-      const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
-      const info=x=>board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-      const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
-      html=`<div class="gm-rank-title">${ic(IC[board])}${board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹'} <small>(${j.players}명)</small></div>`+
-        (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
-        j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
-        (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
-    }catch(e){
-      const why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
-      html=`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking('${board}')">다시 시도</button>`;
+    const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
+    const info=x=>board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+    const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
+    const title=board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
+    const body=(j,stale)=>`<div class="gm-rank-title">${ic(IC[board])}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
+      (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
+      j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
+      (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
+    const paint=html=>{ const b=el('gmBody'); if(!b) return false;
+      b.innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
+    // 전에 본 적 있으면 그걸 먼저 보여주고 뒤에서 갱신 — 서버가 2초 넘게 걸려서 빈 화면을 오래 보던 문제
+    const seen=rankCache[board];
+    paint(seen?body(seen,true):'<div class="gm-intro">랭킹 불러오는 중…</div>');
+    let j=null, why='';
+    for(let attempt=0;attempt<2&&!j;attempt++){   // 한 번 실패하면 조용히 한 번 더 — 가끔 응답이 비던 문제
+      try{
+        const r=await gas({action:'gameRanking',playerId:pid,board});
+        if(!r.success) throw new Error(r.error||'실패');
+        j=r;
+      }catch(e){
+        why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
+        if(attempt===0) await new Promise(r=>setTimeout(r,600));
+      }
     }
-    if(!el('gmBody').querySelector('.gm-rank-tabs')) return; // 그 사이 다른 화면으로 이동
-    el('gmBody').innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize();
+    if(!el('gmBody')||!el('gmBody').querySelector('.gm-rank-tabs')) return; // 그 사이 다른 화면으로 이동
+    if(j){ rankCache[board]=j; paint(body(j,false)); }
+    else if(seen) paint(body(seen,false)+`<div class="gm-rank-note">최신 정보를 받지 못했습니다 (${escHtml(why)})</div>`);
+    else paint(`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking('${board}')">다시 시도</button>`);
   }
 
   /* ---------- 무한의 계단 ---------- */

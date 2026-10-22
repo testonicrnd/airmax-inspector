@@ -1139,6 +1139,17 @@ function gameFindRow(values, playerId) {
     for (var i = 0; i < values.length; i++) if (String(values[i][0]) === playerId) return i;
     return -1;
 }
+// 랭킹 응답 만들기 — 캐시에는 playerId를 담아 두고, 내보낼 때만 '나' 표시로 바꾼다
+function rankOfPid(list, playerId) {
+    for (var i = 0; i < list.length; i++) if (String(list[i].pid) === playerId) return i + 1;
+    return 0;
+}
+function stripPid(x, playerId) {
+    var o = {};
+    for (var k in x) if (k !== 'pid') o[k] = x[k];
+    o.me = String(x.pid) === playerId;
+    return o;
+}
 function gameNickKey(nick) { return String(nick || '').replace(/\s+/g, '').toLowerCase(); }
 function gameHash(text) {
     return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8)
@@ -1201,7 +1212,7 @@ function handleGameAdmin(data) {
                 };
             });
             list.sort(function(a, b) { return (b.done - a.done) || (b.level - a.level) || (b.stage - a.stage); });
-            return buildJson({ success: true, players: list });
+            return buildJson({ success: true, players: list, forcedEvent: readForcedEvent() });
         }
 
         // 아래는 특정 플레이어 대상 — 행이 밀렸을 수 있으므로 playerId로 다시 찾는다
@@ -1249,12 +1260,22 @@ function handleGameAction(data) {
         var token = String(data.token || '');
 
         if (data.action === 'gameRanking') {
+            // 랭킹은 모두가 같은 결과를 보므로 잠깐 캐시 — 시트를 매번 훑지 않아 눈에 띄게 빨라진다.
+            // 내 순위는 사람마다 다르므로 캐시에는 목록만 담고 순위는 아래에서 다시 계산한다.
+            var rkCache = CacheService.getScriptCache();
+            var rkKey = 'gmrank_' + (['stairs','suika','tetris'].indexOf(data.board) >= 0 ? data.board : 'promo');
+            var cached = null;
+            try { cached = JSON.parse(rkCache.get(rkKey) || 'null'); } catch (e) { cached = null; }
+            if (cached && cached.all) {
+                return buildJson({ success: true, players: cached.all.length, myRank: rankOfPid(cached.all, playerId),
+                    top: cached.all.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
+            }
             // 승진 순위: 가장 늦게 입사한(어려운) 직원 → 그 직원의 단계 → 레벨 → 누적 실적
             // board='stairs': 무한의 계단 최고 층수 / 'suika': 수박 게임 / 'tetris': 테트리스 최고 점수 순위 (기록 있는 사람만)
             var board = ['stairs', 'suika', 'tetris'].indexOf(data.board) >= 0 ? data.board : 'promo';
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
                 var s = gameReadState(r) || {};
-                return { nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, me: String(r[0]) === playerId };
+                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0 };
             });
             if (board !== 'promo') {
                 list = list.filter(function(x) { return x[board] > 0; });
@@ -1262,9 +1283,9 @@ function handleGameAction(data) {
             } else {
                 list.sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
             }
-            var myRank = 0;
-            list.forEach(function(x, i) { if (x.me) myRank = i + 1; });
-            return buildJson({ success: true, top: list.slice(0, 10), myRank: myRank, players: list.length });
+            try { rkCache.put(rkKey, JSON.stringify({ all: list }), 45); } catch (e) { /* 캐시 실패는 무시 */ }
+            return buildJson({ success: true, players: list.length, myRank: rankOfPid(list, playerId),
+                top: list.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
         }
 
         // 닉네임 + PIN — 없는 닉네임이면 새로 가입, 있으면 PIN 확인 후 이어하기

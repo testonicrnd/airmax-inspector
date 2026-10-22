@@ -1821,6 +1821,13 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-adm-note { font-size:10px; color:var(--text3); margin:5px 2px 0; }
 .gm-adm-sec { font-size:11px; font-weight:800; color:var(--text2); margin:10px 2px 5px; }
 .gm-adm-sec small { font-weight:600; font-size:10px; color:var(--text3); margin-left:4px; }
+.gm-adm-evnow { display:flex; align-items:center; gap:7px; padding:6px 9px; margin-bottom:5px; border-radius:9px;
+  background:linear-gradient(90deg,#fff2cf,#ffe3a0); border:1px solid #f0b429; font-size:11px; color:#4a3410; }
+.gm-adm-evnow img { height:20px; width:auto; }
+.gm-adm-evnow span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-adm-evnow em { font-style:normal; font-weight:800; color:#8a6400; flex:none; }
+.gm-adm-evnow.off { background:var(--input-bg); border:1px dashed var(--border); color:var(--text3); justify-content:center; }
+.gm-rank-note { font-size:10.5px; color:var(--text3); text-align:center; margin:6px 2px 0; }
 .gm-adm-evs { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
 .gm-adm-evs button { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px 5px;
   border:1px solid var(--border); border-radius:8px; background:var(--input-bg); color:var(--text2);
