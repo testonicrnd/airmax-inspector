@@ -510,8 +510,12 @@
       <button type="button" class="gm-btn primary" id="gmStartBtn" onclick="gmStart()">입사 / 이어하기</button>`;
   }
   function setLoginMsg(text,err){ const m=el('gmLoginMsg'); if(m){ m.textContent=text; m.classList.toggle('err',!!err); } }
+  // 창 크기 고정 — 플레이 화면 높이를 기억해 두고 계단·랭킹·직원 화면도 같은 높이(넘치면 안에서 스크롤)
+  let playH=0;
+  function lockBodySize(){ const b=el('gmBody'); if(!b||!playH) return; b.style.height=playH+'px'; b.classList.add('fixed'); }
   function renderPlay(){
     tipIdx=-1; tipSticky=false;
+    { const b=el('gmBody'); b.style.height=''; b.classList.remove('fixed'); }
     el('gmBody').innerHTML=`
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
@@ -535,6 +539,7 @@
       <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link${stairsUnlocked()?'':' locked'}" onclick="gmShowStairs()">🪜 계단</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
+    playH=el('gmBody').offsetHeight;
     bindUpgradeHold(el('gmUps'));
     const t=el('gmType');
     if(t){
@@ -650,7 +655,7 @@
   async function gmShowRanking(board){
     board=board==='stairs'?'stairs':'promo';
     const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 무한의 계단</button></div>`;
-    el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>';
+    el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>'; lockBodySize();
     let html='';
     try{
       const j=await gas({action:'gameRanking',playerId:pid,board});
@@ -666,17 +671,18 @@
       html=`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking('${board}')">다시 시도</button>`;
     }
     if(!el('gmBody').querySelector('.gm-rank-tabs')) return; // 그 사이 다른 화면으로 이동
-    el('gmBody').innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
+    el('gmBody').innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize();
   }
 
   /* ---------- 무한의 계단 ---------- */
   // 다음 계단이 왼쪽/오른쪽 어느 쪽인지 맞춰 누르며 오르기. 시간 막대는 오를수록 빨리 줄고, 맞게 누르면 조금 회복.
   // 틀리거나 시간이 다 되면 끝 → 층수 × 지금 단계 × 0.05 경험치 (단어 입력의 약 30% 효율)
+  // 아이템: 앞쪽 계단 몇 군데에 놓이고 밟으면 발동 — 🚀 로켓 +10층 / ⏰ 시계 시간 가득 / 🛡️ 방패 실수 1번 막음
   const STAIRS_REQ=12, STAIRS_EXP=0.05;
   let stairs=null, stairsFace=null;
   function stairsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=STAIRS_REQ); }
   function stairsNew(){
-    stairs={xs:[0],dirs:[],count:0,time:1,running:false,over:false,lastT:0,raf:0,result:''};
+    stairs={xs:[0],dirs:[],items:{},shield:0,count:0,time:1,running:false,over:false,lastT:0,raf:0,flash:null};
     stairsGrow();
   }
   function stairsGrow(){
@@ -684,7 +690,25 @@
       const prev=stairs.dirs[stairs.dirs.length-1]||(Math.random()<0.5?-1:1);
       const d=Math.random()<0.65?prev:-prev; // 같은 방향이 이어지는 경우가 더 많게
       stairs.dirs.push(d); stairs.xs.push(stairs.xs[stairs.xs.length-1]+d);
+      const i=stairs.xs.length-1;
+      // 아이템 — 5% 확률, 앞 6칸 안에 다른 아이템이 없을 때만 (로켓 40% · 시계 35% · 방패 25%)
+      if(i>8&&Math.random()<0.05&&![1,2,3,4,5,6].some(k=>stairs.items[i-k])){
+        const r=Math.random(); stairs.items[i]=r<0.4?'rocket':r<0.75?'clock':'shield';
+      }
     }
+  }
+  const STAIR_ITEMS={rocket:'🚀',clock:'⏰',shield:'🛡️'};
+  function stairsFlash(text){ stairs.flash={text,until:performance.now()+1200}; }
+  function stairsItem(it){
+    if(it==='rocket'){
+      for(let k=1;k<=10;k++) delete stairs.items[stairs.count+k];
+      stairs.count+=10; stairs.time=1; stairsGrow(); stairsFlash('🚀 로켓! +10층');
+    } else if(it==='clock'){ stairs.time=1; stairsFlash('⏰ 시간 충전!'); }
+    else if(it==='shield'){ stairs.shield++; stairsFlash('🛡️ 방패 획득!'); }
+  }
+  function stairsInfo(){
+    const i=el('gmStInfo'); if(!i) return;
+    i.textContent=`${stairs.count.toLocaleString()}층`+(stairs.shield?` · 🛡️×${stairs.shield}`:'');
   }
   function gmShowStairs(){
     if(!stairsUnlocked()){ toast(`🔒 주임(Lv.${STAIRS_REQ})을 달성한 직원이 있으면 열립니다`,2500); return; }
@@ -696,11 +720,13 @@
     stairsNew();
     el('gmBody').innerHTML=`
       <div class="gm-st-head"><b>🪜 무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span></div>
-      <canvas class="gm-st-cv" id="gmStCv" width="540" height="340"></canvas>
+      <canvas class="gm-st-cv" id="gmStCv"></canvas>
       <div class="gm-bar st"><i id="gmStTime" style="width:100%"></i></div>
       <div class="gm-st-info" id="gmStInfo">${isTouchDevice()?'◀ ▶ 버튼으로':'← → (또는 A / D) 키로'} 다음 계단 방향을 누르면 시작</div>
       <div class="gm-st-btns"><button type="button" onpointerdown="event.preventDefault();gmStep(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();gmStep(1)">▶</button></div>
       <button type="button" class="gm-btn" onclick="gmStairsExit()">돌아가기</button>`;
+    lockBodySize();
+    const cv=el('gmStCv'); cv.width=Math.round(cv.clientWidth*2)||540; cv.height=Math.round(cv.clientHeight*2)||340;
     drawStairs();
     el('gmWidget').focus();
   }
@@ -712,15 +738,17 @@
     if(d===stairs.dirs[stairs.count]){
       stairs.count++; stairs.time=Math.min(1,stairs.time+0.11);
       stairsGrow();
-      el('gmStInfo').textContent=`${stairs.count.toLocaleString()}층`;
-      drawStairs();
-    } else stairsEnd('발을 헛디뎠습니다!');
+      const it=stairs.items[stairs.count]; if(it){ delete stairs.items[stairs.count]; stairsItem(it); }
+      stairsInfo(); drawStairs();
+    } else if(stairs.shield>0){ stairs.shield--; stairsFlash('🛡️ 방패가 막아줬습니다!'); stairsInfo(); drawStairs(); }
+    else stairsEnd('발을 헛디뎠습니다!');
   }
   function stairsLoop(t){
     if(!stairs||!stairs.running) return;
     const dt=Math.min(0.1,(t-stairs.lastT)/1000); stairs.lastT=t;
     stairs.time-=(0.28+Math.min(stairs.count,400)*0.0018)*dt; // 오를수록 빨리 줄어듦
     const bar=el('gmStTime'); if(bar) bar.style.width=Math.max(0,stairs.time*100)+'%';
+    if(stairs.flash) drawStairs(); // 아이템 문구가 사라질 때까지 다시 그림
     if(stairs.time<=0){ stairsEnd('시간 초과!'); return; }
     stairs.raf=requestAnimationFrame(stairsLoop);
   }
@@ -744,10 +772,12 @@
     const cs=getComputedStyle(el('gmWidget'));
     const top=cs.getPropertyValue('--accent').trim()||'#e8732a', side=cs.getPropertyValue('--border').trim()||'#888';
     const cx=W/2, cy=H*0.68, px=stairs.xs[stairs.count];
-    for(let i=Math.max(0,stairs.count-6);i<Math.min(stairs.xs.length,stairs.count+9);i++){
+    for(let i=Math.max(0,stairs.count-6);i<Math.min(stairs.xs.length,stairs.count+16);i++){
       const x=cx+(stairs.xs[i]-px)*SW, y=cy-(i-stairs.count)*SH;
+      if(y<-40) break;
       g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
       g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1;
+      if(stairs.items[i]&&i>stairs.count){ g.font='34px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.fillText(STAIR_ITEMS[stairs.items[i]],x,y-10); }
     }
     // 캐릭터 — 계단 위에 선 전신 이미지. 마지막으로 오른 방향을 바라보도록 좌우 반전(왼쪽으로 오르면 뒤집음)
     g.save();
@@ -765,6 +795,11 @@
       else { g.fillStyle=top; g.fill(); g.fillStyle='#fff'; g.font='bold 20px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(charName(acc.ch).slice(1),hx,hy); }
     }
     g.restore();
+    // 아이템 발동 문구
+    if(stairs.flash){
+      if(performance.now()>stairs.flash.until) stairs.flash=null;
+      else { g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)'; g.strokeText(stairs.flash.text,W/2,16); g.fillStyle='#ffcf4a'; g.fillText(stairs.flash.text,W/2,16); }
+    }
     // 다음 방향 힌트 없음(직접 보고 판단). 층수 표시
     g.fillStyle=cs.getPropertyValue('--text3').trim()||'#999'; g.font='bold 26px sans-serif'; g.textAlign='right'; g.textBaseline='bottom';
     g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
@@ -785,6 +820,7 @@
           <span class="gm-char-row-text"><b>${escHtml(c.name)}${cur?' (키우는 중)':''}</b><small>${info}</small></span>
           <span class="gm-char-row-diff">${diff}</span></button>`;
       }).join('')+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
+    lockBodySize();
   }
 
   /* ---------- 열기/닫기 ---------- */
