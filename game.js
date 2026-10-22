@@ -232,22 +232,29 @@
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
   /* ---------- 사장까지 키운 선배의 격려 ---------- */
   // 사장을 달성한 다른 직원이 있으면, 업무를 끝낼 때 가끔 그 직원이 격려를 보낸다. 직원마다 효과가 다름.
-  let cheer=null; // {ch, def, until}
-  function cheerOn(){ if(cheer&&Date.now()>cheer.until) cheer=null; return cheer; }
-  function cheerMult(kind){ const c=cheerOn(); return c&&c.def.kind===kind?c.def.v:1; }
-  function cheerAdd(kind){ const c=cheerOn(); return c&&c.def.kind===kind?c.def.v:0; }
-  function cheerHas(kind){ const c=cheerOn(); return !!(c&&c.def.kind===kind); }
+  // 여러 명이 동시에 격려할 수 있다. 같은 사장은 겹치지 않고 남은 시간만 늘어난다.
+  let cheers=[]; // [{ch, def, until}]
+  function cheerOn(){ const now=Date.now(); if(cheers.some(c=>now>c.until)) cheers=cheers.filter(c=>now<=c.until); return cheers; }
+  function cheerMult(kind){ let m=1; cheerOn().forEach(c=>{ if(c.def.kind===kind) m*=c.def.v; }); return m; }
+  function cheerAdd(kind){ let a=0; cheerOn().forEach(c=>{ if(c.def.kind===kind) a+=c.def.v; }); return a; }
+  function cheerHas(kind){ return cheerOn().some(c=>c.def.kind===kind); }
   // 지금 키우는 직원 말고, 사장까지 키워 둔 선배들
   function seniors(){ return acc.runs.map((r,i)=>r&&r.done&&i!==acc.ch?i:-1).filter(i=>i>=0); }
   function tryCheer(){
-    if(cheerOn()) return;
-    const list=seniors(); if(!list.length) return;
-    if(Math.random()>=Math.min(0.02*list.length,0.1)) return; // 선배 1명당 2%, 최대 10%
+    const on=cheerOn(), busy=on.map(c=>c.ch);
+    const list=seniors().filter(i=>busy.indexOf(i)<0); // 이미 격려 중인 사장은 제외(중복 방지)
+    if(!list.length) return;
+    if(Math.random()>=Math.min(0.02*list.length,0.1)) return; // 남은 선배 1명당 2%, 최대 10%
     const ch=list[Math.floor(Math.random()*list.length)], c=CHARS[ch];
     if(!c||!c.cheer) return;
-    cheer={ch,def:c.cheer,until:Date.now()+c.cheer.sec*1000};
+    cheers.push({ch,def:c.cheer,until:Date.now()+c.cheer.sec*1000});
     toast(`${c.cheer.icon} ${c.name} 사장님의 격려 — ${c.cheer.desc} (${c.cheer.sec}초)`,3200);
     fxPop('fx-cheer',{x:3,cls:'lvup',gap:260,ms:1300});
+    // 키워 둔 선배가 전원 동시에 격려 — 흔치 않으니 따로 알려줌
+    if(cheers.length>=3&&cheers.length===seniors().length){
+      toast(`🎉 전원 격려! 선배 ${cheers.length}명이 한꺼번에 밀어줍니다`,4200);
+      fxPop('fx-confetti',{x:6,cls:'big',gap:140,ms:1600});
+    }
     render();
   }
   function evChance(kind){ const e=currentEvent(); return e&&e[kind]||0; }
@@ -797,10 +804,25 @@
     // 선배 사장님의 격려가 걸려 있으면 남은 시간과 함께 보여줌
     const cb=el('gmCheer'), cz=cheerOn();
     if(cb){
-      if(cz){ const left=Math.max(0,Math.ceil((cz.until-Date.now())/1000)), c=CHARS[cz.ch]||{};
+      if(!cz.length) cb.style.display='none';
+      else {
+        const sec=c=>Math.max(0,Math.ceil((c.until-Date.now())/1000));
         cb.style.display='';
-        cb.innerHTML=`<img src="${escHtml(c.face||'')}" alt=""/><b>${escHtml(c.name||'')} 사장님의 격려</b><span>${cz.def.icon} ${escHtml(cz.def.desc)}</span><em>${left}초</em>`;
-      } else cb.style.display='none';
+        cb.classList.toggle('many',cz.length>=2);
+        cb.classList.toggle('full',cz.length>=4);
+        if(cz.length===1){
+          const c0=cz[0], c=CHARS[c0.ch]||{};
+          cb.innerHTML=`<img src="${escHtml(c.face||'')}" alt=""/><b>${escHtml(c.name||'')} 사장님의 격려</b><span>${c0.def.icon} ${escHtml(c0.def.desc)}</span><em>${sec(c0)}초</em>`;
+        } else {
+          // 여럿이면 한 줄에 칩으로 — 많아질수록 글자를 덜어내 줄바꿈이 생기지 않게
+          const tight=cz.length>=5;
+          cb.innerHTML=`<b class="gm-cheer-n">격려 ${cz.length}</b>`+cz.map(c0=>{
+            const c=CHARS[c0.ch]||{};
+            return `<span class="gm-cheer-chip" title="${escHtml((c.name||'')+' — '+c0.def.desc)}">`+
+              `<img src="${escHtml(c.face||'')}" alt=""/>${c0.def.icon}${tight?'':`<i>${sec(c0)}</i>`}</span>`;
+          }).join('');
+        }
+      }
     }
     const ev=currentEvent(), eb=el('gmEvent');
     if(eb){ if(ev){ eb.style.display='';
@@ -1628,9 +1650,10 @@
     if(seq[seqPos]) keyInput(seq[seqPos][0]);
   };
   window.gmBuy=buy;
-  if(window.__GM_TEST) window.__gmCheer=function(ch){ // 자동 테스트에서 격려를 강제로 걸어봄
-    const c=CHARS[ch||0]; if(!c||!c.cheer) return null;
-    cheer={ch:ch||0,def:c.cheer,until:Date.now()+c.cheer.sec*1000}; render(); return cheer;
+  if(window.__GM_TEST) window.__gmCheer=function(ch){ // 자동 테스트에서 격려를 강제로 걸어봄(누적)
+    const i=ch||0, c=CHARS[i]; if(!c||!c.cheer) return null;
+    if(cheers.some(x=>x.ch===i)) return cheers;
+    cheers.push({ch:i,def:c.cheer,until:Date.now()+c.cheer.sec*1000}); render(); return cheers;
   };
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;

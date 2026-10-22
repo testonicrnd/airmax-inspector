@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.41.1';
+const APP_VERSION = 'v2.42.0';
 const APP_DATE    = '2026.10.23';
 
 /* ===== 설정 ===== */

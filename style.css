@@ -1411,6 +1411,16 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-cheer b { color:#4a3410; font-weight:700; white-space:nowrap; }
 .gm-cheer span { color:#6b5120; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-cheer em { font-style:normal; font-weight:700; color:#c47b00; flex:none; }
+/* 여러 명이 동시에 격려 — 한 줄을 유지하려고 칩으로 압축 */
+.gm-cheer.many { gap:4px; padding:4px 7px; }
+.gm-cheer-n { color:#8a6400 !important; font-size:10px; font-weight:800; flex:none; letter-spacing:-0.02em; }
+.gm-cheer-chip { display:flex; align-items:center; gap:2px; flex:none; font-size:11px; color:#4a3410;
+  background:rgba(255,255,255,0.75); border:1px solid rgba(255,183,0,0.5); border-radius:99px; padding:1px 5px 1px 1px; }
+.gm-cheer-chip img { width:16px; height:16px; margin:0; }
+.gm-cheer-chip i { font-style:normal; font-weight:700; color:#8a6400; font-size:10px; }
+.gm-cheer.full { padding:3px 6px; gap:3px; }
+.gm-cheer.full .gm-cheer-chip { padding:1px 3px 1px 1px; font-size:10px; }
+.gm-cheer.full .gm-cheer-chip img { width:14px; height:14px; }
 @keyframes gmCheerIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
 .gm-stats { display:flex; justify-content:space-between; gap:6px; margin:8px 0; color:var(--text2); font-size:12px; }
 .gm-arena { position:relative; display:block; width:100%; padding:8px 10px 10px; border:1.5px dashed var(--border); border-radius:10px;
