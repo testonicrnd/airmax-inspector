@@ -85,6 +85,7 @@
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
     {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
+    {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -94,7 +95,7 @@
     {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:1000000000, grow:1.35, max:20, req:50},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -900,7 +901,7 @@
   function skEnd(why){
     if(!suika||suika.over) return;
     suika.over=true;
-    const n=suika.score, exp=Math.round(n*Math.max(1,st.stage)*SUIKA_EXP);
+    const n=suika.score, exp=Math.round(n*Math.max(1,st.stage)*SUIKA_EXP*(1+0.2*(st.suikaLv||0))); // 수박 장인으로 증가
     const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
