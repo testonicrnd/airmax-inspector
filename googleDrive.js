@@ -1094,8 +1094,9 @@ function handleGameAction(data) {
                     return buildJson({ success: false, error: '이미 사용 중인 닉네임이거나 PIN이 틀렸습니다. (' + (GAME_PIN_MAX_FAIL - fails - 1) + '번 남음)' });
                 }
                 cache.remove(failKey);
-                var t = String(row[9] || '');
-                if (!t) { t = gameNewId(); sheet.getRange(at + 2, 10).setValue(t); }
+                // 로그인할 때마다 새 토큰 — 예전 기기의 토큰은 무효가 되어 그 기기는 더 이상 저장할 수 없음(동시 접속 덮어쓰기·백섭 방지)
+                var t = gameNewId();
+                sheet.getRange(at + 2, 10).setValue(t);
                 return buildJson({ success: true, created: false, playerId: rowId, token: t, nickname: String(row[1]), state: gameReadState(row) });
             } finally {
                 lock.releaseLock();
@@ -1106,7 +1107,7 @@ function handleGameAction(data) {
         var idx = gameFindRow(values, playerId);
         // PIN 계정은 세션 토큰이 맞아야 불러오기/저장 가능. PIN 없는 예전 행은 예전 앱(토큰 없음)이 랭킹 초기화 전까지 계속 쓸 수 있게 둠
         var legacy = idx >= 0 && !values[idx][8];
-        if (idx >= 0 && !legacy && String(values[idx][9]) !== token) return buildJson({ success: false, auth: false, error: '다시 로그인해주세요.' });
+        if (idx >= 0 && !legacy && String(values[idx][9]) !== token) return buildJson({ success: false, auth: false, code: 'OTHER_DEVICE', error: '다른 기기에서 로그인되어 로그아웃되었습니다.' });
         if (idx < 0 && token) return buildJson({ success: false, auth: false, error: '계정을 찾을 수 없습니다. 다시 로그인해주세요.' });
 
         if (data.action === 'gameLoad') {

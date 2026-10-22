@@ -226,9 +226,14 @@
     lsSet(LS_ACCT,a);
   }
   // 서버가 토큰을 거부(랭킹 초기화로 계정이 없어졌거나 다른 계정) → 로그인 화면으로
-  function authLost(){
-    setAccount(null); stopLoops(); mon=null; useAcc(acc0());
-    if(el('gmBody')){ renderNick(); setLoginMsg('다시 로그인해주세요.'); }
+  // 다른 기기에서 로그인하면 이 기기 토큰이 무효 → 저장하지 않고 로그아웃. 이 기기의 예전 진행도 지워서
+  // 나중에 다시 로그인했을 때 옛날 데이터로 서버를 덮어쓰지 않게(백섭 방지)
+  function authLost(msg){
+    const keepNick=nick;
+    setAccount(null); stopLoops(); mon=null; dirty=false; useAcc(acc0());
+    try{ localStorage.removeItem(LS_STATE); }catch(e){}
+    nick=keepNick;
+    if(el('gmBody')){ if(!isVisible()) gmShow(); renderNick(); setLoginMsg(msg||'다른 기기에서 로그인되어 로그아웃되었습니다. 다시 로그인하면 최신 진행을 불러옵니다.',true); }
   }
   async function gas(payload){
     if(typeof GAS_URL==='undefined'||!GAS_URL) throw new Error('no gas');
@@ -1349,8 +1354,8 @@
     serverOk=true;
     const local=lsGet(LS_STATE,null);
     const localSt=local&&local.pid===pid&&local.state?local.state:null;
-    // 이 기기 저장과 서버 저장 중 더 최근 것으로 이어하기
-    const pick=[j.state,localSt].filter(Boolean).sort((a,b)=>(b.lastSave||0)-(a.lastSave||0))[0];
+    // 서버 진행이 기준(항상 마지막으로 로그인한 기기만 저장할 수 있음). 서버에 아직 없을 때만 이 기기 저장 사용
+    const pick=j.state||localSt;
     useAcc(hydrate(pick));
     if(j.created) toast(`${j.nickname} 님, 입사를 환영합니다!`,3000);
     else toast(`${j.nickname} 님, 이어서 플레이합니다`,2500);
@@ -1446,6 +1451,7 @@
       saveServer(false);
     } else {
       lastInput=Date.now();
+      if(pid&&token) loadServer(); // 돌아오면 바로 서버 확인 — 다른 기기에서 로그인했으면 즉시 로그아웃, 더 최신 진행이면 불러옴
       if(mon&&!ticker&&isVisible()){ applyOffline(); render(); startLoops(); }
       if(locked&&isVisible()&&(document.activeElement===document.body||!document.activeElement)) focusPlay();
     }
