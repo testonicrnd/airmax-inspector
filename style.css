@@ -1361,7 +1361,7 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
 
 /* ===== 숨은 미니 게임 "테스토닉 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
-.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:360px; max-width:calc(100vw - 32px);
+.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:400px; max-width:calc(100vw - 32px);
   background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
 .gm-widget.dim { opacity:0.35; }
