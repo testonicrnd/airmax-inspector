@@ -7,6 +7,8 @@
    조작(PC): 업무마다 뜨는 단어(점검 장소·구분·항목·결과 등 짧은 단어)를 입력칸에 치고 Space/Enter — 옆에서 보면 일하는 모습.
    보스(결재)는 단어 여러 개. 맞게 이어서 치면 콤보로 처리량 증가, 틀리면 콤보 초기화. 긴 단어일수록 한 번에 많이 처리.
    휴대폰: 화면 탭(지금 키를 맞게 누른 것으로 처리).
+   🪜 무한의 계단: 주임을 달성한 직원이 있으면 열림. ←/→(A/D)로 다음 계단 방향을 맞춰 오르기, 끝나면 층수만큼 경험치(단어 입력보다 낮은 효율).
+   최고 층수는 계정별로 저장하고 랭킹을 따로 집계.
    📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
    캐릭터: 신동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
@@ -327,9 +329,29 @@
   }
   function buy(i){
     const u=UPGRADES[i], lv=st[u.key]||0, c=costOf(u,lv);
-    if(lv>=u.max||st.gold<c||(u.req&&st.lv<u.req)) return;
+    if(lv>=u.max||st.gold<c||(u.req&&st.lv<u.req)) return false;
     st.gold-=c; st[u.key]++; dirty=true; render();
+    return true;
   }
+  // 강화 타일 — 누르면 1번, 꾹 누르고 있으면 돈이 되는 만큼 쭈루룩(점점 빨라짐). 타일이 다시 그려져도 이어지도록 목록 단위로 처리
+  let holdTimer=0;
+  function holdStop(){ clearTimeout(holdTimer); holdTimer=0; }
+  function bindUpgradeHold(box){
+    box.addEventListener('pointerdown',e=>{
+      const tile=e.target.closest('.gm-tile'); if(!tile||e.target.closest('.gm-tile-q')) return;
+      if(e.button>0) return;
+      e.preventDefault(); lastInput=Date.now();
+      const i=+tile.dataset.i;
+      holdStop();
+      if(!buy(i)) return;
+      let n=0;
+      const again=()=>{ if(!buy(i)){ holdStop(); return; } n++; lastInput=Date.now(); holdTimer=setTimeout(again,n<10?90:n<30?50:25); };
+      holdTimer=setTimeout(again,380);
+    });
+  }
+  window.addEventListener('pointerup',holdStop);
+  window.addEventListener('pointercancel',holdStop);
+  window.addEventListener('blur',holdStop);
   // 게임이 비활성이던 동안 — 커피 수혈이 10% 효율로 실제로 업무를 처리한 것처럼 계산 (최대 누적 시간은 야근 강화로 늘어남).
   // 지금 키우는 캐릭터에만 반영. 업무 건수·실적·경험치·단계까지 반영하고, 결재 보스는 커피만으로 30초 안에 처리될 때만 통과
   function applyOffline(){
@@ -450,7 +472,7 @@
     el('gmBody').innerHTML=`
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
-      <div class="gm-stats"><span>💰 <b id="gmGold"></b></span><span id="gmStage"></span><span id="gmDps"></span></div>
+      <div class="gm-stats"><span>💸 <b id="gmGold"></b></span><span id="gmStage"></span><span id="gmDps"></span></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         ${bodyHtml(acc.ch)}
         <div class="gm-task">
@@ -467,8 +489,9 @@
       <div class="gm-hint" id="gmFocusHint"></div>
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link${stairsUnlocked()?'':' locked'}" onclick="gmShowStairs()">🪜 계단</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
+    bindUpgradeHold(el('gmUps'));
     const t=el('gmType');
     if(t){
       t.addEventListener('keydown',e=>{
@@ -524,12 +547,12 @@
     const ups=UPGRADES.map((u,i)=>{
       const lv=st[u.key]||0, c=costOf(u,lv), maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
-      return `<button type="button" class="gm-tile${cls}" onclick="gmBuy(${i})">
+      return `<button type="button" class="gm-tile${cls}" data-i="${i}">
         <span class="gm-tile-q" onmouseenter="gmTip(event,${i},true)" onclick="gmTip(event,${i})">?</span>
         <span class="gm-tile-icon">${locked?'🔒':u.icon}</span>
         <span class="gm-tile-name">${u.name}</span>
         <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
-        <span class="gm-tile-cost">${locked?'':maxed?'MAX':'💰'+fmt(c)}</span></button>`;
+        <span class="gm-tile-cost">${locked?'':maxed?'MAX':'💸'+fmt(c)}</span></button>`;
     }).join('');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }
@@ -574,21 +597,120 @@
     w.appendChild(t);
     setTimeout(()=>t.remove(),ms||2200);
   }
-  async function gmShowRanking(){
-    el('gmBody').innerHTML='<div class="gm-intro">랭킹 불러오는 중…</div>';
+  async function gmShowRanking(board){
+    board=board==='stairs'?'stairs':'promo';
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 무한의 계단</button></div>`;
+    el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>';
     let html='';
     try{
-      const j=await gas({action:'gameRanking',playerId:pid});
+      const j=await gas({action:'gameRanking',playerId:pid,board});
       if(!j.success) throw new Error(j.error);
-      html=`<div class="gm-rank-title">🏆 승진 랭킹 <small>(${j.players}명)</small></div>`+
-        j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계</span></div>`).join('')+
-        (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>나</span></div>`:'');
+      const info=x=>board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+      const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:'나';
+      html=`<div class="gm-rank-title">${board==='stairs'?'🪜 무한의 계단 최고 기록':'🏆 승진 랭킹'} <small>(${j.players}명)</small></div>`+
+        (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
+        j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
+        (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
     }catch(e){
       const why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
-      html=`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking()">다시 시도</button>`;
+      html=`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking('${board}')">다시 시도</button>`;
     }
-    el('gmBody').innerHTML=html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
+    if(!el('gmBody').querySelector('.gm-rank-tabs')) return; // 그 사이 다른 화면으로 이동
+    el('gmBody').innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
   }
+
+  /* ---------- 무한의 계단 ---------- */
+  // 다음 계단이 왼쪽/오른쪽 어느 쪽인지 맞춰 누르며 오르기. 시간 막대는 오를수록 빨리 줄고, 맞게 누르면 조금 회복.
+  // 틀리거나 시간이 다 되면 끝 → 층수 × 지금 단계 × 0.05 경험치 (단어 입력의 약 30% 효율)
+  const STAIRS_REQ=12, STAIRS_EXP=0.05;
+  let stairs=null, stairsFace=null;
+  function stairsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=STAIRS_REQ); }
+  function stairsNew(){
+    stairs={xs:[0],dirs:[],count:0,time:1,running:false,over:false,lastT:0,raf:0,result:''};
+    stairsGrow();
+  }
+  function stairsGrow(){
+    while(stairs.dirs.length<stairs.count+30){
+      const prev=stairs.dirs[stairs.dirs.length-1]||(Math.random()<0.5?-1:1);
+      const d=Math.random()<0.65?prev:-prev; // 같은 방향이 이어지는 경우가 더 많게
+      stairs.dirs.push(d); stairs.xs.push(stairs.xs[stairs.xs.length-1]+d);
+    }
+  }
+  function gmShowStairs(){
+    if(!stairsUnlocked()){ toast(`🔒 주임(Lv.${STAIRS_REQ})을 달성한 직원이 있으면 열립니다`,2500); return; }
+    const c=CHARS[acc.ch]||CHARS[0];
+    stairsFace=null;
+    if(c.face){ stairsFace=new Image(); stairsFace.src=c.face; stairsFace.onload=()=>drawStairs(); }
+    stairsNew();
+    el('gmBody').innerHTML=`
+      <div class="gm-st-head"><b>🪜 무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span></div>
+      <canvas class="gm-st-cv" id="gmStCv" width="540" height="340"></canvas>
+      <div class="gm-bar st"><i id="gmStTime" style="width:100%"></i></div>
+      <div class="gm-st-info" id="gmStInfo">${isTouchDevice()?'◀ ▶ 버튼으로':'← → (또는 A / D) 키로'} 다음 계단 방향을 누르면 시작</div>
+      <div class="gm-st-btns"><button type="button" onpointerdown="event.preventDefault();gmStep(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();gmStep(1)">▶</button></div>
+      <button type="button" class="gm-btn" onclick="gmStairsExit()">돌아가기</button>`;
+    drawStairs();
+    el('gmWidget').focus();
+  }
+  function gmStep(d){
+    if(!stairs) return;
+    lastInput=Date.now();
+    if(stairs.over){ gmShowStairs(); return; } // 끝난 뒤 누르면 다시 시작
+    if(!stairs.running){ stairs.running=true; stairs.lastT=performance.now(); stairs.raf=requestAnimationFrame(stairsLoop); el('gmStInfo').textContent='오르는 중…'; }
+    if(d===stairs.dirs[stairs.count]){
+      stairs.count++; stairs.time=Math.min(1,stairs.time+0.11);
+      stairsGrow();
+      el('gmStInfo').textContent=`${stairs.count.toLocaleString()}층`;
+      drawStairs();
+    } else stairsEnd('발을 헛디뎠습니다!');
+  }
+  function stairsLoop(t){
+    if(!stairs||!stairs.running) return;
+    const dt=Math.min(0.1,(t-stairs.lastT)/1000); stairs.lastT=t;
+    stairs.time-=(0.28+Math.min(stairs.count,400)*0.0018)*dt; // 오를수록 빨리 줄어듦
+    const bar=el('gmStTime'); if(bar) bar.style.width=Math.max(0,stairs.time*100)+'%';
+    if(stairs.time<=0){ stairsEnd('시간 초과!'); return; }
+    stairs.raf=requestAnimationFrame(stairsLoop);
+  }
+  function stairsEnd(why){
+    if(!stairs||stairs.over) return;
+    stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
+    const n=stairs.count, exp=Math.round(n*Math.max(1,st.stage)*STAIRS_EXP);
+    const best=n>(acc.stairsBest||0);
+    if(best) acc.stairsBest=n;
+    if(exp>0) gainExp(exp);
+    dirty=true; saveServer(true);
+    const info=el('gmStInfo');
+    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}층</b> · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>아무 방향이나 누르면 다시 시작</small>`;
+    if(el('gmStBest')) el('gmStBest').textContent=(acc.stairsBest||0).toLocaleString();
+    drawStairs();
+  }
+  function drawStairs(){
+    const cv=el('gmStCv'); if(!cv||!stairs) return;
+    const g=cv.getContext('2d'), W=cv.width, H=cv.height, SW=96, SH=50, BW=90;
+    g.clearRect(0,0,W,H);
+    const cs=getComputedStyle(el('gmWidget'));
+    const top=cs.getPropertyValue('--accent').trim()||'#e8732a', side=cs.getPropertyValue('--border').trim()||'#888';
+    const cx=W/2, cy=H*0.68, px=stairs.xs[stairs.count];
+    for(let i=Math.max(0,stairs.count-6);i<Math.min(stairs.xs.length,stairs.count+9);i++){
+      const x=cx+(stairs.xs[i]-px)*SW, y=cy-(i-stairs.count)*SH;
+      g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
+      g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1;
+    }
+    // 캐릭터 — 얼굴 이미지(없으면 이름)
+    const r=23, hx=cx, hy=cy-8-r;
+    g.save(); g.beginPath(); g.arc(hx,hy,r,0,Math.PI*2); g.closePath();
+    if(stairs.over){ g.globalAlpha=0.45; }
+    if(stairsFace&&stairsFace.complete&&stairsFace.naturalWidth){ g.fillStyle='#f1ede8'; g.fill(); g.clip(); g.drawImage(stairsFace,hx-r,hy-r,r*2,r*2); }
+    else { g.fillStyle=top; g.fill(); g.fillStyle='#fff'; g.font='bold 20px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(charName(acc.ch).slice(1),hx,hy); }
+    g.restore();
+    // 다음 방향 힌트 없음(직접 보고 판단). 층수 표시
+    g.fillStyle=cs.getPropertyValue('--text3').trim()||'#999'; g.font='bold 26px sans-serif'; g.textAlign='right'; g.textBaseline='bottom';
+    g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
+  }
+  window.gmShowStairs=gmShowStairs;
+  window.gmStep=gmStep;
+  window.gmStairsExit=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); if(stairs.running) stairsEnd('그만 오름'); } stairs=null; renderPlay(); focusPlay(); };
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
   function gmShowChars(){
     const hire=canHire();
@@ -671,7 +793,7 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ renderPlay(); focusPlay(); };
+  window.gmBack=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
@@ -706,6 +828,12 @@
     if(!hasFocus()||e.target.tagName==='INPUT') return;
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat) return;
     lastInput=Date.now();
+    // 무한의 계단 — ←/A/F 왼쪽, →/D/J 오른쪽
+    if(stairs&&el('gmStCv')){
+      if(['ArrowLeft','KeyA','KeyF'].includes(e.code)){ e.preventDefault(); gmStep(-1); }
+      else if(['ArrowRight','KeyD','KeyJ'].includes(e.code)){ e.preventDefault(); gmStep(1); }
+      return;
+    }
     // 창은 잡혀 있는데 입력칸 밖이면 입력칸으로 (PC 단어 입력)
     if(el('gmType')){ el('gmType').focus(); return; }
     if(KEYS.some(k=>k[0]===e.code)||/^Key[A-Z]$/.test(e.code)){ e.preventDefault(); keyInput(e.code); }

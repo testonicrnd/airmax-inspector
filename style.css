@@ -1502,3 +1502,19 @@ body.checklist-page-active { padding-bottom:46px; }
   font-size:11.5px; line-height:1.55; box-shadow:0 4px 14px rgba(0,0,0,0.25); pointer-events:none; word-break:keep-all; }
 .gm-tip span { opacity:0.7; font-size:10.5px; }
 .gm-float.project { font-size:15px; color:#d9a23a; font-weight:800; }
+
+/* 테스토닉 키우기 — 무한의 계단 / 랭킹 탭 */
+.gm-st-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:6px; }
+.gm-st-head span { font-size:11.5px; color:var(--text3); }
+.gm-st-cv { display:block; width:100%; height:170px; border:1.5px solid var(--border2); border-radius:10px; background:var(--input-bg); }
+.gm-bar.st { margin-top:6px; }
+.gm-bar.st i { background:var(--accent); transition:none; }
+.gm-st-info { font-size:12px; text-align:center; color:var(--text2); margin-top:6px; min-height:34px; word-break:keep-all; }
+.gm-st-info small { color:var(--text4); }
+.gm-st-btns { display:flex; gap:8px; margin-top:4px; }
+.gm-st-btns button { flex:1; padding:12px 0; font-size:18px; border:1.5px solid var(--border); border-radius:10px; background:var(--input-bg); color:var(--text); cursor:pointer; touch-action:manipulation; }
+.gm-st-btns button:active { transform:scale(0.96); background:var(--accent-bg); }
+.gm-link.locked { opacity:0.4; }
+.gm-rank-tabs { display:flex; gap:4px; margin-bottom:8px; }
+.gm-rank-tabs button { flex:1; padding:6px 0; border:1.5px solid var(--border); border-radius:8px; background:none; color:var(--text3); font-family:inherit; font-size:12px; cursor:pointer; }
+.gm-rank-tabs button.on { border-color:var(--accent); color:var(--text); font-weight:700; background:var(--accent-bg); }
