@@ -11,6 +11,8 @@
    최고 층수는 계정별로 저장하고 랭킹을 따로 집계.
    🍉 수박 게임: 대리를 달성한 직원이 있으면 열림. 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체(오찬근 → … → 신동준).
    끝나면 점수만큼 경험치(단어 입력보다 낮은 효율), 최고 점수 랭킹 따로 집계.
+   🧱 테트리스: 과장을 달성한 직원이 있으면 열림. 줄을 지운 점수만큼 경험치, 최고 점수 랭킹.
+   🗺️ 미니게임 월드: 미니게임을 한곳에 모은 구름 지도. 잠긴 섬은 안개 + 🔒, 누르면 해금 직급 안내.
    ⚡ 깜짝 이벤트: 평일 하루 3번, 10~17시 중 무작위 정시에 시작해 1시간 진행(한국 시간). 날짜로 정해지므로 모두 같은 시간에 같은 이벤트.
    📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
@@ -86,6 +88,7 @@
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
     {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
     {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
+    {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -95,7 +98,7 @@
     {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:1000000000, grow:1.35, max:20, req:50},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -549,7 +552,7 @@
         :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link${stairsUnlocked()?'':' locked'}" onclick="gmShowStairs()">🪜 계단</button><button type="button" class="gm-link${suikaUnlocked()?'':' locked'}" onclick="gmShowSuika()">🍉 수박</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link" onclick="gmShowWorld()">🗺️ 미니게임 월드</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
     playH=el('gmBody').offsetHeight;
     bindUpgradeHold(el('gmUps'));
@@ -668,16 +671,16 @@
     setTimeout(()=>t.remove(),ms||2200);
   }
   async function gmShowRanking(board){
-    board=['stairs','suika'].includes(board)?board:'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">🍉 수박</button></div>`;
+    board=['stairs','suika','tetris'].includes(board)?board:'promo';
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">🍉 수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">🧱 테트리스</button></div>`;
     el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>'; lockBodySize();
     let html='';
     try{
       const j=await gas({action:'gameRanking',playerId:pid,board});
       if(!j.success) throw new Error(j.error);
-      const info=x=>board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${(x.suika||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-      const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:'나';
-      html=`<div class="gm-rank-title">${board==='stairs'?'🪜 무한의 계단 최고 기록':board==='suika'?'🍉 수박 게임 최고 점수':'🏆 승진 랭킹'} <small>(${j.players}명)</small></div>`+
+      const info=x=>board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+      const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
+      html=`<div class="gm-rank-title">${board==='stairs'?'🪜 무한의 계단 최고 기록':board==='suika'?'🍉 수박 게임 최고 점수':board==='tetris'?'🧱 테트리스 최고 점수':'🏆 승진 랭킹'} <small>(${j.players}명)</small></div>`+
         (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
         j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
         (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
@@ -740,7 +743,7 @@
       <div class="gm-bar st"><i id="gmStTime" style="width:100%"></i></div>
       <div class="gm-st-info" id="gmStInfo">${isTouchDevice()?'◀ ▶ 버튼으로':'← → (또는 A / D) 키로'} 다음 계단 방향을 누르면 시작</div>
       <div class="gm-st-btns"><button type="button" onpointerdown="event.preventDefault();gmStep(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();gmStep(1)">▶</button></div>
-      <button type="button" class="gm-btn" onclick="gmStairsExit()">돌아가기</button>`;
+      <button type="button" class="gm-btn" onclick="gmStairsExit()">🗺️ 월드로 돌아가기</button>`;
     lockBodySize();
     const cv=el('gmStCv'); cv.width=Math.round(cv.clientWidth*2)||540; cv.height=Math.round(cv.clientHeight*2)||340;
     drawStairs();
@@ -857,7 +860,7 @@
       <div class="gm-st-head"><b>🍉 수박 게임</b><span>점수 <b id="gmSkScore">0</b> · 최고 <b id="gmSkBest">${(acc.suikaBest||0).toLocaleString()}</b></span></div>
       <canvas class="gm-st-cv gm-sk-cv" id="gmSkCv"></canvas>
       <div class="gm-st-info" id="gmSkInfo">${isTouchDevice()?'떨어뜨릴 곳을 탭하세요':'← → 로 옮기고 Space(또는 ↓)로 떨어뜨리기 · 마우스로도 가능'}</div>
-      <button type="button" class="gm-btn" onclick="gmSuikaExit()">그만하고 돌아가기</button>`;
+      <button type="button" class="gm-btn" onclick="gmSuikaExit()">🗺️ 그만하고 월드로</button>`;
     lockBodySize();
     const cv=el('gmSkCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
     suika={W:cv.width,H:cv.height,balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
@@ -966,10 +969,167 @@
       else { g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)'; g.strokeText(S.flash.text,S.W/2,line+14); g.fillStyle='#ffcf4a'; g.fillText(S.flash.text,S.W/2,line+14); } }
   }
   window.gmShowSuika=gmShowSuika;
-  window.gmSuikaExit=function(){ if(suika){ cancelAnimationFrame(suika.raf); if(!suika.over&&suika.score>0) skEnd('그만함'); } suika=null; renderPlay(); focusPlay(); };
+
+  /* ---------- 테트리스 ---------- */
+  // 10×20 판, 7종 블록(7개 묶음 무작위), 고스트(착지 위치), 다음 블록, 착지 후 0.5초 유예. 10줄마다 레벨 업(빨라짐).
+  // 점수: 1·2·3·4줄 = 100·300·500·800 × 레벨, 천천히 내리기 +1/칸, 바로 내리기 +2/칸 → 점수 × 지금 단계 × 0.012 경험치
+  const TT_REQ=35, TT_EXP=0.012, TT_W=10, TT_H=20;
+  const TT_PIECES={
+    I:{n:4,c:[[0,1],[1,1],[2,1],[3,1]],col:'#4fc3f7'}, O:{n:2,c:[[0,0],[1,0],[0,1],[1,1]],col:'#ffd54f'},
+    T:{n:3,c:[[1,0],[0,1],[1,1],[2,1]],col:'#ba68c8'}, S:{n:3,c:[[1,0],[2,0],[0,1],[1,1]],col:'#81c784'},
+    Z:{n:3,c:[[0,0],[1,0],[1,1],[2,1]],col:'#e57373'}, J:{n:3,c:[[0,0],[0,1],[1,1],[2,1]],col:'#64b5f6'},
+    L:{n:3,c:[[2,0],[0,1],[1,1],[2,1]],col:'#ffb74d'}};
+  let tetris=null;
+  function tetrisUnlocked(){ return acc.runs.some(r=>r&&r.lv>=TT_REQ); }
+  function ttBag(){ if(!tetris.bag.length){ tetris.bag=Object.keys(TT_PIECES); for(let i=tetris.bag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [tetris.bag[i],tetris.bag[j]]=[tetris.bag[j],tetris.bag[i]]; } } return tetris.bag.pop(); }
+  function ttHit(cells,x,y){ return cells.some(([cx,cy])=>{ const gx=x+cx, gy=y+cy; return gx<0||gx>=TT_W||gy>=TT_H||(gy>=0&&tetris.grid[gy][gx]); }); }
+  function ttSpawn(){
+    const k=tetris.next; tetris.next=ttBag();
+    const P=TT_PIECES[k];
+    tetris.cur={k,n:P.n,cells:P.c.map(a=>a.slice()),x:Math.floor((TT_W-P.n)/2),y:k==='I'?-1:0};
+    tetris.lockT=0;
+    if(ttHit(tetris.cur.cells,tetris.cur.x,tetris.cur.y)) ttEnd('더 이상 쌓을 곳이 없습니다!');
+  }
+  function gmShowTetris(){
+    if(!tetrisUnlocked()){ toast(`🔒 과장(Lv.${TT_REQ}) 이상 달성 시 자동으로 해금됩니다`,2500); return; }
+    if(tetris) cancelAnimationFrame(tetris.raf);
+    const touch=isTouchDevice();
+    el('gmBody').innerHTML=`
+      <div class="gm-st-head"><b>🧱 테트리스</b><span>최고 <b id="gmTtBest">${(acc.tetrisBest||0).toLocaleString()}</b>점</span></div>
+      <canvas class="gm-st-cv gm-tt-cv" id="gmTtCv"></canvas>
+      <div class="gm-st-info" id="gmTtInfo">${touch?'아래 버튼으로 조작하세요':'← → 이동 · ↑ 회전 · ↓ 내리기 · Space 바로 내리기'}</div>
+      ${touch?`<div class="gm-st-btns gm-tt-btns"><button type="button" onpointerdown="event.preventDefault();ttMove(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();ttRotate(1)">⟳</button><button type="button" onpointerdown="event.preventDefault();ttMove(1)">▶</button><button type="button" onpointerdown="event.preventDefault();ttSoft()">▼</button><button type="button" onpointerdown="event.preventDefault();tetris&&tetris.over?gmShowTetris():ttHard()">⤓</button></div>`:''}
+      <button type="button" class="gm-btn" onclick="gmTetrisExit()">🗺️ 그만하고 월드로</button>`;
+    lockBodySize();
+    const cv=el('gmTtCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
+    tetris={grid:Array.from({length:TT_H},()=>Array(TT_W).fill(null)),bag:[],next:null,cur:null,score:0,lines:0,level:1,dropT:0,lockT:0,over:false,lastT:performance.now(),raf:0,flash:null};
+    tetris.next=ttBag(); ttSpawn();
+    tetris.raf=requestAnimationFrame(ttLoop);
+    el('gmWidget').focus();
+  }
+  function ttMove(d){ if(!tetris||tetris.over) return; lastInput=Date.now(); const c=tetris.cur; if(!ttHit(c.cells,c.x+d,c.y)){ c.x+=d; tetris.lockT=0; ttDraw(); } }
+  function ttRotate(dir){
+    if(!tetris||tetris.over) return; lastInput=Date.now();
+    const c=tetris.cur; if(c.k==='O') return;
+    const cells=c.cells.map(([x,y])=>dir>0?[c.n-1-y,x]:[y,c.n-1-x]);
+    for(const [kx,ky] of [[0,0],[-1,0],[1,0],[-2,0],[2,0],[0,-1]]){ if(!ttHit(cells,c.x+kx,c.y+ky)){ c.cells=cells; c.x+=kx; c.y+=ky; tetris.lockT=0; ttDraw(); return; } }
+  }
+  function ttSoft(){ if(!tetris||tetris.over) return; lastInput=Date.now(); const c=tetris.cur; if(!ttHit(c.cells,c.x,c.y+1)){ c.y++; tetris.score+=1; tetris.dropT=0; ttDraw(); } }
+  function ttHard(){ if(!tetris||tetris.over) return; lastInput=Date.now(); const c=tetris.cur; let n=0; while(!ttHit(c.cells,c.x,c.y+1)){ c.y++; n++; } tetris.score+=n*2; ttLock(); }
+  function ttLock(){
+    const t=tetris, c=t.cur, col=TT_PIECES[c.k].col;
+    let out=false;
+    c.cells.forEach(([cx,cy])=>{ const gy=c.y+cy; if(gy<0) out=true; else t.grid[gy][c.x+cx]=col; });
+    if(out){ ttEnd('천장까지 쌓였습니다!'); return; }
+    const full=t.grid.map((r,i)=>r.every(Boolean)?i:-1).filter(i=>i>=0);
+    if(full.length){
+      t.grid=t.grid.filter((r,i)=>!full.includes(i)); while(t.grid.length<TT_H) t.grid.unshift(Array(TT_W).fill(null));
+      t.score+=[0,100,300,500,800][full.length]*t.level; t.lines+=full.length;
+      const lv=1+Math.floor(t.lines/10); if(lv>t.level){ t.level=lv; t.flash={text:`레벨 ${lv}!`,until:performance.now()+1200}; }
+      else if(full.length===4) t.flash={text:'🧱 테트리스! +'+(800*t.level),until:performance.now()+1200};
+    }
+    ttSpawn(); ttDraw();
+  }
+  function ttLoop(){
+    const t=tetris; if(!t||!el('gmTtCv')){ tetris=null; return; }
+    const now=performance.now(), dt=Math.max(0,Math.min(0.05,(now-t.lastT)/1000)); t.lastT=now;
+    if(!t.over){
+      const c=t.cur, interval=Math.max(0.06,0.8-(t.level-1)*0.07);
+      if(ttHit(c.cells,c.x,c.y+1)){ t.lockT+=dt; if(t.lockT>0.5) ttLock(); } // 바닥에 닿으면 0.5초 유예 후 고정
+      else { t.lockT=0; t.dropT+=dt; if(t.dropT>=interval){ t.dropT=0; c.y++; } }
+    }
+    ttDraw();
+    t.raf=requestAnimationFrame(ttLoop);
+  }
+  function ttEnd(why){
+    const t=tetris; if(!t||t.over) return;
+    t.over=true;
+    const n=t.score, exp=Math.round(n*Math.max(1,st.stage)*TT_EXP*(1+0.2*(st.tetrisLv||0))); // 테트리스 고수로 증가
+    const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n;
+    if(exp>0) gainExp(exp);
+    dirty=true; saveServer(true);
+    const info=el('gmTtInfo');
+    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · ${t.lines}줄 · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'⤓ 버튼':'Space'}으로 다시 시작</small>`;
+    if(el('gmTtBest')) el('gmTtBest').textContent=(acc.tetrisBest||0).toLocaleString();
+  }
+  function ttCell(g,x,y,s,col,alpha){
+    g.globalAlpha=alpha; g.fillStyle=col; g.fillRect(x+1,y+1,s-2,s-2);
+    g.fillStyle='rgba(255,255,255,0.28)'; g.fillRect(x+1,y+1,s-2,Math.max(2,s*0.18));
+    g.globalAlpha=1;
+  }
+  function ttDraw(){
+    const cv=el('gmTtCv'); if(!cv||!tetris) return;
+    const t=tetris, g=cv.getContext('2d'), W=cv.width, H=cv.height;
+    g.clearRect(0,0,W,H);
+    const cs=Math.floor(Math.min((H-16)/TT_H,(W*0.66)/TT_W)), bw=cs*TT_W, bh=cs*TT_H, bx=12, by=Math.floor((H-bh)/2);
+    const css=getComputedStyle(el('gmWidget')), line=css.getPropertyValue('--border2').trim()||'#444', text=css.getPropertyValue('--text2').trim()||'#aaa';
+    g.fillStyle='rgba(0,0,0,0.18)'; g.fillRect(bx,by,bw,bh);
+    g.strokeStyle=line; g.lineWidth=1;
+    for(let i=0;i<=TT_W;i++){ g.beginPath(); g.moveTo(bx+i*cs+0.5,by); g.lineTo(bx+i*cs+0.5,by+bh); g.stroke(); }
+    for(let j=0;j<=TT_H;j++){ g.beginPath(); g.moveTo(bx,by+j*cs+0.5); g.lineTo(bx+bw,by+j*cs+0.5); g.stroke(); }
+    t.grid.forEach((r,y)=>r.forEach((col,x)=>{ if(col) ttCell(g,bx+x*cs,by+y*cs,cs,col,t.over?0.45:1); }));
+    if(!t.over&&t.cur){
+      const c=t.cur, col=TT_PIECES[c.k].col; let gy=c.y; while(!ttHit(c.cells,c.x,gy+1)) gy++;
+      c.cells.forEach(([cx,cy])=>{ if(gy+cy>=0){ g.strokeStyle=col; g.lineWidth=2; g.strokeRect(bx+(c.x+cx)*cs+3,by+(gy+cy)*cs+3,cs-6,cs-6); } }); // 고스트
+      c.cells.forEach(([cx,cy])=>{ if(c.y+cy>=0) ttCell(g,bx+(c.x+cx)*cs,by+(c.y+cy)*cs,cs,col,1); });
+    }
+    // 오른쪽 — 다음 블록, 점수
+    const px=bx+bw+18, pw=W-px-10;
+    g.fillStyle=text; g.font=`bold ${Math.round(cs*0.62)}px sans-serif`; g.textAlign='left'; g.textBaseline='top';
+    g.fillText('다음',px,by);
+    const N=TT_PIECES[t.next], ns=Math.min(Math.floor(pw/4.5),cs);
+    N.c.forEach(([x,y])=>ttCell(g,px+x*ns,by+cs*1.1+y*ns,ns,N.col,1));
+    const rows=[['점수',t.score.toLocaleString()],['줄',t.lines],['레벨',t.level]];
+    rows.forEach(([k,v],i)=>{ const y=by+cs*4.2+i*cs*2.1; g.fillStyle=text; g.font=`${Math.round(cs*0.55)}px sans-serif`; g.fillText(k,px,y);
+      g.font=`bold ${Math.round(cs*0.75)}px sans-serif`; g.fillStyle=css.getPropertyValue('--text').trim()||'#fff'; g.fillText(String(v),px,y+cs*0.75); });
+    if(t.flash){ if(performance.now()>t.flash.until) t.flash=null;
+      else { g.font=`bold ${Math.round(cs*0.9)}px sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText(t.flash.text,bx+bw/2,by+bh*0.35); g.fillStyle='#ffcf4a'; g.fillText(t.flash.text,bx+bw/2,by+bh*0.35); } }
+  }
+  window.gmShowTetris=gmShowTetris;
+  window.ttMove=ttMove; window.ttRotate=ttRotate; window.ttSoft=ttSoft; window.ttHard=ttHard;
+  window.gmTetrisExit=function(){ if(tetris){ cancelAnimationFrame(tetris.raf); if(!tetris.over&&tetris.score>0) ttEnd('그만함'); } tetris=null; gmShowWorld(); };
+
+  /* ---------- 미니게임 월드 ---------- */
+  // 구름 섬 지도. 열린 섬은 둥실둥실 + 최고 기록, 잠긴 섬은 안개 + 🔒(누르면 해금 직급 안내). 준비 중 섬으로 다음 게임 예고
+  const WORLD=[
+    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),pos:[27,30]},
+    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), pos:[73,42]},
+    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),pos:[30,68]},
+    {id:'soon',  icon:'❓',name:'준비 중',    req:null,      best:()=>'',go:null,pos:[72,80]},
+  ];
+  function gmShowWorld(){
+    if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
+    const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
+    el('gmBody').innerHTML=`
+      <div class="gm-st-head"><b>🗺️ 미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
+      <div class="gm-world" id="gmWorld">
+        <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i>
+        ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
+          return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}" style="left:${w.pos[0]}%;top:${w.pos[1]}%;animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
+            <span class="gm-isle-icon">${w.icon}</span><b>${w.name}</b>
+            <small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`🔒 ${rankOf(w.req)[2]} 이상`}</small>
+            ${o?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
+      </div>
+      <div class="gm-st-info" id="gmWorldMsg">구름 섬을 눌러 미니게임에 들어가세요</div>
+      <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
+    lockBodySize();
+  }
+  window.gmShowWorld=gmShowWorld;
+  window.gmWorldGo=function(i){
+    const w=WORLD[i], msg=el('gmWorldMsg');
+    lastInput=Date.now();
+    if(w.req==null){ if(msg) msg.textContent='❓ 다음 미니게임은 곧 추가됩니다!'; return; }
+    if(!acc.runs.some(r=>r&&r.lv>=w.req)){
+      if(msg) msg.innerHTML=`🔒 <b>'${rankOf(w.req)[2]}'</b> 이상 달성 시 자동으로 해금됩니다.`;
+      const b=document.querySelectorAll('.gm-isle')[i]; if(b){ b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); }
+      return;
+    }
+    w.go();
+  };
+  window.gmSuikaExit=function(){ if(suika){ cancelAnimationFrame(suika.raf); if(!suika.over&&suika.score>0) skEnd('그만함'); } suika=null; gmShowWorld(); };
   document.addEventListener('keyup',e=>{ if(!suika) return; if(['ArrowLeft','KeyA'].includes(e.code)) suika.keys.L=false; if(['ArrowRight','KeyD'].includes(e.code)) suika.keys.R=false; });
   window.gmStep=gmStep;
-  window.gmStairsExit=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); if(stairs.running) stairsEnd('그만 오름'); } stairs=null; renderPlay(); focusPlay(); };
+  window.gmStairsExit=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); if(stairs.running) stairsEnd('그만 오름'); } stairs=null; gmShowWorld(); };
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
   function gmShowChars(){
     const hire=canHire();
@@ -1053,7 +1213,7 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } renderPlay(); focusPlay(); };
+  window.gmBack=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
@@ -1086,6 +1246,17 @@
     if(!opened||!isVisible()) return;
     if(e.key==='Escape'){ gmHide(); return; }
     if(!hasFocus()||e.target.tagName==='INPUT') return;
+    if(tetris&&el('gmTtCv')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+      lastInput=Date.now();
+      const c=e.code, once=!e.repeat;
+      if(['ArrowLeft','KeyA'].includes(c)){ e.preventDefault(); ttMove(-1); }
+      else if(['ArrowRight','KeyD'].includes(c)){ e.preventDefault(); ttMove(1); }
+      else if(['ArrowDown','KeyS'].includes(c)){ e.preventDefault(); ttSoft(); }
+      else if(['ArrowUp','KeyX','KeyW'].includes(c)){ e.preventDefault(); if(once) ttRotate(1); }
+      else if(c==='KeyZ'){ e.preventDefault(); if(once) ttRotate(-1); }
+      else if(['Space','Enter'].includes(c)){ e.preventDefault(); if(once){ if(tetris.over) gmShowTetris(); else ttHard(); } }
+      return;
+    }
     if(suika&&el('gmSkCv')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
       lastInput=Date.now();
       if(['ArrowLeft','KeyA'].includes(e.code)){ e.preventDefault(); suika.keys.L=true; }
