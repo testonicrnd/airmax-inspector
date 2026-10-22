@@ -1010,12 +1010,12 @@ function handleGameAction(data) {
         var token = String(data.token || '');
 
         if (data.action === 'gameRanking') {
-            // 순위: 가장 뒤(어려운) 캐릭터 → 그 캐릭터의 단계 → 레벨 → 누적 실적
+            // 순위: 가장 늦게 입사한(어려운) 직원 → 그 직원의 단계 → 레벨 → 누적 실적
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
                 var s = gameReadState(r) || {};
-                return { nickname: String(r[1]), ch: Number(s.top) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, me: String(r[0]) === playerId };
+                return { nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, me: String(r[0]) === playerId };
             });
-            list.sort(function(a, b) { return (b.ch - a.ch) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
+            list.sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
             var myRank = 0;
             list.forEach(function(x, i) { if (x.me) myRank = i + 1; });
             return buildJson({ success: true, top: list.slice(0, 10), myRank: myRank, players: list.length });

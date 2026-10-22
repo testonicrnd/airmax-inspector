@@ -8,7 +8,8 @@
    맞게 이어서 누르면 콤보로 처리량 증가, 틀리면 콤보 초기화. 게임 창에 포커스가 있을 때만 키를 받으므로
    대시보드 입력칸에서 타이핑할 때는 반응하지 않음. 휴대폰은 화면 탭으로 처리.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
-   캐릭터: 신동준으로 시작, 지금 캐릭터를 사장까지 키우면 다음 캐릭터 해금. 뒤 캐릭터일수록 업무량·승진 경험치가 많아 더 어려움.
+   캐릭터: 신동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
+   늦게 입사한 직원일수록(입사 순서 기준) 업무량·승진 경험치가 많아 더 어려움.
    캐릭터마다 진행(실적·강화·단계)은 따로.
 
    계정: 닉네임(중복 불가) + PIN 숫자 4~6자리. 처음 쓰는 닉네임이면 가입, 이미 있으면 PIN이 맞을 때 이어하기(다른 기기에서도).
@@ -30,9 +31,9 @@
   // 레벨 → 직급 (노가다 감성으로 승진 간격이 점점 길어짐). 마지막 '사장'을 달성하면 다음 캐릭터 해금
   const RANKS=[[1,'🧑‍🎓','인턴'],[5,'🧑‍💻','사원'],[12,'🧑‍💼','주임'],[22,'👨‍💼','대리'],[35,'🕴️','과장'],[50,'🎩','차장'],[70,'👑','부장'],[95,'🦸','이사'],[130,'🚀','사장']];
   const BOSS_LV=RANKS[RANKS.length-1][0];
-  // 캐릭터 — 순서대로 해금. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
+  // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
   const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철'},{name:'강옥남'},{name:'이용훈'},{name:'하문숙'},{name:'신원옥'},{name:'천병석'},{name:'오찬근'}];
-  const HP_STEP=1.6, EXP_STEP=1.12; // 다음 캐릭터마다 업무량 ×1.6, 승진 경험치 ×1.12
+  const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
   // 업무 키 — 방향키 + 자주 쓰는 알파벳(한/영 상태와 무관하게 e.code로 판정)
   const KEYS=[['ArrowUp','↑'],['ArrowDown','↓'],['ArrowLeft','←'],['ArrowRight','→'],
     ...'ASDFJKLEIRUWO'.split('').map(c=>['Key'+c,c])];
@@ -45,8 +46,9 @@
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(10%)`, base:60, grow:1.3, max:46},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false});
-  const acc0=()=>({v:4,ch:0,cleared:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
+  const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
   let seq=[], seqPos=0, combo=0, lastInput=Date.now();
 
@@ -63,15 +65,18 @@
   function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
   function goldMult(bonusLv){ return 1+bonusLv*0.15; }
   function comboMult(){ return Math.min(1+combo*0.05,2); }             // 연속 성공마다 +5%, 최대 2배
-  function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,acc.ch); return Math.ceil(boss?b*8:b); }
+  function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
   function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv); return Math.ceil(boss?r*8:r); }
-  function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,acc.ch)*Math.pow(lv,1.6)); }
+  function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
   function costOf(u,lv){ return Math.ceil(u.base*Math.pow(u.grow,lv)); }
   function offlineCapMin(offLv){ return OFFLINE_BASE_MIN+OFFLINE_STEP_MIN*offLv; }
   function fmtMin(m){ return m>=60?`${Math.floor(m/60)}시간${m%60?' '+(m%60)+'분':''}`:`${m}분`; }
   function rankOf(lv){ let r=RANKS[0]; RANKS.forEach(x=>{ if(lv>=x[0]) r=x; }); return r; }
   function seqLen(){ return Math.min(4+Math.floor(st.stage/3),10)+(mon&&mon.boss?2:0); } // 단계가 오를수록 키 순서가 길어짐
   function charName(i){ return (CHARS[i]||CHARS[0]).name; }
+  function hiredCount(){ return acc.runs.filter(Boolean).length; }
+  function doneCount(){ return acc.runs.filter(r=>r&&r.done).length; }
+  function canHire(){ return doneCount()>=hiredCount()&&hiredCount()<CHARS.length; } // 사장 달성 수만큼 입사권
 
   /* ---------- 저장 ---------- */
   // 저장된 값 → 계정 구조. 예전(캐릭터 1명) 저장은 신동준 진행으로 옮김
@@ -92,9 +97,9 @@
   function useAcc(a){ acc=a; st=acc.runs[acc.ch]; }
   // 랭킹용 요약 — 가장 뒤 캐릭터의 단계·레벨
   function summarize(){
-    let top=0; acc.runs.forEach((r,i)=>{ if(r) top=i; });
+    let top=0; acc.runs.forEach((r,i)=>{ if(r&&r.tier>=acc.runs[top].tier) top=i; });
     const r=acc.runs[top];
-    acc.top=top; acc.stage=r.stage; acc.lv=r.lv;
+    acc.top=top; acc.tier=r.tier; acc.stage=r.stage; acc.lv=r.lv;
     acc.totalGold=acc.runs.reduce((s,x)=>s+(x?x.totalGold:0),0);
   }
   function loadLocal(){
@@ -178,12 +183,10 @@
       const before=rankOf(st.lv-1), now=rankOf(st.lv);
       if(before[2]!==now[2]&&!quiet) toast(`${now[1]} ${now[2]}(으)로 승진했습니다!`);
     }
-    // 사장 달성 → 다음 캐릭터 해금
+    // 사장 달성 → 원하는 직원 한 명 입사권
     if(st.lv>=BOSS_LV&&!st.done){
       st.done=true;
-      if(acc.cleared<acc.ch+1) acc.cleared=acc.ch+1;
-      const next=CHARS[acc.ch+1];
-      toast(next?`🚀 ${charName(acc.ch)} 사장 달성! 새 직원 ${next.name} 해금 — 👥 직원에서 바꿀 수 있습니다`:`🏆 ${charName(acc.ch)} 사장 달성! 모든 직원을 사장으로 키웠습니다`,6000);
+      toast(canHire()?`🚀 ${charName(acc.ch)} 사장 달성! 👥 직원에서 원하는 직원을 한 명 입사시킬 수 있습니다`:`🏆 ${charName(acc.ch)} 사장 달성!`,6000);
     }
   }
   // 한 번 처리 — 키 입력 성공(콤보 배율) 또는 휴대폰 탭
@@ -257,10 +260,15 @@
     const extra=(st.stage>startStage?` · ${startStage}→${st.stage}단계`:'')+(rankOf(st.lv)[2]!==rankOf(startLv)[2]?` · ${rankOf(st.lv)[2]} 승진!`:'');
     toast(`☕ 자리 비운 ${awayText} 동안 커피 힘으로 업무 ${tasks.toLocaleString()}건 처리 · 실적 +${fmt(gold)}${extra}`,5000);
   }
-  // 캐릭터 바꾸기 — 해금된 캐릭터만. 처음 고르면 인턴부터 새로 시작
+  // 캐릭터 바꾸기 — 입사한 직원끼리는 언제든. 입사 안 한 직원은 입사권이 있을 때 골라서 입사(인턴부터, 입사 순서만큼 어려움)
   function switchChar(i){
-    if(i<0||i>=CHARS.length||i>acc.cleared) return;
-    if(!acc.runs[i]) acc.runs[i]=run0();
+    if(i<0||i>=CHARS.length) return;
+    if(!acc.runs[i]){
+      if(!canHire()) return;
+      if(!confirm(`${charName(i)}을(를) 입사시킬까요?\n입사권은 사장 달성 1번에 1명입니다. (업무량 ×${fmt(Math.pow(HP_STEP,hiredCount()))})`)) return;
+      acc.runs[i]=Object.assign(run0(),{tier:hiredCount()});
+      toast(`🎉 ${charName(i)} 입사! 인턴부터 시작합니다`,3000);
+    }
     acc.ch=i; st=acc.runs[i]; combo=0; dirty=true;
     spawn(st.kills>=10);
     renderPlay(); el('gmWidget').focus();
@@ -436,11 +444,12 @@
   }
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
   function gmShowChars(){
-    el('gmBody').innerHTML=`<div class="gm-rank-title">👥 직원 <small>사장까지 키우면 다음 직원 입사</small></div>`+
+    const hire=canHire();
+    el('gmBody').innerHTML=`<div class="gm-rank-title">👥 직원 <small>${hire?'🎫 입사권 1장 — 원하는 직원을 고르세요':'사장 1명 달성마다 원하는 직원 1명 입사'}</small></div>`+
       CHARS.map((c,i)=>{
-        const r=acc.runs[i], open=i<=acc.cleared, cur=i===acc.ch;
-        const diff=`업무량 ×${fmt(Math.pow(HP_STEP,i))}`;
-        const info=!open?`🔒 ${escHtml(charName(i-1))} 사장 달성 시 입사`:r?`${rankOf(r.lv)[2]} Lv.${r.lv} · ${r.stage}단계${r.done?' · 🚀 사장 달성':''}`:'새로 입사 대기';
+        const r=acc.runs[i], open=!!r||hire, cur=i===acc.ch;
+        const diff=`업무량 ×${fmt(Math.pow(HP_STEP,r?r.tier:hiredCount()))}`;
+        const info=r?`${rankOf(r.lv)[2]} Lv.${r.lv} · ${r.stage}단계${r.done?' · 🚀 사장 달성':''}`:hire?'🎫 눌러서 입사시키기':'🔒 사장을 달성하면 입사 가능';
         return `<button type="button" class="gm-char-row${cur?' cur':''}${open?'':' locked'}" ${open&&!cur?`onclick="gmSwitchChar(${i})"`:'disabled'}>
           <span class="gm-avatar">${faceHtml(i)}</span>
           <span class="gm-char-row-text"><b>${escHtml(c.name)}${cur?' (키우는 중)':''}</b><small>${info}</small></span>
