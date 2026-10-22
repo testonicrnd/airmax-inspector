@@ -1665,3 +1665,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-isle.art.soon { border:none; opacity:1; padding:0; animation:gmIsleBob 3.2s ease-in-out infinite; }
 .gm-isle.art.soon .gm-isle-art { opacity:0.9; }
 .gm-isle.art.soon .gm-isle-label { margin-top:-10px; background:rgba(255,255,255,0.92); box-shadow:0 2px 6px rgba(0,40,80,0.2); padding:3px 10px 4px; }
+
+/* 보스 제한시간은 카드 오른쪽 위에 겹쳐 표시 — 보스가 나와도 화면 높이가 바뀌지 않게 */
+.gm-task { position:relative; }
+.gm-timer, .gm-timer:empty { display:block; position:absolute; top:5px; right:8px; min-height:0; margin:0; font-size:11px; font-weight:700; }
+.gm-timer:empty { display:none; }
