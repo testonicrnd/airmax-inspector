@@ -83,7 +83,7 @@
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:500, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:500, grow:1.25, max:9999, req:22},
     {key:'focusLv', icon:'🔗', name:'집중력',      desc:lv=>`콤보 최대 ×${(2+0.1*lv).toFixed(1)}`, base:1500, grow:1.3, max:20, req:35},
-    {key:'awakeLv', icon:'⚡', name:'각성',        desc:lv=>`커피 수혈에도 몰입(크리티컬) ${lv*20}% 적용`, base:2000, grow:2, max:5, req:35},
+    {key:'awakeLv', icon:'⚡', name:'각성',        desc:lv=>`커피 수혈도 ${lv}% 확률로 3배 처리`, base:2000, grow:1.6, max:10, req:35},
     {key:'projLv',  icon:'🏆', name:'프로젝트 달성', desc:lv=>`${(projChance(lv)*100).toFixed(1)}% 확률로 20배 처리 (크리티컬 상위)`, base:5000, grow:1.35, max:20, req:50},
     {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:3000, grow:1.35, max:20, req:50},
   ];
@@ -104,8 +104,9 @@
   }
   function atkOf(atkLv,lv){ return (1+atkLv)*Math.pow(2,Math.floor(atkLv/25))*(1+(lv-1)*0.03); }
   function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0)); } // 업무력 × 숙련
-  // 커피 수혈 — +0.3: 강화 전에도 아주 천천히 자동 처리. 카페인 중독으로 증가, 각성하면 몰입(크리티컬) 기대값 일부 적용
-  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*critChance(s.critLv)*0.2*(s.awakeLv||0)); }
+  // 커피 수혈 — +0.3: 강화 전에도 아주 천천히 자동 처리. 카페인 중독으로 증가.
+  // 각성은 커피 전용 크리티컬(레벨당 1%, 최대 10%) — 방치만으로 너무 강해지지 않게 직접 플레이 몰입(최대 100%)과 따로 둠
+  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0)); }
   function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
   function projChance(projLv){ return Math.min(0.005*projLv,0.1); }
   function offRate(payLv){ return OFFLINE_RATE+0.02*(payLv||0); }
