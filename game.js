@@ -260,11 +260,13 @@
       renderKeys();
     }
   }
+  let enterPending=false;
   function checkTyped(submit){
     const t=el('gmType'); if(!t) return;
     const v=t.value, clean=v.replace(/\s/g,'');
     if(!clean){ if(/\s/.test(v)) t.value=''; return; }
-    if(clean===seq[seqPos]||submit||/\s/.test(v)){ wordInput(clean); t.value=''; }
+    // Space/Enter를 눌렀을 때만 처리 (단어와 같아졌다고 바로 처리하지 않음 — IME에 따라 조합 중 글자가 확정돼 엔터 없이 넘어가던 문제)
+    if(submit||/\s/.test(v)){ wordInput(clean); t.value=''; }
   }
   function keyInput(code){
     const want=seq[seqPos];
@@ -443,11 +445,15 @@
     if(t){
       t.addEventListener('keydown',e=>{
         lastInput=Date.now();
-        if(e.key==='Enter'&&!e.isComposing){ e.preventDefault(); checkTyped(true); }
+        if(e.key==='Enter'){
+          e.preventDefault();
+          // 한글 조합 중에 누른 Enter는 조합이 끝난 뒤(compositionend) 처리
+          if(e.isComposing||e.keyCode===229){ enterPending=true; setTimeout(()=>{ if(enterPending){ enterPending=false; checkTyped(true); } },80); } else checkTyped(true);
+        }
       });
       t.addEventListener('input',e=>{ lastInput=Date.now(); if(!e.isComposing) checkTyped(false); });
       // 한글 조합이 끝난 뒤(Space/Enter로 마지막 글자 확정) — 값이 반영된 다음에 확인
-      t.addEventListener('compositionend',()=>setTimeout(()=>checkTyped(false),0));
+      t.addEventListener('compositionend',()=>setTimeout(()=>{ const sub=enterPending; enterPending=false; checkTyped(sub); },0));
     }
   }
   function focusPlay(){ const t=el('gmType'); (t||el('gmWidget')).focus(); }
