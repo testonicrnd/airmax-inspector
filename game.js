@@ -9,6 +9,8 @@
    휴대폰: 화면 탭(지금 키를 맞게 누른 것으로 처리).
    🪜 무한의 계단: 주임을 달성한 직원이 있으면 열림. ←/→(A/D)로 다음 계단 방향을 맞춰 오르기, 끝나면 층수만큼 경험치(단어 입력보다 낮은 효율).
    최고 층수는 계정별로 저장하고 랭킹을 따로 집계.
+   🍉 수박 게임: 대리를 달성한 직원이 있으면 열림. 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체(오찬근 → … → 신동준).
+   끝나면 점수만큼 경험치(단어 입력보다 낮은 효율), 최고 점수 랭킹 따로 집계.
    ⚡ 깜짝 이벤트: 평일 하루 3번, 10~17시 중 무작위 정시에 시작해 1시간 진행(한국 시간). 날짜로 정해지므로 모두 같은 시간에 같은 이벤트.
    📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
@@ -540,7 +542,7 @@
         :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link${stairsUnlocked()?'':' locked'}" onclick="gmShowStairs()">🪜 계단</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><button type="button" class="gm-link${stairsUnlocked()?'':' locked'}" onclick="gmShowStairs()">🪜 계단</button><button type="button" class="gm-link${suikaUnlocked()?'':' locked'}" onclick="gmShowSuika()">🍉 수박</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
     playH=el('gmBody').offsetHeight;
     bindUpgradeHold(el('gmUps'));
@@ -659,16 +661,16 @@
     setTimeout(()=>t.remove(),ms||2200);
   }
   async function gmShowRanking(board){
-    board=board==='stairs'?'stairs':'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 무한의 계단</button></div>`;
+    board=['stairs','suika'].includes(board)?board:'promo';
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">🍉 수박</button></div>`;
     el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>'; lockBodySize();
     let html='';
     try{
       const j=await gas({action:'gameRanking',playerId:pid,board});
       if(!j.success) throw new Error(j.error);
-      const info=x=>board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-      const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:'나';
-      html=`<div class="gm-rank-title">${board==='stairs'?'🪜 무한의 계단 최고 기록':'🏆 승진 랭킹'} <small>(${j.players}명)</small></div>`+
+      const info=x=>board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${(x.suika||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+      const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:'나';
+      html=`<div class="gm-rank-title">${board==='stairs'?'🪜 무한의 계단 최고 기록':board==='suika'?'🍉 수박 게임 최고 점수':'🏆 승진 랭킹'} <small>(${j.players}명)</small></div>`+
         (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
         j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
         (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
@@ -751,7 +753,7 @@
   }
   function stairsLoop(t){
     if(!stairs||!stairs.running) return;
-    const dt=Math.min(0.1,(t-stairs.lastT)/1000); stairs.lastT=t;
+    const dt=Math.max(0,Math.min(0.1,(t-stairs.lastT)/1000)); stairs.lastT=t;
     stairs.time-=(0.28+Math.min(stairs.count,400)*0.0018)*dt; // 오를수록 빨리 줄어듦
     const bar=el('gmStTime'); if(bar) bar.style.width=Math.max(0,stairs.time*100)+'%';
     if(stairs.flash) drawStairs(); // 아이템 문구가 사라질 때까지 다시 그림
@@ -811,6 +813,130 @@
     g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
   }
   window.gmShowStairs=gmShowStairs;
+
+  /* ---------- 수박 게임 ---------- */
+  // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 오찬근 이용훈 천병석 하문숙 신원옥 강옥남 신원철 신동준.
+  // 신동준 둘이 합쳐지면 사라지며 보너스. 공이 위쪽 선을 넘은 채 잠시 머물면 끝 → 점수 × 지금 단계 × 0.05 경험치
+  const SUIKA_REQ=22, SUIKA_EXP=0.05;
+  const SK_NAMES=['오찬근','이용훈','천병석','하문숙','신원옥','강옥남','신원철','신동준'];
+  const SK_R=[0.042,0.056,0.072,0.09,0.11,0.135,0.164,0.198]; // 판 폭 대비 반지름
+  const SK_COLORS=['#9ad1ff','#7fd99a','#ffd166','#ff9f6e','#f78fb3','#b392f0','#5ec2c2','#ff6b6b'];
+  let suika=null;
+  function suikaUnlocked(){ return acc.runs.some(r=>r&&r.lv>=SUIKA_REQ); }
+  function skImgs(){
+    return SK_NAMES.map(n=>{ const c=CHARS.find(x=>x.name===n); if(!c||!c.face) return null; const im=new Image(); im.src=c.face; return im; });
+  }
+  function skNextTier(){ const r=Math.random(); return r<0.35?0:r<0.65?1:r<0.87?2:3; } // 떨어뜨리는 공은 작은 4종
+  function gmShowSuika(){
+    if(!suikaUnlocked()){ toast(`🔒 대리(Lv.${SUIKA_REQ})를 달성한 직원이 있으면 열립니다`,2500); return; }
+    if(suika) cancelAnimationFrame(suika.raf);
+    if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; }
+    el('gmBody').innerHTML=`
+      <div class="gm-st-head"><b>🍉 수박 게임</b><span>점수 <b id="gmSkScore">0</b> · 최고 <b id="gmSkBest">${(acc.suikaBest||0).toLocaleString()}</b></span></div>
+      <canvas class="gm-st-cv gm-sk-cv" id="gmSkCv"></canvas>
+      <div class="gm-st-info" id="gmSkInfo">${isTouchDevice()?'떨어뜨릴 곳을 탭하세요':'← → 로 옮기고 Space(또는 ↓)로 떨어뜨리기 · 마우스로도 가능'}</div>
+      <button type="button" class="gm-btn" onclick="gmSuikaExit()">그만하고 돌아가기</button>`;
+    lockBodySize();
+    const cv=el('gmSkCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
+    suika={W:cv.width,H:cv.height,balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
+      imgs:skImgs(),keys:{},lastT:performance.now(),raf:0,id:0};
+    cv.addEventListener('pointermove',e=>{ const r=cv.getBoundingClientRect(); suika&&(suika.dropX=(e.clientX-r.left)/r.width*suika.W); });
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); lastInput=Date.now(); if(!suika) return; if(suika.over){ gmShowSuika(); return; }
+      const r=cv.getBoundingClientRect(); suika.dropX=(e.clientX-r.left)/r.width*suika.W; skDrop(); });
+    suika.raf=requestAnimationFrame(skLoop);
+    el('gmWidget').focus();
+  }
+  function skR(t){ return SK_R[t]*suika.W; }
+  function skDrop(){
+    if(!suika||suika.over||suika.cool>0) return;
+    const r=skR(suika.cur), x=Math.min(suika.W-r,Math.max(r,suika.dropX));
+    suika.balls.push({id:++suika.id,x,y:r+6,vx:0,vy:0,r,t:suika.cur,age:0});
+    suika.cur=suika.next; suika.next=skNextTier(); suika.cool=0.45;
+  }
+  function skLoop(){
+    const now=performance.now();
+    if(!suika||!el('gmSkCv')){ suika=null; return; }
+    const dt=Math.max(0,Math.min(0.033,(now-suika.lastT)/1000)); suika.lastT=now; // 첫 프레임 시각이 시작 시각보다 앞설 수 있어 음수 방지
+    if(!suika.over){
+      suika.cool=Math.max(0,suika.cool-dt);
+      const mv=(suika.keys.L?-1:0)+(suika.keys.R?1:0); if(mv) suika.dropX=Math.min(suika.W,Math.max(0,suika.dropX+mv*suika.W*0.9*dt));
+      for(let k=0;k<4;k++) skStep(dt/4);
+      // 위쪽 선을 넘은 공이 1.5초 넘게 머물면 끝
+      const line=suika.H*0.16;
+      const above=suika.balls.some(b=>b.age>1.2&&b.y-b.r<line);
+      suika.danger=above?suika.danger+dt:0;
+      if(suika.danger>1.5) skEnd('공이 넘쳤습니다!');
+    }
+    skDraw();
+    suika.raf=requestAnimationFrame(skLoop);
+  }
+  function skStep(dt){
+    const S=suika, G=S.H*3.2, B=S.balls;
+    for(const b of B){ b.age+=dt; b.vy+=G*dt; b.vx*=0.995; b.x+=b.vx*dt; b.y+=b.vy*dt;
+      if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.3; } if(b.x>S.W-b.r){ b.x=S.W-b.r; b.vx=-Math.abs(b.vx)*0.3; }
+      if(b.y>S.H-b.r){ b.y=S.H-b.r; b.vy=-Math.abs(b.vy)*0.15; b.vx*=0.97; } }
+    for(let it=0;it<3;it++){
+      for(let i=0;i<B.length;i++){ const a=B[i]; if(a.dead) continue;
+        for(let j=i+1;j<B.length;j++){ const b=B[j]; if(b.dead) continue;
+          const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy), m=a.r+b.r;
+          if(a.t===b.t&&d<m+S.W*0.004){ skMerge(a,b); break; } // 같은 공은 닿기만 해도 합체
+          if(d>=m||d===0) continue;
+          const nx=dx/d, ny=dy/d, ov=m-d, ma=a.r*a.r, mb=b.r*b.r;
+          a.x-=nx*ov*mb/(ma+mb); a.y-=ny*ov*mb/(ma+mb); b.x+=nx*ov*ma/(ma+mb); b.y+=ny*ov*ma/(ma+mb);
+          const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
+          if(rv<0){ const jj=-(1.15)*rv/(1/ma+1/mb); a.vx-=jj/ma*nx; a.vy-=jj/ma*ny; b.vx+=jj/mb*nx; b.vy+=jj/mb*ny; }
+        } }
+      S.balls=S.balls.filter(b=>!b.dead);
+    }
+  }
+  function skMerge(a,b){
+    a.dead=b.dead=true;
+    const t=a.t+1, x=(a.x+b.x)/2, y=(a.y+b.y)/2;
+    if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 신동준 합체! +100',until:performance.now()+1500}; }
+    else { suika.score+=t*(t+1)/2; suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:skR(t),t,age:1.3});
+      if(t>=5) suika.flash={text:`${SK_NAMES[t]} 등장!`,until:performance.now()+1200}; }
+    const sc=el('gmSkScore'); if(sc) sc.textContent=suika.score.toLocaleString();
+  }
+  function skEnd(why){
+    if(!suika||suika.over) return;
+    suika.over=true;
+    const n=suika.score, exp=Math.round(n*Math.max(1,st.stage)*SUIKA_EXP);
+    const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
+    if(exp>0) gainExp(exp);
+    dirty=true; saveServer(true);
+    const info=el('gmSkInfo');
+    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'탭':'Space 또는 클릭'}하면 다시 시작</small>`;
+    if(el('gmSkBest')) el('gmSkBest').textContent=(acc.suikaBest||0).toLocaleString();
+  }
+  function skBall(g,b,t,x,y,r,alpha){
+    const im=suika.imgs[t];
+    g.save(); g.globalAlpha=alpha;
+    g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.closePath(); g.fillStyle='#f1ede8'; g.fill();
+    if(im&&im.complete&&im.naturalWidth){ g.save(); g.clip(); g.drawImage(im,x-r,y-r,r*2,r*2); g.restore(); }
+    else { g.fillStyle=SK_COLORS[t]; g.fill(); g.fillStyle='#fff'; g.font=`bold ${Math.round(r*0.55)}px sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(SK_NAMES[t].slice(1),x,y); }
+    g.lineWidth=Math.max(3,r*0.09); g.strokeStyle=SK_COLORS[t]; g.stroke();
+    g.restore();
+  }
+  function skDraw(){
+    const cv=el('gmSkCv'); if(!cv) return;
+    const g=cv.getContext('2d'), S=suika; g.clearRect(0,0,S.W,S.H);
+    const line=S.H*0.16;
+    g.save(); g.setLineDash([12,10]); g.strokeStyle=S.danger>0?'#d93025':'rgba(150,150,150,0.5)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,line); g.lineTo(S.W,line); g.stroke(); g.restore();
+    if(!S.over){
+      const r=skR(S.cur), x=Math.min(S.W-r,Math.max(r,S.dropX));
+      g.save(); g.strokeStyle='rgba(150,150,150,0.35)'; g.lineWidth=2; g.beginPath(); g.moveTo(x,r*2+8); g.lineTo(x,S.H); g.stroke(); g.restore();
+      skBall(g,null,S.cur,x,r+6,r,S.cool>0?0.45:0.95);
+      // 다음 공 미리보기 (오른쪽 위)
+      const nr=Math.min(skR(S.next),S.W*0.045); g.font='bold 20px sans-serif'; g.fillStyle='rgba(150,150,150,0.9)'; g.textAlign='right'; g.textBaseline='middle';
+      g.fillText('다음',S.W-nr*2-22,nr+12); skBall(g,null,S.next,S.W-nr-10,nr+12,nr,0.9);
+    }
+    for(const b of S.balls) skBall(g,b,b.t,b.x,b.y,b.r,S.over?0.5:1);
+    if(S.flash){ if(performance.now()>S.flash.until) S.flash=null;
+      else { g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)'; g.strokeText(S.flash.text,S.W/2,line+14); g.fillStyle='#ffcf4a'; g.fillText(S.flash.text,S.W/2,line+14); } }
+  }
+  window.gmShowSuika=gmShowSuika;
+  window.gmSuikaExit=function(){ if(suika){ cancelAnimationFrame(suika.raf); if(!suika.over&&suika.score>0) skEnd('그만함'); } suika=null; renderPlay(); focusPlay(); };
+  document.addEventListener('keyup',e=>{ if(!suika) return; if(['ArrowLeft','KeyA'].includes(e.code)) suika.keys.L=false; if(['ArrowRight','KeyD'].includes(e.code)) suika.keys.R=false; });
   window.gmStep=gmStep;
   window.gmStairsExit=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); if(stairs.running) stairsEnd('그만 오름'); } stairs=null; renderPlay(); focusPlay(); };
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
@@ -896,7 +1022,7 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } renderPlay(); focusPlay(); };
+  window.gmBack=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
@@ -929,6 +1055,13 @@
     if(!opened||!isVisible()) return;
     if(e.key==='Escape'){ gmHide(); return; }
     if(!hasFocus()||e.target.tagName==='INPUT') return;
+    if(suika&&el('gmSkCv')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+      lastInput=Date.now();
+      if(['ArrowLeft','KeyA'].includes(e.code)){ e.preventDefault(); suika.keys.L=true; }
+      else if(['ArrowRight','KeyD'].includes(e.code)){ e.preventDefault(); suika.keys.R=true; }
+      else if(['Space','ArrowDown','Enter','KeyS'].includes(e.code)){ e.preventDefault(); if(e.repeat) return; if(suika.over) gmShowSuika(); else skDrop(); }
+      return;
+    }
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat) return;
     lastInput=Date.now();
     // 무한의 계단 — ←/A/F 왼쪽, →/D/J 오른쪽
