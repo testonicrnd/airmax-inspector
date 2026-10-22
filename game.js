@@ -43,7 +43,7 @@
   const WORD_MIN=2, WORD_MAX=6, BOSS_WORDS=3;
   let words=WORD_BASE.slice();
   // 점검표에 오타로 올라간 장소 단어 고치기 (시트를 고쳐도 남아 있는 기록이 있을 수 있어서)
-  const WORD_FIX={'운동잠현관':'운동장현관','운동잠':'운동장'};
+  const WORD_FIX={'운동잠현관':'운동장현관','운동잠':'운동장','중앙혀관':'중앙현관','혀관':'현관'};
   function placeWords(list){
     const out=new Set();
     (list||[]).forEach(p=>[p&&p.name,...((p&&p.areas)||[])].forEach(t=>String(t||'').split(/[\s()\[\]{}·,.\/\-_~!?:;'"]+/).forEach(w=>{
