@@ -30,8 +30,8 @@
     ['📸','회사 블로그 사진'],['🐕','사장님 강아지 산책'],['🧾','법인카드 영수증 풀칠'],['🔧','고장 난 의자 수리'],['❄️','에어컨 필터 청소'],['📠','팩스 보내기'],['📱','사장님 휴대폰 설정'],['🚙','거래처 접대 운전']];
   const BOSSES=[['👔','팀장님 결재'],['🧐','부장님 검토'],['📈','분기 실적 보고'],['🏢','본부장 회의'],['👨‍👩‍👧','사장님 가족 행사'],['🧓','회장님 방문'],['💼','사장님 보고']];
   // 레벨 → 직급 (노가다 감성으로 승진 간격이 점점 길어짐). 마지막 '사장'을 달성하면 다음 캐릭터 해금
-  const RANKS=[[1,'🧑‍🎓','인턴'],[5,'🧑‍💻','사원'],[12,'🧑‍💼','주임'],[22,'👨‍💼','대리'],[35,'🕴️','과장'],[50,'🎩','차장'],[70,'👑','부장'],[95,'🦸','이사'],[130,'🚀','사장']];
-  const BOSS_LV=RANKS[RANKS.length-1][0];
+  const RANKS=[[1,'🧑‍🎓','인턴'],[5,'🧑‍💻','사원'],[12,'🧑‍💼','주임'],[22,'👨‍💼','대리'],[35,'🕴️','과장'],[50,'🎩','차장'],[70,'👑','부장'],[95,'🦸','이사'],[112,'💼','상무이사'],[130,'🎖️','전무이사'],[150,'🚀','사장']];
+  const BOSS_LV=RANKS[RANKS.length-1][0]; // 사장 = 만렙(150)
   // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
   const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png'},{name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png'},{name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png'},{name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png'},{name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png'},{name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png'},{name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png'}];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
@@ -226,8 +226,10 @@
   }
   function gainExp(n,quiet){
     st.exp+=n;
-    while(st.exp>=expNeed(st.lv)){
+    if(st.lv>=BOSS_LV){ st.lv=BOSS_LV; st.exp=0; } // 만렙 — 경험치는 더 쌓지 않음
+    while(st.lv<BOSS_LV&&st.exp>=expNeed(st.lv)){
       st.exp-=expNeed(st.lv); st.lv++;
+      if(st.lv>=BOSS_LV) st.exp=0;
       const before=rankOf(st.lv-1), now=rankOf(st.lv);
       if(before[2]!==now[2]&&!quiet) toast(`${now[1]} ${now[2]}(으)로 승진했습니다!`);
     }
@@ -489,8 +491,8 @@
     if(!el('gmGold')) return;
     const r=rankOf(st.lv);
     el('gmAvatar').textContent=r[1];
-    el('gmRank').innerHTML=`<b>${r[2]} ${escHtml(charName(acc.ch))}</b> · Lv.${st.lv} <span class="gm-nick">${escHtml(nick)}</span>`;
-    el('gmExpBar').style.width=Math.min(100,st.exp/expNeed(st.lv)*100)+'%';
+    el('gmRank').innerHTML=`<b>${r[2]} ${escHtml(charName(acc.ch))}</b> · Lv.${st.lv}${st.lv>=BOSS_LV?' (MAX)':''} <span class="gm-nick">${escHtml(nick)}</span>`;
+    el('gmExpBar').style.width=(st.lv>=BOSS_LV?100:Math.min(100,st.exp/expNeed(st.lv)*100))+'%';
     el('gmGold').textContent=fmt(st.gold);
     el('gmStage').textContent=`📂 ${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
     el('gmDps').textContent=`☕ 초당 ${fmt(autoDps(st))}`;
