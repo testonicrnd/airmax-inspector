@@ -807,11 +807,11 @@
   // 아이템: 앞쪽 계단 몇 군데에 놓이고 밟으면 발동 — 🚀 로켓 +10층 / ⏰ 시계 시간 가득 / 🛡️ 방패 실수·시간 초과 1번 막음
   const STAIRS_REQ=12, STAIRS_BASE=100;
   // 미니게임 경험치 — '레벨 몇 개분'으로 계산(점수×단계로 곱하면 후반에 폭발해서).
-  // 기준 점수에서 레벨 0.06개, 점수에 거의 비례(0.8제곱), 효율 스킬 +20%/레벨.
+  // 기준 점수에서 레벨 0.15개, 점수에 거의 비례(0.8제곱), 효율 스킬 +20%/레벨. 잘한 판은 10레벨 안팎까지.
   // 한 판 한도(cap, 레벨 개수)는 그 판에서 멀리 갈수록 열림 — 테트리스 단계·수박 최대 공·계단 층수
   function miniExp(score,base,skillLv,cap){
     if(score<=0||st.lv>=BOSS_LV) return 0;
-    let L=Math.min(cap,0.06*Math.pow(score/base,0.8)*(1+0.2*(skillLv||0)));
+    let L=Math.min(cap,0.15*Math.pow(score/base,0.8)*(1+0.2*(skillLv||0)));
     // 레벨 L개분을 실제 경험치로 — 레벨마다 필요한 양을 차례로 더함
     let exp=0, lv=st.lv, need=expNeed(lv)-st.exp;
     while(L>0&&lv<BOSS_LV){ const full=expNeed(lv), part=Math.min(L,need/full); exp+=part*full; L-=part; lv++; need=expNeed(lv); }
@@ -904,7 +904,7 @@
   function stairsEnd(why){
     if(!stairs||stairs.over) return;
     stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
-    const n=stairs.count, exp=miniExp(n,STAIRS_BASE,st.stairLv,1+0.5*Math.floor(n/100)); // 계단 단련으로 증가, 100층마다 한도 +0.5레벨
+    const n=stairs.count, exp=miniExp(n,STAIRS_BASE,st.stairLv,1+Math.floor(n/50)); // 계단 단련으로 증가, 50층마다 한도 +1레벨
     const best=n>(acc.stairsBest||0);
     if(best) acc.stairsBest=n;
     if(exp>0) gainExp(exp);
@@ -1086,7 +1086,7 @@
   function skEnd(why){
     if(!suika||suika.over) return;
     suika.over=true;
-    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,0.6+0.3*(suika.maxT||0)); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가
+    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,1+1.3*(suika.maxT||0)); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가(신동준 약 10레벨)
     const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
@@ -1205,7 +1205,7 @@
   function ttEnd(why){
     const t=tetris; if(!t||t.over) return;
     t.over=true;
-    const n=t.score, exp=miniExp(n,TT_BASE,st.tetrisLv,1+0.35*(t.level-1)); // 테트리스 고수로 증가, 테트리스 단계마다 한도 +0.35레벨
+    const n=t.score, exp=miniExp(n,TT_BASE,st.tetrisLv,Math.max(1,t.level)); // 테트리스 고수로 증가, 테트리스 단계 수만큼 한도(10단계 → 10레벨)
     const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
