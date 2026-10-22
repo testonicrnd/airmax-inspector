@@ -1466,3 +1466,11 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-char-row-text small { color:var(--text3); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gm-char-row-diff { font-size:10.5px; color:var(--text4); white-space:nowrap; }
 .gm-foot { gap:6px; }
+
+/* 테스토닉 키우기 — PC 단어 입력 / 📌 고정 */
+.gm-keys.words { flex-wrap:wrap; }
+.gm-keys.words .gm-key { width:auto; min-width:0; padding:0 10px; font-size:14px; letter-spacing:0.5px; }
+.gm-type { width:100%; box-sizing:border-box; margin-top:6px; padding:8px 10px; border:1.5px solid var(--border); border-radius:8px; background:var(--input-bg); color:var(--text); font-size:15px; font-family:inherit; text-align:center; }
+.gm-type:focus { outline:none; border-color:var(--accent, #e8732a); }
+#gmLockBtn { opacity:0.35; filter:grayscale(1); }
+.gm-widget.locked #gmLockBtn { opacity:1; filter:none; }

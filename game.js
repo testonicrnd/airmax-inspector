@@ -4,9 +4,10 @@
    대시보드 표를 가리지 않도록 작은 창 + 반투명 전환, Esc 또는 [−]로 즉시 숨기기(보스 키).
    1분 동안 입력이 없으면 자동 저장 후 창을 숨김.
 
-   조작: 업무마다 뜨는 키 순서(방향키/알파벳)를 키보드로 하나씩 입력해서 처리 — 옆에서 보면 키보드로 일하는 모습.
-   맞게 이어서 누르면 콤보로 처리량 증가, 틀리면 콤보 초기화. 게임 창에 포커스가 있을 때만 키를 받으므로
-   대시보드 입력칸에서 타이핑할 때는 반응하지 않음. 휴대폰은 화면 탭으로 처리.
+   조작(PC): 업무마다 뜨는 단어(점검 장소·구분·항목·결과 등 짧은 단어)를 입력칸에 치고 Space/Enter — 옆에서 보면 일하는 모습.
+   보스(결재)는 단어 여러 개. 맞게 이어서 치면 콤보로 처리량 증가, 틀리면 콤보 초기화. 긴 단어일수록 한 번에 많이 처리.
+   휴대폰: 화면 탭(지금 키를 맞게 누른 것으로 처리).
+   📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
    캐릭터: 신동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
    늦게 입사한 직원일수록(입사 순서 기준) 업무량·승진 경험치가 많아 더 어려움.
@@ -17,7 +18,7 @@
    ===================================================================== */
 (function(){
   // 닉네임+PIN 계정으로 바꾸면서 저장 키를 새로 씀 — 예전(닉네임만) 기기 저장은 이어받지 않고 새로 시작(랭킹 초기화와 함께)
-  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy';
+  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy', LS_LOCK='airmax_game_lock';
   const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_HIDE=60000;
   // 게임이 비활성(숨김/닫힘/페이지 닫힘)일 때 커피 수혈은 10% 효율로, 최대 누적 시간은 야근 강화로 10분부터 5분씩 늘어남
   const OFFLINE_RATE=0.1, OFFLINE_BASE_MIN=10, OFFLINE_STEP_MIN=5;
@@ -34,12 +35,38 @@
   // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
   const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철'},{name:'강옥남'},{name:'이용훈'},{name:'하문숙'},{name:'신원옥'},{name:'천병석'},{name:'오찬근'}];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
-  // 업무 키 — 방향키 + 자주 쓰는 알파벳(한/영 상태와 무관하게 e.code로 판정)
+  // PC 단어 입력 — 점검표에서 쓰는 짧은 단어 + 점검 장소/세부구역을 잘게 나눈 단어(2~6글자)를 섞어서 사용
+  const WORD_BASE=['매트','집진기','소모품','흡입력','풍속계','풍속','호스','브라켓','연결부','센서','전원','동작상태','표시상태','통신상태','모뎀',
+    '먼지봉투','헤파필터','필터','모터','사용률','교체','정상','이상','정기','수시','긴급','점검자','점검일자','특이사항','실시','미실시','측정',
+    '육안','시연','점등','신형로고','구형로고','서명','직인','점검표','에어맥스','클린매트','테스토닉','세부구역','업체명','설치장소','흡입상태',
+    '볼복귀','스프링','외관','청소','먼지','포집','누적','가동','가동시간','점검구분','소모품교체','제품종류','담당자','확인자'];
+  const WORD_MIN=2, WORD_MAX=6, BOSS_WORDS=3;
+  let words=WORD_BASE.slice();
+  function placeWords(list){
+    const out=new Set();
+    (list||[]).forEach(p=>[p&&p.name,...((p&&p.areas)||[])].forEach(t=>String(t||'').split(/[\s()\[\]{}·,.\/\-_~!?:;'"]+/).forEach(w=>{
+      if(w.length>=WORD_MIN&&w.length<=WORD_MAX&&/[가-힣]/.test(w)&&!/^\d/.test(w)) out.add(w);
+    })));
+    return [...out];
+  }
+  function refreshWords(){
+    let list=[];
+    try{ list=(typeof clPlaces!=='undefined'&&clPlaces.length)?clPlaces:(lsGet('airmax_checklist_places',[])||[]); }catch(e){}
+    const pw=placeWords(list);
+    words=[...new Set(WORD_BASE.concat(pw,pw))]; // 장소 단어도 고르게 섞이도록
+    if(!pw.length&&!refreshWords.fetched){
+      // 이 기기에서 점검표를 열어본 적이 없으면 장소 목록을 한 번 받아 옴
+      refreshWords.fetched=true;
+      gas({action:'getChecklistPlaces'}).then(j=>{ if(j&&j.success&&Array.isArray(j.places)) words=[...new Set(WORD_BASE.concat(placeWords(j.places)))]; }).catch(()=>{});
+    }
+  }
+  function usingWords(){ return !isTouchDevice(); }
+  // 휴대폰 탭용 키 — 방향키 + 알파벳
   const KEYS=[['ArrowUp','↑'],['ArrowDown','↓'],['ArrowLeft','←'],['ArrowRight','→'],
     ...'ASDFJKLEIRUWO'.split('').map(c=>['Key'+c,c])];
   // 강화 — 비용은 완만하게 오르고, 업무력은 25레벨마다 2배 보너스. 몰입은 97레벨에 크리티컬 100%
   const UPGRADES=[
-    {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`키 1번에 ${fmt(atkOf(lv,st.lv))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
+    {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'키 1번에'} ${fmt(atkOf(lv,st.lv)*(usingWords()?1.3:1))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
     {key:'autoLv',  icon:'☕', name:'커피 수혈',   desc:lv=>`가만히 있어도 초당 ${fmt(autoDps({...st,autoLv:lv}))} 처리`, base:30, grow:1.09, max:9999},
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
@@ -50,7 +77,7 @@
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
-  let seq=[], seqPos=0, combo=0, lastInput=Date.now();
+  let seq=[], seqPos=0, combo=0, lastInput=Date.now(), locked=!!lsGet(LS_LOCK,false);
 
   /* ---------- 숫자/계산 ---------- */
   function fmt(n){
@@ -64,7 +91,7 @@
   function autoDps(s){ return (s.autoLv+0.3)*atkOf(s.atkLv,s.lv)*0.3; } // +0.3 — 커피 수혈 전에도 아주 천천히 자동 처리
   function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
   function goldMult(bonusLv){ return 1+bonusLv*0.15; }
-  function comboMult(){ return Math.min(1+combo*0.05,2); }             // 연속 성공마다 +5%, 최대 2배
+  function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),2); } // 연속 성공마다 +5%(단어는 +10%), 최대 2배
   function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
   function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv); return Math.ceil(boss?r*8:r); }
   function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
@@ -72,7 +99,7 @@
   function offlineCapMin(offLv){ return OFFLINE_BASE_MIN+OFFLINE_STEP_MIN*offLv; }
   function fmtMin(m){ return m>=60?`${Math.floor(m/60)}시간${m%60?' '+(m%60)+'분':''}`:`${m}분`; }
   function rankOf(lv){ let r=RANKS[0]; RANKS.forEach(x=>{ if(lv>=x[0]) r=x; }); return r; }
-  function seqLen(){ return Math.min(4+Math.floor(st.stage/3),10)+(mon&&mon.boss?2:0); } // 단계가 오를수록 키 순서가 길어짐
+  function seqLen(){ return Math.min(4+Math.floor(st.stage/3),10)+(mon&&mon.boss?2:0); } // (휴대폰 탭) 단계가 오를수록 키 순서가 길어짐
   function charName(i){ return (CHARS[i]||CHARS[0]).name; }
   function hiredCount(){ return acc.runs.filter(Boolean).length; }
   function doneCount(){ return acc.runs.filter(r=>r&&r.done).length; }
@@ -120,8 +147,12 @@
   }
   async function gas(payload){
     if(typeof GAS_URL==='undefined'||!GAS_URL) throw new Error('no gas');
-    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
-    return JSON.parse(await res.text());
+    const ctl=typeof AbortController!=='undefined'?new AbortController():null;
+    const timer=ctl?setTimeout(()=>ctl.abort(),15000):0;
+    try{
+      const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal:ctl?ctl.signal:undefined});
+      return JSON.parse(await res.text());
+    }finally{ clearTimeout(timer); }
   }
   async function saveServer(force){
     saveLocal();
@@ -138,12 +169,14 @@
     try{
       if(!pid||!token) return;
       const j=await gas({action:'gameLoad',playerId:pid,token});
-      if(j.auth===false){ setAccount(null); useAcc(acc0()); return; }
-      if(!j.success){ serverOk=false; return; }
+      if(j.auth===false){ authLost(); return false; }
+      if(!j.success){ serverOk=false; return false; }
       serverOk=true;
       // 서버 쪽이 더 최근에 저장됐으면(다른 기기에서 플레이) 서버 진행을 사용
-      if(j.found&&j.state&&(j.state.lastSave||0)>(acc.lastSave||0)){ useAcc(hydrate(j.state)); saveLocal(); }
+      if(j.found&&j.state&&(j.state.lastSave||0)>(acc.lastSave||0)){ useAcc(hydrate(j.state)); saveLocal(); return true; }
     }catch(e){ serverOk=false; }
+    renderSaveState();
+    return false;
   }
 
   /* ---------- 진행 ---------- */
@@ -156,8 +189,14 @@
     renderMonster();
   }
   function newSeq(){
-    const n=seqLen();
-    seq=Array.from({length:n},()=>KEYS[Math.floor(Math.random()*KEYS.length)]);
+    if(usingWords()){
+      // 일반 업무는 단어 1개, 보스는 여러 개(같은 단어 연속은 피함)
+      const n=mon&&mon.boss?BOSS_WORDS:1;
+      seq=[];
+      while(seq.length<n){ const w=words[Math.floor(Math.random()*words.length)]; if(w!==seq[seq.length-1]||words.length<2) seq.push(w); }
+    } else {
+      seq=Array.from({length:seqLen()},()=>KEYS[Math.floor(Math.random()*KEYS.length)]);
+    }
     seqPos=0;
     renderKeys();
   }
@@ -195,8 +234,35 @@
     st.keys++;
     const crit=Math.random()<critChance(st.critLv);
     hit(atkOf(st.atkLv,st.lv)*(crit?3:1)*mult,crit,true);
+    afterWork();
+  }
+  function afterWork(){
     for(const id of ['gmMonster','gmHero']){ const m=el(id); if(m){ m.classList.remove('hit'); void m.offsetWidth; m.classList.add('hit'); } }
     render();
+  }
+  // PC 단어 입력 — 맞으면 단어 글자 수만큼 처리(×1.3, 콤보 배율), 틀리면 콤보 초기화
+  function wordInput(typed){
+    const want=seq[seqPos];
+    if(!want||!typed) return;
+    if(typed===want){
+      combo++; if(combo>st.bestCombo) st.bestCombo=combo;
+      seqPos++;
+      st.keys++;
+      const crit=Math.random()<critChance(st.critLv);
+      hit(atkOf(st.atkLv,st.lv)*want.length*1.3*comboMult()*(crit?3:1),crit,true);
+      afterWork();
+      if(mon&&seqPos>=seq.length){ if(seq.length>1) floatText('✔ 완료',false); newSeq(); } else renderKeys();
+    } else {
+      combo=0;
+      const k=el('gmKeys'); if(k){ k.classList.remove('miss'); void k.offsetWidth; k.classList.add('miss'); }
+      renderKeys();
+    }
+  }
+  function checkTyped(submit){
+    const t=el('gmType'); if(!t) return;
+    const v=t.value, clean=v.replace(/\s/g,'');
+    if(!clean){ if(/\s/.test(v)) t.value=''; return; }
+    if(clean===seq[seqPos]||submit||/\s/.test(v)){ wordInput(clean); t.value=''; }
   }
   function keyInput(code){
     const want=seq[seqPos];
@@ -224,8 +290,8 @@
       toast(`⏰ ${mon.name} 실패… 실력을 더 쌓고 다시 도전`);
       spawn(false);
     }
-    // 1분 동안 입력이 없으면 저장하고 숨김
-    if(isVisible()&&Date.now()-lastInput>IDLE_HIDE) gmHide();
+    // 1분 동안 입력이 없으면 저장하고 숨김 (📌 고정 중이면 숨기지 않음)
+    if(!locked&&isVisible()&&Date.now()-lastInput>IDLE_HIDE) gmHide();
     if(Date.now()-lastRender>200) render();
   }
   function buy(i){
@@ -271,7 +337,7 @@
     }
     acc.ch=i; st=acc.runs[i]; combo=0; dirty=true;
     spawn(st.kills>=10);
-    renderPlay(); el('gmWidget').focus();
+    renderPlay(); focusPlay();
     saveServer(true);
   }
 
@@ -297,6 +363,7 @@
       <div class="gm-head">
         <span class="gm-title">테스토닉 키우기</span>
         <span class="gm-head-btns">
+          <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()">📌</button>
           <button type="button" title="반투명" onclick="gmToggleDim()">◐</button>
           <button type="button" title="숨기기 (Esc)" onclick="gmHide()">−</button>
           <button type="button" title="닫기" onclick="gmClose()">×</button>
@@ -309,6 +376,7 @@
     chip.onclick=()=>gmShow();
     document.body.appendChild(chip);
     if(lsGet(LS_POS,false)) w.classList.add('dim');
+    w.classList.toggle('locked',locked);
     w.addEventListener('pointerdown',()=>{ lastInput=Date.now(); });
     // 제목줄을 끌어서 창 이동 — 위치는 기억해 두고 다음에 열 때 그 자리에. 더블클릭하면 기본 위치(오른쪽 아래)로
     const head=w.querySelector('.gm-head');
@@ -362,23 +430,36 @@
         </div>
         <div class="gm-float-layer" id="gmFloat"></div>
       </div>
-      <div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div>
+      <div class="gm-keys${usingWords()?' words':''}" id="gmKeys" onpointerdown="gmTouchTap(event)"></div>
+      ${usingWords()?'<input class="gm-type" id="gmType" autocomplete="off" spellcheck="false" placeholder="위 단어를 입력하고 Space 또는 Enter"/>':''}
       <div class="gm-hint" id="gmFocusHint"></div>
       <div class="gm-ups" id="gmUps"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">🏆 랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">👥 직원</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
+    const t=el('gmType');
+    if(t){
+      t.addEventListener('keydown',e=>{
+        lastInput=Date.now();
+        if(e.key==='Enter'&&!e.isComposing){ e.preventDefault(); checkTyped(true); }
+      });
+      t.addEventListener('input',e=>{ lastInput=Date.now(); if(!e.isComposing) checkTyped(false); });
+      // 한글 조합이 끝난 뒤(Space/Enter로 마지막 글자 확정) — 값이 반영된 다음에 확인
+      t.addEventListener('compositionend',()=>setTimeout(()=>checkTyped(false),0));
+    }
   }
+  function focusPlay(){ const t=el('gmType'); (t||el('gmWidget')).focus(); }
   function renderKeys(){
     const k=el('gmKeys'); if(!k) return;
-    k.innerHTML=seq.map((x,i)=>`<span class="gm-key${i<seqPos?' done':i===seqPos?' now':''}">${x[1]}</span>`).join('')+
+    k.innerHTML=seq.map((x,i)=>`<span class="gm-key${i<seqPos?' done':i===seqPos?' now':''}">${escHtml(typeof x==='string'?x:x[1])}</span>`).join('')+
       (combo>1?`<span class="gm-combo">${combo} 콤보 ×${comboMult().toFixed(2)}</span>`:'');
   }
-  function isTouchDevice(){ return window.matchMedia('(pointer:coarse)').matches||(typeof isMobile==='function'&&isMobile()); }
+  // 터치 화면(휴대폰·태블릿)인지 — 화면 폭이 아니라 입력 장치로 판단(PC 브라우저 창을 좁혀도 PC 방식 유지)
+  function isTouchDevice(){ return window.matchMedia('(pointer:coarse)').matches||window.matchMedia('(hover:none)').matches; }
   function renderFocus(){
     const h=el('gmFocusHint'); if(!h) return;
     if(isTouchDevice()){ h.textContent='👆 화면을 탭해서 업무를 처리하세요'; h.classList.add('on'); return; }
     const on=hasFocus();
-    h.textContent=on?'⌨ 키보드 입력 중 — 위 키를 순서대로 누르세요':'창을 한 번 클릭하면 키보드로 처리할 수 있습니다';
+    h.textContent=on?'⌨ 단어를 입력하고 Space 또는 Enter — 길수록 많이 처리':'입력칸을 클릭하면 단어를 입력할 수 있습니다';
     h.classList.toggle('on',on);
   }
   function renderMonster(){
@@ -439,7 +520,10 @@
       html=`<div class="gm-rank-title">🏆 승진 랭킹 <small>(${j.players}명)</small></div>`+
         j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계</span></div>`).join('')+
         (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>나</span></div>`:'');
-    }catch(e){ html='<div class="gm-intro">랭킹을 불러오지 못했습니다. (서버에 게임 기능이 아직 없거나 네트워크 문제)</div>'; }
+    }catch(e){
+      const why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
+      html=`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking()">다시 시도</button>`;
+    }
     el('gmBody').innerHTML=html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
   }
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
@@ -463,16 +547,18 @@
     if(opened){ gmShow(); return; }
     opened=true;
     loadLocal();
+    refreshWords();
     gmShow();
-    await loadServer();
     if(!pid||!token){ renderNick(); (nick?el('gmPin'):el('gmNick'))?.focus(); return; }
+    // 이 기기 저장으로 바로 시작 — 서버 확인은 뒤에서(느린 서버 때문에 기다리지 않게). 다른 기기 진행이 더 최신이면 바꿔서 이어감
     startPlay();
+    if(await loadServer()&&mon){ combo=0; spawn(st.kills>=10); renderPlay(); focusPlay(); toast('다른 기기의 최신 진행을 불러왔습니다',2500); }
   }
   function startPlay(){
     applyOffline();
     spawn(st.kills>=10);
     renderPlay();
-    el('gmWidget').focus();
+    focusPlay();
     startLoops();
   }
   function startLoops(){
@@ -522,12 +608,12 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ renderPlay(); el('gmWidget').focus(); };
+  window.gmBack=function(){ renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
     if(mon&&!ticker){ applyOffline(); render(); startLoops(); }
-    if(el('gmKeys')) el('gmWidget').focus();
+    if(el('gmKeys')) focusPlay();
   };
   window.gmHide=function(){
     const w=el('gmWidget'); if(!w) return;
@@ -543,6 +629,11 @@
     stopLoops(); opened=false; mon=null;
     el('gmWidget').remove(); el('gmChip').remove();
   };
+  window.gmToggleLock=function(){
+    locked=!locked; lsSet(LS_LOCK,locked); lastInput=Date.now();
+    el('gmWidget').classList.toggle('locked',locked);
+    toast(locked?'📌 고정 — 입력이 없어도 창을 숨기지 않습니다':'고정 해제 — 1분 동안 입력이 없으면 숨깁니다',2200);
+  };
   window.gmToggleDim=function(){ const w=el('gmWidget'); w.classList.toggle('dim'); lsSet(LS_POS,w.classList.contains('dim')); };
 
   // 키보드 — 게임 창에 포커스가 있을 때만(대시보드 입력칸 타이핑과 섞이지 않게). Esc는 보스 키
@@ -552,10 +643,23 @@
     if(!hasFocus()||e.target.tagName==='INPUT') return;
     if(e.ctrlKey||e.metaKey||e.altKey||e.repeat) return;
     lastInput=Date.now();
+    // 창은 잡혀 있는데 입력칸 밖이면 입력칸으로 (PC 단어 입력)
+    if(el('gmType')){ el('gmType').focus(); return; }
     if(KEYS.some(k=>k[0]===e.code)||/^Key[A-Z]$/.test(e.code)){ e.preventDefault(); keyInput(e.code); }
   });
-  // 창을 닫거나 탭을 벗어나면 저장
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden&&opened) saveServer(false); });
+  // 다른 탭을 보러 가면 저장하고 진행을 멈춤 → 돌아오면 그동안은 커피 수혈 10%로 계산하고 이어서 진행.
+  // 돌아온 순간 1분 무입력으로 바로 숨겨지지 않게 입력 시각도 새로 잡음
+  document.addEventListener('visibilitychange',()=>{
+    if(!opened) return;
+    if(document.hidden){
+      if(mon&&ticker){ stopLoops(); acc.inactiveAt=Date.now(); }
+      saveServer(false);
+    } else {
+      lastInput=Date.now();
+      if(mon&&!ticker&&isVisible()){ applyOffline(); render(); startLoops(); }
+      if(locked&&isVisible()&&(document.activeElement===document.body||!document.activeElement)) focusPlay();
+    }
+  });
 
   // 이스터에그 — 푸터 AIRMAX를 2초 안에 3번
   let taps=[];
