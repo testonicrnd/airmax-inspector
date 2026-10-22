@@ -1488,7 +1488,7 @@ body.checklist-page-active { padding-bottom:46px; }
 @keyframes gmToast { from { opacity:0; transform:translateY(-6px); } }
 .gm-rank-title { font-weight:700; margin-bottom:6px; }
 .gm-rank-row { display:flex; gap:8px; padding:5px 4px; border-bottom:1px solid var(--border2); font-size:12px; }
-.gm-rank-row span:first-child { width:18px; color:var(--text3); }
+.gm-rank-row > span:first-child { width:18px; color:var(--text3); }
 .gm-rank-row b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-rank-row.me { background:var(--accent-bg); }
 
@@ -1871,7 +1871,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-tile-icon img[src$="lock.png"] { height:18px; opacity:0.8; }
 .gm-medal { height:22px; width:auto; display:block; }
 .gm-rank-row { align-items:center; border-radius:8px; }
-.gm-rank-row span:first-child { width:24px; display:flex; justify-content:center; }
+.gm-rank-row > span:first-child { width:24px; display:flex; justify-content:center; }
 .gm-rank-row.top { font-weight:700; padding:6px 4px; }
 .gm-rank-row.top1 { background:linear-gradient(90deg,rgba(255,200,60,0.22),transparent 80%); }
 .gm-rank-row.top2 { background:linear-gradient(90deg,rgba(190,200,215,0.22),transparent 80%); }
