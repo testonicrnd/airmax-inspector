@@ -1019,7 +1019,7 @@
     const S=suika, G=S.H*3.2, B=S.balls;
     // 무게 = 부피(반지름³) — 큰 공일수록 훨씬 무거워서, 큰 공이 작은 공을 치면 작은 공이 툭 밀려나고 쌓이면 아래를 눌러 비집고 들어감.
     // 회전: 각속도 w, 각도 a. 바닥·벽·다른 공과 닿은 면의 미끄러짐을 마찰로 줄이면서 구르게 함 (관성모멘트 = 질량·r²/2)
-    const SK_E=0.35, SK_E_FLOOR=0.25; // 공끼리 / 바닥 튕김
+    const SK_E=0.08, SK_E_FLOOR=0.05; // 공끼리 / 바닥 튕김 — 원조처럼 거의 안 튀고 묵직하게
     for(const b of B){ b.touch=false; b.age+=dt; b.vy+=G*dt; b.vx*=0.999; b.w=(b.w||0)*0.998; b.x+=b.vx*dt; b.y+=b.vy*dt; b.a=(b.a||0)+b.w*dt;
       // 벽·바닥은 배경 그림의 나무 상자 안쪽(L·R·F)
       if(b.x<S.L+b.r){ b.x=S.L+b.r; b.vx=Math.abs(b.vx)*0.45; b.w*=0.8; } if(b.x>S.R-b.r){ b.x=S.R-b.r; b.vx=-Math.abs(b.vx)*0.45; b.w*=0.8; }
@@ -1059,10 +1059,10 @@
     const t=a.t+1, x=(a.x+b.x)/2, y=(a.y+b.y)/2;
     if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 신동준 합체! +100',until:performance.now()+1500}; }
     else { suika.score+=t*(t+1)/2; const nr=skR(t);
-      suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2-suika.H*0.25,r:nr,t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
-      // 합체 순간 주변 공을 바깥으로 툭 (가까울수록, 가벼울수록 많이)
+      suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:nr,t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
+      // 합체 순간 커진 공이 자리를 차지하며 주변 공을 옆으로 살짝 밀어냄
       suika.balls.forEach(o=>{ if(o.dead||o===a||o===b) return; const dx=o.x-x, dy=o.y-y, d=Math.hypot(dx,dy)||1, reach=nr+o.r+suika.W*0.04;
-        if(d<reach){ const k=(1-d/reach)*suika.H*0.9*Math.min(1,(nr/o.r)*0.6); o.vx+=dx/d*k; o.vy+=dy/d*k-suika.H*0.1; } });
+        if(d<reach){ const k=(1-d/reach)*suika.H*0.3*Math.min(1,(nr/o.r)*0.6); o.vx+=dx/d*k; o.vy+=Math.min(0,dy/d*k*0.3); } }); // 옆으로 살짝 비켜나기만
       if(t>=5) suika.flash={text:`${SK_NAMES[t]} 등장!`,until:performance.now()+1200}; }
     const sc=el('gmSkScore'); if(sc) sc.textContent=suika.score.toLocaleString();
   }
