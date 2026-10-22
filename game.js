@@ -9,6 +9,7 @@
    휴대폰: 화면 탭(지금 키를 맞게 누른 것으로 처리).
    🪜 무한의 계단: 주임을 달성한 직원이 있으면 열림. ←/→(A/D)로 다음 계단 방향을 맞춰 오르기, 끝나면 층수만큼 경험치(단어 입력보다 낮은 효율).
    최고 층수는 계정별로 저장하고 랭킹을 따로 집계.
+   ⚡ 깜짝 이벤트: 하루 3번, 10~17시 중 무작위 정시에 시작해 1시간 진행(한국 시간). 날짜로 정해지므로 모두 같은 시간에 같은 이벤트.
    📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
    캐릭터: 신동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
@@ -105,10 +106,38 @@
     return Math.floor(n).toLocaleString();
   }
   function atkOf(atkLv,lv){ return (1+atkLv)*Math.pow(2,Math.floor(atkLv/25))*(1+(lv-1)*0.03); }
-  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0)); } // 업무력 × 숙련
+  /* ---------- 깜짝 이벤트 ---------- */
+  // 하루 3번, 10~17시 중 무작위 정시 시작 · 1시간. 날짜(한국 시간)를 씨앗으로 뽑아서 서버 없이도 모두 같은 일정.
+  // 자리 비움(커피 10%) 계산에는 적용하지 않음
+  const EVENTS=[
+    {id:'party', icon:'🍻', name:'회식 타임',   desc:'경험치 ×2 · 실적 ×1.5', exp:2, gold:1.5},
+    {id:'trip',  icon:'💼', name:'사장님 출장', desc:'처리량 ×2',            power:2},
+    {id:'coffee',icon:'☕', name:'커피 배달',   desc:'커피 수혈 ×4',          auto:4},
+    {id:'golden',icon:'🌟', name:'보너스 업무', desc:'황금 업무 실적 ×10', golden:0.2},
+    {id:'bonus', icon:'📈', name:'성과급 시즌', desc:'실적 ×2',              gold:2},
+  ];
+  const EVENT_HOURS=[10,11,12,13,14,15,16,17], EVENTS_PER_DAY=3;
+  let evOff=false, lastEventId='';
+  function kst(){ const d=new Date(Date.now()+9*3600e3); return {key:d.toISOString().slice(0,10),h:d.getUTCHours(),m:d.getUTCMinutes(),s:d.getUTCSeconds()}; }
+  function seeded(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
+    return ()=>{ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); h^=h>>>16; return (h>>>0)/4294967296; }; }
+  function eventsOn(key){
+    const rnd=seeded('testonic-event-'+key), pick=(arr,n)=>{ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a.slice(0,n); };
+    const hours=pick(EVENT_HOURS,EVENTS_PER_DAY).sort((a,b)=>a-b), types=pick(EVENTS,EVENTS_PER_DAY);
+    return hours.map((h,i)=>({h,ev:types[i]}));
+  }
+  function currentEvent(){
+    if(evOff) return null;
+    const k=kst(), slot=eventsOn(k.key).find(x=>x.h===k.h);
+    return slot?{...slot.ev,left:(59-k.m)*60+(60-k.s)}:null;
+  }
+  function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
+  function evChance(kind){ const e=currentEvent(); return e&&e[kind]||0; }
+
+  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*evMult('power'); } // 업무력 × 숙련 × 이벤트
   // 커피 수혈 — +0.3: 강화 전에도 아주 천천히 자동 처리. 카페인 중독으로 증가.
   // 각성은 커피 전용 크리티컬(레벨당 1%, 최대 10%) — 방치만으로 너무 강해지지 않게 직접 플레이 몰입(최대 100%)과 따로 둠
-  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0)); }
+  function autoDps(s){ return (s.autoLv+0.3)*power(s)*0.3*(1+0.1*(s.cafLv||0))*(1+2*0.01*(s.awakeLv||0))*evMult('auto'); }
   function critChance(critLv){ return Math.min(0.03+critLv*0.01,1); }
   function projChance(projLv){ return Math.min(0.005*projLv,0.1); }
   function offRate(payLv){ return OFFLINE_RATE+0.02*(payLv||0); }
@@ -116,7 +145,7 @@
   function goldMult(bonusLv){ return 1+bonusLv*0.15; }
   function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),2+0.1*(st.focusLv||0)); } // 연속 성공마다 +5%(단어는 +10%), 최대 2배(집중력으로 증가)
   function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
-  function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv); return Math.ceil(boss?r*8:r); }
+  function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv)*evMult('gold'); return Math.ceil(boss?r*8:r); }
   function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
   function costOf(u,lv){ return Math.ceil(u.base*Math.pow(u.grow,lv)); }
   function offlineCapMin(offLv){ return OFFLINE_BASE_MIN+OFFLINE_STEP_MIN*offLv; }
@@ -207,7 +236,8 @@
     const b=BOSSES[(st.stage-1)%BOSSES.length];
     const t=boss?b:TASKS[Math.floor(Math.random()*TASKS.length)];
     const max=hpOf(st.stage,boss);
-    mon={boss,emoji:t[0],name:t[1],hp:max,max,deadline:boss?Date.now()+bossTime()*1000:0};
+    const golden=!boss&&Math.random()<evChance('golden');
+    mon={boss,emoji:t[0],name:t[1],hp:max,max,deadline:boss?Date.now()+bossTime()*1000:0,golden};
     newSeq();
     renderMonster();
   }
@@ -233,7 +263,8 @@
     dirty=true;
   }
   function defeat(){
-    const g=rewardOf(st.stage,mon.boss);
+    const g=rewardOf(st.stage,mon.boss)*(mon.golden?10:1);
+    if(mon.golden) floatText('🌟 황금 업무! 실적 ×10',true,true);
     st.gold+=g; st.totalGold+=g;
     gainExp(mon.boss?st.stage*6:st.stage);
     if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); }
@@ -241,7 +272,7 @@
     spawn(st.kills>=10);
   }
   function gainExp(n,quiet){
-    st.exp+=n;
+    st.exp+=n*evMult('exp');
     if(st.lv>=BOSS_LV){ st.lv=BOSS_LV; st.exp=0; } // 만렙 — 경험치는 더 쌓지 않음
     while(st.lv<BOSS_LV&&st.exp>=expNeed(st.lv)){
       st.exp-=expNeed(st.lv); st.lv++;
@@ -326,6 +357,9 @@
     // 1분 동안 입력이 없으면 저장하고 숨김 (📌 고정 중이면 숨기지 않음)
     if(!locked&&isVisible()&&Date.now()-lastInput>IDLE_HIDE) gmHide();
     if(Date.now()-lastRender>200) render();
+    // 이벤트 시작/종료 알림
+    const ev=currentEvent(), id=ev?ev.id+kst().key+ev.h:'';
+    if(id!==lastEventId){ if(ev) toast(`⚡ 깜짝 이벤트! ${ev.icon} ${ev.name} — ${ev.desc}`,5000); else if(lastEventId) toast('이벤트가 끝났습니다',2500); lastEventId=id; }
   }
   function buy(i){
     const u=UPGRADES[i], lv=st[u.key]||0, c=costOf(u,lv);
@@ -361,7 +395,8 @@
   window.addEventListener('blur',holdStop);
   // 게임이 비활성이던 동안 — 커피 수혈이 10% 효율로 실제로 업무를 처리한 것처럼 계산 (최대 누적 시간은 야근 강화로 늘어남).
   // 지금 키우는 캐릭터에만 반영. 업무 건수·실적·경험치·단계까지 반영하고, 결재 보스는 커피만으로 30초 안에 처리될 때만 통과
-  function applyOffline(){
+  function applyOffline(){ evOff=true; try{ applyOfflineCalc(); } finally{ evOff=false; } }
+  function applyOfflineCalc(){
     const since=acc.inactiveAt||acc.lastSave||Date.now();
     acc.inactiveAt=0;
     const capMin=offlineCapMin(st.offLv);
@@ -478,6 +513,7 @@
   function renderPlay(){
     tipIdx=-1; tipSticky=false;
     el('gmBody').innerHTML=`
+      <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
       <div class="gm-stats"><span>💸 <b id="gmGold"></b></span><span id="gmStage"></span><span id="gmDps"></span></div>
@@ -533,7 +569,8 @@
   function renderMonster(){
     if(!mon||!el('gmMonster')) return;
     el('gmMonster').textContent=mon.emoji;
-    el('gmMonName').textContent=(mon.boss?'⚠ 보스 · ':'')+mon.name;
+    el('gmMonName').textContent=(mon.boss?'⚠ 보스 · ':mon.golden?'🌟 황금 · ':'')+mon.name;
+    el('gmArena').classList.toggle('golden',!!mon.golden);
     el('gmArena').classList.toggle('boss',mon.boss);
   }
   function render(){
@@ -546,6 +583,8 @@
     el('gmGold').textContent=fmt(st.gold);
     el('gmStage').textContent=`📂 ${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
     el('gmDps').textContent=`☕ 초당 ${fmt(autoDps(st))}`;
+    const ev=currentEvent(), eb=el('gmEvent');
+    if(eb){ if(ev){ eb.style.display=''; eb.textContent=`${ev.icon} ${ev.name} · ${ev.desc} · ${Math.ceil(ev.left/60)}분`; } else eb.style.display='none'; }
     if(mon){
       el('gmHpBar').style.width=Math.max(0,mon.hp/mon.max*100)+'%';
       el('gmHpText').textContent=`남은 업무 ${fmt(Math.max(0,Math.ceil(mon.hp)))} / ${fmt(mon.max)}`;

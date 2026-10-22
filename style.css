@@ -1518,3 +1518,9 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-rank-tabs { display:flex; gap:4px; margin-bottom:8px; }
 .gm-rank-tabs button { flex:1; padding:6px 0; border:1.5px solid var(--border); border-radius:8px; background:none; color:var(--text3); font-family:inherit; font-size:12px; cursor:pointer; }
 .gm-rank-tabs button.on { border-color:var(--accent); color:var(--text); font-weight:700; background:var(--accent-bg); }
+
+/* 테스토닉 키우기 — 깜짝 이벤트 띠 / 황금 업무 */
+.gm-event { margin:-2px 0 8px; padding:6px 10px; border-radius:8px; font-size:11.5px; font-weight:700; text-align:center; color:#5a3d00;
+  background:linear-gradient(90deg,#ffd76a,#ffb547); animation:gmEventGlow 2s ease-in-out infinite; word-break:keep-all; }
+@keyframes gmEventGlow { 50% { filter:brightness(1.08); } }
+.gm-arena.golden { box-shadow:inset 0 0 0 2px #ffcf4a, 0 0 12px rgba(255,200,60,0.35); }
