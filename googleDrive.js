@@ -938,7 +938,7 @@ function authorizeDrive() {
     Logger.log('이제 [배포 관리 → 편집 → 새 버전]으로 재배포하세요.');
 }
 
-// ===== 숨은 미니 게임 "신동준 키우기" 저장소 =====
+// ===== 숨은 미니 게임 "테스토닉 키우기" 저장소 =====
 // 점검표와 완전히 분리된 "Air Max 게임 DB" 스프레드시트를 처음 저장할 때 만들고, players 시트에 플레이어 1명 = 1행으로 저장.
 // 계정 = 닉네임(중복 불가, 대소문자·띄어쓰기 무시) + PIN(숫자 4~6자리). PIN은 해시만 저장하고, 로그인하면 세션 토큰을 받아 저장할 때 사용.
 // PIN을 5번 틀리면 그 닉네임은 10분 동안 로그인 잠금. 진행 데이터는 JSON 문자열로 한 칸에 저장(크기 제한)
@@ -1010,10 +1010,12 @@ function handleGameAction(data) {
         var token = String(data.token || '');
 
         if (data.action === 'gameRanking') {
+            // 순위: 가장 뒤(어려운) 캐릭터 → 그 캐릭터의 단계 → 레벨 → 누적 실적
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
-                return { nickname: String(r[1]), stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, me: String(r[0]) === playerId };
+                var s = gameReadState(r) || {};
+                return { nickname: String(r[1]), ch: Number(s.top) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, me: String(r[0]) === playerId };
             });
-            list.sort(function(a, b) { return (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
+            list.sort(function(a, b) { return (b.ch - a.ch) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
             var myRank = 0;
             list.forEach(function(x, i) { if (x.me) myRank = i + 1; });
             return buildJson({ success: true, top: list.slice(0, 10), myRank: myRank, players: list.length });

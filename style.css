@@ -1360,7 +1360,7 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .checklist-title { margin-bottom:0; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
 
-/* ===== 숨은 미니 게임 "신동준 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
+/* ===== 숨은 미니 게임 "테스토닉 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
 .gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:300px; max-width:calc(100vw - 32px);
   background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
@@ -1374,7 +1374,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-chip { position:fixed; right:16px; bottom:48px; z-index:900; width:34px; height:34px; border-radius:50%; border:1.5px solid var(--border);
   background:var(--surface); font-size:16px; cursor:pointer; opacity:0.6; display:none; }
 .gm-chip:hover { opacity:1; }
-.gm-intro { line-height:1.6; color:var(--text2); margin-bottom:10px; }
+.gm-intro { display:flex; align-items:flex-start; gap:10px; line-height:1.6; color:var(--text2); margin-bottom:10px; word-break:keep-all; overflow-wrap:break-word; }
+.gm-intro > span { flex:1; min-width:0; }
 .gm-input { width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--border); border-radius:8px; background:var(--input-bg); color:var(--text); font-size:14px; font-family:inherit; margin-bottom:8px; }
 .gm-login-msg { font-size:11.5px; color:var(--text3); margin:-2px 0 8px; line-height:1.4; }
 .gm-login-msg.err { color:#d9534f; font-weight:600; }
@@ -1411,7 +1412,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-up-cost { font-size:12px; font-weight:600; white-space:nowrap; }
 .gm-foot { display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:11px; color:var(--text4); }
 .gm-link { background:none; border:none; color:var(--text2); font-family:inherit; font-size:12px; cursor:pointer; padding:0; }
-.gm-toast { position:absolute; left:10px; right:10px; top:40px; padding:7px 10px; border-radius:8px; background:var(--btn-bg); color:var(--btn-text);
+.gm-toast { word-break:keep-all; position:absolute; left:10px; right:10px; top:40px; padding:7px 10px; border-radius:8px; background:var(--btn-bg); color:var(--btn-text);
   font-size:12px; text-align:center; animation:gmToast 0.25s; pointer-events:none; }
 @keyframes gmToast { from { opacity:0; transform:translateY(-6px); } }
 .gm-rank-title { font-weight:700; margin-bottom:6px; }
@@ -1420,7 +1421,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-rank-row b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-rank-row.me { background:var(--accent-bg); }
 
-/* 신동준 키우기 — 캐릭터 이미지 / 무소음 처리 영역 */
+/* 테스토닉 키우기 — 캐릭터 이미지 / 무소음 처리 영역 */
 .gm-avatar { position:relative; width:40px; height:40px; flex-shrink:0; }
 .gm-avatar img { width:40px; height:40px; border-radius:50%; object-fit:cover; background:#f1ede8; border:1.5px solid var(--border); display:block; }
 .gm-avatar i { position:absolute; right:-4px; bottom:-4px; font-style:normal; font-size:15px; line-height:1; }
@@ -1431,7 +1432,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-task { flex:1; min-width:0; text-align:center; align-self:center; }
 .gm-hint { font-size:10.5px; color:var(--text4); text-align:center; margin-top:4px; }
 
-/* 신동준 키우기 — 키보드 입력 */
+/* 테스토닉 키우기 — 키보드 입력 */
 .gm-widget:focus { outline:none; }
 .gm-widget:focus-within { border-color:var(--accent); }
 .gm-keys { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; align-items:center; margin-top:8px; min-height:27px; }
@@ -1444,8 +1445,24 @@ body.checklist-page-active { padding-bottom:46px; }
 @keyframes gmShake { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
 .gm-combo { font-size:11px; font-weight:600; color:var(--accent-text); margin-left:4px; }
 .gm-hint.on { color:var(--ok-text); }
-.gm-intro-img { width:44px; height:44px; border-radius:50%; float:left; margin:0 8px 4px 0; background:#f1ede8; }
+.gm-intro-img { width:44px; height:44px; border-radius:50%; flex-shrink:0; background:#f1ede8; }
 
-/* 신동준 키우기 — 제목줄을 잡고 창 이동 */
+/* 테스토닉 키우기 — 제목줄을 잡고 창 이동 */
 .gm-head { cursor:move; touch-action:none; }
 .gm-head-btns button { cursor:pointer; }
+
+/* 테스토닉 키우기 — 이미지가 아직 없는 직원은 이름으로 대신 표시 / 직원 목록 */
+.gm-face-ph { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; border:1.5px solid var(--border); box-sizing:border-box; }
+.gm-hero-ph { width:72px; height:112px; border-radius:36px 36px 10px 10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:#fff; }
+.gm-hero-ph span { font-size:18px; font-weight:700; }
+.gm-hero-ph small { font-size:10px; opacity:0.85; }
+.gm-c1 { background:#5b8def; } .gm-c2 { background:#e0739a; } .gm-c3 { background:#3fae8c; } .gm-c4 { background:#d9a23a; }
+.gm-c5 { background:#9a6fd6; } .gm-c6 { background:#5f7d95; } .gm-c7 { background:#d9634a; }
+.gm-char-row { display:flex; align-items:center; gap:8px; width:100%; padding:6px 4px; border:none; border-bottom:1px solid var(--border2); background:none; color:var(--text); font-family:inherit; text-align:left; cursor:pointer; }
+.gm-char-row:disabled { cursor:default; }
+.gm-char-row.cur { background:var(--accent-bg); }
+.gm-char-row.locked { opacity:0.45; }
+.gm-char-row-text { flex:1; min-width:0; display:flex; flex-direction:column; font-size:12px; }
+.gm-char-row-text small { color:var(--text3); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gm-char-row-diff { font-size:10.5px; color:var(--text4); white-space:nowrap; }
+.gm-foot { gap:6px; }
