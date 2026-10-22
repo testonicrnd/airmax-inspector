@@ -247,7 +247,7 @@
     if(!c||!c.cheer) return;
     cheer={ch,def:c.cheer,until:Date.now()+c.cheer.sec*1000};
     toast(`${c.cheer.icon} ${c.name} 사장님의 격려 — ${c.cheer.desc} (${c.cheer.sec}초)`,3200);
-    fxPop('fx-levelup',{x:3,cls:'lvup',gap:260,ms:1100});
+    fxPop('fx-cheer',{x:3,cls:'lvup',gap:260,ms:1300});
     render();
   }
   function evChance(kind){ const e=currentEvent(); return e&&e[kind]||0; }
@@ -801,19 +801,29 @@
     }
     // 강화 타일 — 바뀐 게 있을 때만 다시 그림(누르는 도중에 버튼이 새로 그려져 클릭이 씹히지 않게)
     // 만렙 스킬은 큰 타일에서 빼서 맨 아래 작은 아이콘 줄(MAX)로 모음
-    const maxedList=UPGRADES.map((u,i)=>[u,i]).filter(([u])=>(st[u.key]||0)>=u.max);
-    const ups=UPGRADES.map((u,i)=>{
-      const lv=st[u.key]||0, c=costOf(u,lv), maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
-      if(maxed) return '';
-      const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
-      return `<button type="button" class="gm-tile${cls}" data-i="${i}">
+    // 스킬이 늘어나도 창이 길어지지 않게 — 지금 올릴 수 있는 것만 큰 타일로,
+    // 만렙과 아직 안 열린 스킬은 각각 아래쪽 작은 아이콘 줄로 모은다(타일 영역은 스크롤).
+    const chip=u=>SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon;
+    const maxedList=[], lockedList=[], openList=[];
+    UPGRADES.forEach((u,i)=>{
+      const lv=st[u.key]||0;
+      if(lv>=u.max) maxedList.push([u,i]);
+      else if(u.req&&st.lv<u.req) lockedList.push([u,i]);
+      else openList.push([u,i]);
+    });
+    const ups=openList.map(([u,i])=>{
+      const lv=st[u.key]||0, c=costOf(u,lv);
+      return `<button type="button" class="gm-tile${st.gold<c?' off':''}" data-i="${i}">
         <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
-        <span class="gm-tile-icon">${locked?`<img src="${UI}lock.png" alt=""/>`:SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon}</span>
+        <span class="gm-tile-icon">${chip(u)}</span>
         <span class="gm-tile-name">${u.name}</span>
-        <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
-        <span class="gm-tile-cost">${locked?'':maxed?'MAX':MONEY+fmt(c)}</span></button>`;
-    }).join('')+(maxedList.length?`<div class="gm-maxrow"><span class="gm-maxrow-label">MAX</span>${maxedList.map(([u,i])=>
-      `<span class="gm-maxchip" data-i="${i}" title="${u.name} (MAX)">${SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon}</span>`).join('')}</div>`:'');
+        <span class="gm-tile-lv">Lv.${lv}</span>
+        <span class="gm-tile-cost">${MONEY+fmt(c)}</span></button>`;
+    }).join('')
+    +(lockedList.length?`<div class="gm-maxrow locked"><span class="gm-maxrow-label">잠김</span>${lockedList.map(([u,i])=>
+      `<span class="gm-maxchip" onclick="gmTip(event,${i})" title="${u.name} — ${rankOf(u.req)[2]} 달성">${chip(u)}<img class="gm-chip-lock" src="${UI}lock.png" alt=""/></span>`).join('')}</div>`:'')
+    +(maxedList.length?`<div class="gm-maxrow"><span class="gm-maxrow-label">MAX</span>${maxedList.map(([u,i])=>
+      `<span class="gm-maxchip" onclick="gmTip(event,${i})" title="${u.name} (MAX)">${chip(u)}</span>`).join('')}</div>`:'');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }
     if(tipIdx>=0) renderTip();

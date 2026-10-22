@@ -1361,7 +1361,7 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
 
 /* ===== 숨은 미니 게임 "테스토닉 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
-.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:400px; max-width:calc(100vw - 32px);
+.gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:400px; max-width:calc(100vw - 32px); max-height:calc(100vh - 64px);
   background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
 .gm-widget.dim { opacity:0.35; }
@@ -1491,7 +1491,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-ups .gm-up { flex-shrink:0; }
 
 /* 테스토닉 키우기 — 강화 타일(4칸) + ? 설명 말풍선 */
-.gm-ups { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; max-height:none; overflow:visible; padding-right:0; }
+/* 타일 3줄까지만 보이고 그 아래는 스크롤 — 스킬이 늘어나도 창 높이는 그대로 */
+.gm-ups { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; max-height:233px; overflow-y:auto; align-content:start; padding-right:3px; }
 .gm-tile { position:relative; display:flex; flex-direction:column; align-items:center; gap:1px; min-width:0; padding:7px 2px 5px; border:1.5px solid var(--border); border-radius:9px;
   background:var(--input-bg); color:var(--text); font-family:inherit; cursor:pointer; transition:transform 0.08s, border-color 0.15s; }
 .gm-tile:hover { border-color:var(--accent); }
@@ -1731,7 +1732,13 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-maxrow-label { font-size:9.5px; font-weight:800; color:#d9a23a; margin-right:2px; letter-spacing:0.5px; }
 .gm-maxchip { width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:6px; cursor:help; }
 .gm-maxchip:hover { background:rgba(217,162,58,0.25); }
+.gm-maxchip { position:relative; }
 .gm-maxchip img { height:20px; width:auto; }
+.gm-maxrow.locked { background:var(--input-bg); border:1px dashed var(--border); }
+.gm-maxrow.locked .gm-maxrow-label { color:var(--text3); }
+.gm-maxrow.locked .gm-maxchip { opacity:0.55; filter:grayscale(0.7); cursor:help; }
+.gm-maxrow.locked .gm-maxchip:hover { opacity:1; filter:none; background:var(--border2); }
+.gm-chip-lock { position:absolute; right:-1px; bottom:-1px; height:11px !important; width:auto; }
 
 /* 창 최소 높이(550px)를 채울 때 남는 공간은 메뉴 줄 위로 */
 .gm-body.padded { display:flex; flex-direction:column; box-sizing:border-box; }
