@@ -378,14 +378,14 @@ function handleSubmitChecklist(data) {
                 sheet.getRange(startRow, 1, rows.length, CHECKLIST_LONG_HEADERS.length).setValues(rows);
             }
             if (dedupeKey) cache.put(dedupeKey, submissionId + '|' + submittedAt, 600);
-            // 장소별 시트/통계 시트 갱신 — 실패해도 원본 저장은 이미 끝났으므로 제출은 성공으로 응답
-            try {
-                if (location) getOrCreateLocationSheet(ss, location);
-                refreshChecklistStats(ss);
-            } catch (e) { /* 통계 갱신 실패는 무시 — rebuildChecklistReports()로 언제든 재생성 가능 */ }
         } finally {
             lock.releaseLock();
         }
+        // 장소별 시트(새 장소일 때만 생성, 수식이라 원본이 바뀌면 자동 반영) — 실패해도 원본 저장은 이미 끝났으므로 성공으로 응답
+        try { if (location) getOrCreateLocationSheet(ss, location); } catch (e) { /* 무시 */ }
+        // 통계 시트는 전체를 다시 계산해서 오래 걸림 → 자동 실행(5분마다)이 설치돼 있으면 '갱신 필요'만 표시하고 바로 응답.
+        // 설치 전이면 예전처럼 바로 갱신 (setupChecklistStatsTrigger를 한 번 실행하면 제출이 빨라짐)
+        try { markChecklistStatsDirty(ss); } catch (e) { /* 통계 갱신 실패는 무시 — rebuildChecklistReports()로 언제든 재생성 가능 */ }
         return buildJson({ success: true, submissionId: submissionId, submittedAt: submittedAt });
     } catch(err) {
         return buildJson({ success: false, error: err.message });
@@ -503,6 +503,42 @@ function fixChecklistSheetOrder(ss) {
         ss.setActiveSheet(sh);
         ss.moveActiveSheet(i + 1);
     });
+}
+
+// ===== 통계 시트 지연 갱신 =====
+// 제출할 때마다 통계 전체를 다시 계산하면 응답이 느려지므로, 표시만 해 두고 시간 트리거가 몰아서 갱신
+var CL_STATS_DIRTY_PROP = 'CL_STATS_DIRTY', CL_STATS_TRIGGER_PROP = 'CL_STATS_TRIGGER';
+function markChecklistStatsDirty(ss) {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty(CL_STATS_TRIGGER_PROP)) props.setProperty(CL_STATS_DIRTY_PROP, String(Date.now()));
+    else refreshChecklistStats(ss || getOrCreateChecklistSpreadsheet()); // 트리거 설치 전 — 예전처럼 바로 갱신
+}
+// 5분마다 실행 — 새 제출이 있었을 때만 통계 갱신
+function refreshChecklistStatsIfDirty() {
+    var props = PropertiesService.getScriptProperties();
+    if (!props.getProperty(CL_STATS_DIRTY_PROP)) return;
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) return; // 다른 작업 중이면 다음 회차에
+    try {
+        props.deleteProperty(CL_STATS_DIRTY_PROP); // 갱신 도중 들어온 제출은 다시 표시되어 다음 회차에 반영
+        refreshChecklistStats(getOrCreateChecklistSpreadsheet());
+    } finally {
+        lock.releaseLock();
+    }
+}
+// GAS 편집기에서 한 번만 실행 — 5분마다 통계를 갱신하는 시간 트리거 설치(이미 있으면 다시 만들지 않음)
+function setupChecklistStatsTrigger() {
+    var exists = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'refreshChecklistStatsIfDirty'; });
+    if (!exists) ScriptApp.newTrigger('refreshChecklistStatsIfDirty').timeBased().everyMinutes(5).create();
+    PropertiesService.getScriptProperties().setProperty(CL_STATS_TRIGGER_PROP, '1');
+    refreshChecklistStatsIfDirty();
+    Logger.log('통계 자동 갱신(5분마다) 설치 완료 — 이제 점검표 제출이 바로 끝나고, 통계 시트는 최대 5분 뒤 반영됩니다.');
+}
+// 되돌리기 — 트리거 삭제, 제출할 때마다 바로 통계 갱신(예전 방식)
+function removeChecklistStatsTrigger() {
+    ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === 'refreshChecklistStatsIfDirty') ScriptApp.deleteTrigger(t); });
+    PropertiesService.getScriptProperties().deleteProperty(CL_STATS_TRIGGER_PROP);
+    Logger.log('통계 자동 갱신 해제 — 제출할 때마다 바로 갱신합니다.');
 }
 
 function refreshChecklistStats(ss) {
