@@ -1,6 +1,6 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.41.0';
-const APP_DATE    = '2026.10.22';
+const APP_VERSION = 'v2.41.1';
+const APP_DATE    = '2026.10.23';
 
 /* ===== 설정 ===== */
 /* 관리자 비밀번호는 코드에 두지 않음 — GAS 스크립트 속성(ADMIN_PASSWORD / SUPER_ADMIN_PASSWORD)에서 서버가 확인 */

@@ -1403,12 +1403,13 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-bar i { display:block; height:100%; width:0; background:var(--accent); transition:width 0.15s; }
 .gm-bar.hp i { background:#d93025; }
 /* 선배 사장님의 격려 — 버프가 걸려 있는 동안만 보임 */
-.gm-cheer { display:flex; align-items:center; gap:7px; margin:6px 0 0; padding:6px 9px; border-radius:10px;
-  background:linear-gradient(90deg, rgba(255,207,74,0.22), rgba(255,207,74,0.06)); border:1px solid rgba(255,183,0,0.45);
-  font-size:11px; line-height:1.25; animation:gmCheerIn 0.25s ease-out; }
+.gm-cheer { position:absolute; left:4px; right:4px; top:4px; z-index:3; pointer-events:none;
+  display:flex; align-items:center; gap:7px; padding:5px 8px; border-radius:9px;
+  background:linear-gradient(90deg, rgba(255,243,214,0.97), rgba(255,236,186,0.94)); border:1px solid rgba(255,183,0,0.7);
+  box-shadow:0 2px 8px rgba(0,0,0,0.16); font-size:11px; line-height:1.25; animation:gmCheerIn 0.25s ease-out; }
 .gm-cheer img { width:22px; height:22px; border-radius:50%; object-fit:cover; flex:none; background:#fff; }
-.gm-cheer b { color:var(--text1); font-weight:700; white-space:nowrap; }
-.gm-cheer span { color:var(--text2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-cheer b { color:#4a3410; font-weight:700; white-space:nowrap; }
+.gm-cheer span { color:#6b5120; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-cheer em { font-style:normal; font-weight:700; color:#c47b00; flex:none; }
 @keyframes gmCheerIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
 .gm-stats { display:flex; justify-content:space-between; gap:6px; margin:8px 0; color:var(--text2); font-size:12px; }
@@ -1448,7 +1449,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-avatar { position:relative; width:40px; height:40px; flex-shrink:0; }
 .gm-avatar img { width:40px; height:40px; border-radius:50%; object-fit:cover; background:#f1ede8; border:1.5px solid var(--border); display:block; }
 .gm-avatar i { position:absolute; right:-4px; bottom:-4px; font-style:normal; font-size:15px; line-height:1; }
-.gm-arena { display:flex; align-items:flex-end; gap:6px; cursor:default; touch-action:manipulation; min-height:120px; }
+.gm-arena { position:relative; display:flex; align-items:flex-end; gap:6px; cursor:default; touch-action:manipulation; min-height:120px; }
 .gm-hero { height:112px; width:auto; flex-shrink:0; pointer-events:none; user-select:none; transform-origin:bottom center; }
 .gm-hero.hit { animation:gmHeroHit 0.18s; }
 @keyframes gmHeroHit { 50% { transform:translateY(-4px) rotate(-3deg); } }

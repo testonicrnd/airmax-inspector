@@ -633,7 +633,7 @@
     w.id='gmWidget'; w.className='gm-widget'; w.tabIndex=0;
     w.innerHTML=`
       <div class="gm-head">
-        <span class="gm-title" onclick="gmTitleClick()"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>테스토닉 키우기</span>
+        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>테스토닉 키우기</span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
           <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
@@ -662,12 +662,26 @@
     head.addEventListener('pointerdown',e=>{
       if(e.target.closest('button')) return;
       const r=w.getBoundingClientRect();
-      drag={dx:e.clientX-r.left,dy:e.clientY-r.top};
+      // 제목을 눌렀는지 기억해 둠 — 창 이동(드래그)이 클릭을 먹어버려서 제목 클릭이 안 먹던 문제
+      drag={dx:e.clientX-r.left,dy:e.clientY-r.top,x0:e.clientX,y0:e.clientY,moved:false,title:!!e.target.closest('.gm-title')};
       head.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
-    head.addEventListener('pointermove',e=>{ if(drag) placeWidget(e.clientX-drag.dx,e.clientY-drag.dy); });
-    const endDrag=()=>{ if(!drag) return; drag=null; const r=w.getBoundingClientRect(); lsSet(LS_XY,{x:Math.round(r.left),y:Math.round(r.top)}); };
+    head.addEventListener('pointermove',e=>{
+      if(!drag) return;
+      // 몇 px 안쪽 흔들림은 클릭으로 봄(손 떨림으로 제목 클릭이 날아가지 않게)
+      if(!drag.moved&&Math.abs(e.clientX-drag.x0)<4&&Math.abs(e.clientY-drag.y0)<4) return;
+      drag.moved=true;
+      placeWidget(e.clientX-drag.dx,e.clientY-drag.dy);
+    });
+    const endDrag=()=>{
+      if(!drag) return;
+      const wasTitleClick=!drag.moved&&drag.title;
+      const moved=drag.moved;
+      drag=null;
+      if(moved){ const r=w.getBoundingClientRect(); lsSet(LS_XY,{x:Math.round(r.left),y:Math.round(r.top)}); }
+      if(wasTitleClick) gmTitleClick();
+    };
     head.addEventListener('pointerup',endDrag); head.addEventListener('pointercancel',endDrag);
     head.addEventListener('dblclick',e=>{ if(e.target.closest('button')) return; lsSet(LS_XY,null); w.style.left=w.style.top=w.style.right=w.style.bottom=''; });
     const xy=lsGet(LS_XY,null);
@@ -705,8 +719,8 @@
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
       <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
-      <div class="gm-cheer" id="gmCheer" style="display:none"></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
+        <div class="gm-cheer" id="gmCheer" style="display:none"></div>
         ${bodyHtml(acc.ch)}
         <div class="gm-task">
           <div class="gm-mon-name" id="gmMonName"></div>
