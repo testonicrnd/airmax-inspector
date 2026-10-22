@@ -1706,3 +1706,12 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-scene-txt { padding:12px 14px 2px; text-align:center; font-size:13px; line-height:1.6; color:var(--text2); word-break:keep-all; }
 .gm-scene-txt b { color:var(--text); }
 .gm-scene-card .gm-btn { width:calc(100% - 28px); margin:10px 14px 14px; }
+
+/* 휴대폰 폭 — 강화 타일 5칸이 좁아지면 글자를 조금 줄여 이름이 잘리지 않게 */
+@media (max-width:440px) {
+  .gm-ups { gap:4px; }
+  .gm-tile { padding:5px 1px 4px; }
+  .gm-tile-name { font-size:9px; letter-spacing:-0.3px; }
+  .gm-tile-lv, .gm-tile-cost { font-size:8.5px; }
+  .gm-tile-icon img { height:19px; }
+}
