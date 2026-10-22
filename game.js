@@ -74,20 +74,20 @@
   const KEYS=[['ArrowUp','↑'],['ArrowDown','↓'],['ArrowLeft','←'],['ArrowRight','→'],
     ...'ASDFJKLEIRUWO'.split('').map(c=>['Key'+c,c])];
   // 강화 — 비용은 완만하게 오르고, 업무력은 25레벨마다 2배 보너스. 몰입은 97레벨에 크리티컬 100%.
-  // req: 이 레벨(직급)이 되어야 열리는 스킬. 화면은 4칸 타일, 설명은 타일의 ?에 마우스를 올리면(휴대폰은 탭) 표시
+  // req: 이 레벨(직급)이 되어야 열리는 스킬. 첫 레벨 비용은 해금 시점 분당 수입의 약 1~4분치(시뮬레이션 기준). 화면은 4칸 타일, 설명은 타일의 ?에 마우스를 올리면(휴대폰은 탭) 표시
   const UPGRADES=[
     {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'키 1번에'} ${fmt(power({...st,atkLv:lv})*(usingWords()?1.3:1))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
     {key:'autoLv',  icon:'☕', name:'커피 수혈',   desc:lv=>`가만히 있어도 초당 ${fmt(autoDps({...st,autoLv:lv}))} 처리`, base:30, grow:1.09, max:9999},
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
-    {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:300, grow:1.4, max:15, req:12},
-    {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:500, grow:1.25, max:9999, req:22},
-    {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:500, grow:1.25, max:9999, req:22},
-    {key:'focusLv', icon:'🔗', name:'집중력',      desc:lv=>`콤보 최대 ×${(2+0.1*lv).toFixed(1)}`, base:1500, grow:1.3, max:20, req:35},
-    {key:'awakeLv', icon:'⚡', name:'각성',        desc:lv=>`커피 수혈도 ${lv}% 확률로 3배 처리`, base:2000, grow:1.6, max:10, req:35},
-    {key:'projLv',  icon:'🏆', name:'프로젝트 달성', desc:lv=>`${(projChance(lv)*100).toFixed(1)}% 확률로 20배 처리 (크리티컬 상위)`, base:5000, grow:1.35, max:20, req:50},
-    {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:3000, grow:1.35, max:20, req:50},
+    {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
+    {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
+    {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
+    {key:'focusLv', icon:'🔗', name:'집중력',      desc:lv=>`콤보 최대 ×${(2+0.1*lv).toFixed(1)}`, base:30000000, grow:1.3, max:20, req:35},
+    {key:'awakeLv', icon:'⚡', name:'각성',        desc:lv=>`커피 수혈도 ${lv}% 확률로 3배 처리`, base:50000000, grow:1.6, max:10, req:35},
+    {key:'projLv',  icon:'🏆', name:'프로젝트 달성', desc:lv=>`${(projChance(lv)*100).toFixed(1)}% 확률로 20배 처리 (크리티컬 상위)`, base:1500000000, grow:1.35, max:20, req:50},
+    {key:'payLv',   icon:'🌃', name:'야근 수당',   desc:lv=>`자리 비운 동안 커피 수혈 효율 ${Math.round(offRate(lv)*100)}%`, base:1000000000, grow:1.35, max:20, req:50},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
   const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
