@@ -1020,10 +1020,10 @@
     // 무게 = 부피(반지름³) — 큰 공일수록 훨씬 무거워서, 큰 공이 작은 공을 치면 작은 공이 툭 밀려나고 쌓이면 아래를 눌러 비집고 들어감.
     // 회전: 각속도 w, 각도 a. 바닥·벽·다른 공과 닿은 면의 미끄러짐을 마찰로 줄이면서 구르게 함 (관성모멘트 = 질량·r²/2)
     const SK_E=0.35, SK_E_FLOOR=0.25; // 공끼리 / 바닥 튕김
-    for(const b of B){ b.age+=dt; b.vy+=G*dt; b.vx*=0.999; b.w=(b.w||0)*0.998; b.x+=b.vx*dt; b.y+=b.vy*dt; b.a=(b.a||0)+b.w*dt;
+    for(const b of B){ b.touch=false; b.age+=dt; b.vy+=G*dt; b.vx*=0.999; b.w=(b.w||0)*0.998; b.x+=b.vx*dt; b.y+=b.vy*dt; b.a=(b.a||0)+b.w*dt;
       // 벽·바닥은 배경 그림의 나무 상자 안쪽(L·R·F)
       if(b.x<S.L+b.r){ b.x=S.L+b.r; b.vx=Math.abs(b.vx)*0.45; b.w*=0.8; } if(b.x>S.R-b.r){ b.x=S.R-b.r; b.vx=-Math.abs(b.vx)*0.45; b.w*=0.8; }
-      if(b.y>S.F-b.r){ b.y=S.F-b.r; b.vy=Math.abs(b.vy)>S.H*0.08?-Math.abs(b.vy)*SK_E_FLOOR:0; // 세게 떨어지면 통, 살살 닿으면 멈춤
+      if(b.y>S.F-b.r){ b.y=S.F-b.r; b.touch=true; b.vy=Math.abs(b.vy)>S.H*0.08?-Math.abs(b.vy)*SK_E_FLOOR:0; // 세게 떨어지면 통, 살살 닿으면 멈춤
         const slip=b.vx-b.w*b.r, jt=-slip/3*0.6; // 바닥 마찰 — 미끄러짐을 줄이고 그만큼 회전
         b.vx+=jt; b.w-=2*jt/b.r; b.vx*=0.985; } }
     for(let it=0;it<3;it++){
@@ -1033,6 +1033,7 @@
           if(a.t===b.t&&d<m+S.W*0.004){ skMerge(a,b); break; } // 같은 공은 닿기만 해도 합체
           if(d>=m||d===0) continue;
           const nx=dx/d, ny=dy/d, ov=m-d, ma=a.r*a.r*a.r, mb=b.r*b.r*b.r;
+          a.touch=b.touch=true;
           // 겹친 만큼 밀어냄 — 가벼운 쪽이 더 많이 밀림(무거운 공이 내려앉으며 작은 공을 비켜냄)
           const pc=Math.min(ov,S.W*0.03)*0.85;
           a.x-=nx*pc*mb/(ma+mb); a.y-=ny*pc*mb/(ma+mb); b.x+=nx*pc*ma/(ma+mb); b.y+=ny*pc*ma/(ma+mb);
@@ -1050,7 +1051,7 @@
     // 충돌 정리 뒤 다시 상자 안으로, 거의 멈춘 공은 더 빨리 가라앉혀 제자리 떨림 방지
     for(const b of S.balls){
       if(b.x<S.L+b.r) b.x=S.L+b.r; if(b.x>S.R-b.r) b.x=S.R-b.r; if(b.y>S.F-b.r){ b.y=S.F-b.r; if(b.vy>0) b.vy=0; }
-      if(Math.hypot(b.vx,b.vy)<S.H*0.07){ b.vx*=0.9; b.vy*=0.9; b.w*=0.9; }
+      if(b.touch&&Math.hypot(b.vx,b.vy)<S.H*0.07){ b.vx*=0.9; b.vy*=0.9; b.w*=0.9; } // 바닥·다른 공에 닿아 있는 공만(떨어지는 공은 그대로 가속)
     }
   }
   function skMerge(a,b){
