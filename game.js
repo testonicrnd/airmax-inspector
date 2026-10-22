@@ -536,7 +536,7 @@
         <div class="gm-float-layer" id="gmFloat"></div>
       </div>
       ${usingWords()
-        ?'<div class="gm-typerow"><div class="gm-keys words" id="gmKeys"></div><input class="gm-type" id="gmType" autocomplete="off" spellcheck="false" placeholder="단어 입력 후 Space·Enter"/></div>'
+        ?'<div class="gm-keys words" id="gmKeys"></div><input class="gm-type" id="gmType" autocomplete="off" spellcheck="false" placeholder="위 단어를 입력하고 Space 또는 Enter"/>'
         :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
@@ -586,7 +586,10 @@
     if(!el('gmGold')) return;
     const r=rankOf(st.lv);
     el('gmAvatar').textContent=r[1];
-    el('gmRank').innerHTML=`<b>${r[2]} ${escHtml(charName(acc.ch))}</b> · Lv.${st.lv}${st.lv>=BOSS_LV?' (MAX)':''} <span class="gm-nick">${escHtml(nick)}</span>`;
+    // 직급·레벨 + 오른쪽에 경험치 수치(현재 / 다음 레벨까지, %)
+    const need=expNeed(st.lv), pct=st.lv>=BOSS_LV?100:Math.min(99.9,st.exp/need*100);
+    el('gmRank').innerHTML=`<span class="gm-rank-l"><b>${r[2]} ${escHtml(charName(acc.ch))}</b> · Lv.${st.lv}${st.lv>=BOSS_LV?' (MAX)':''} <span class="gm-nick">${escHtml(nick)}</span></span>`+
+      `<span class="gm-exp-num">${st.lv>=BOSS_LV?'만렙':`${fmt(Math.floor(st.exp))} / ${fmt(need)} (${pct.toFixed(1)}%)`}</span>`;
     el('gmExpBar').style.width=(st.lv>=BOSS_LV?100:Math.min(100,st.exp/expNeed(st.lv)*100))+'%';
     el('gmGold').textContent=fmt(st.gold);
     el('gmStage').textContent=`📂 ${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
@@ -604,9 +607,10 @@
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
       return `<button type="button" class="gm-tile${cls}" data-i="${i}">
         <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
-        <span class="gm-tile-top"><span class="gm-tile-icon">${locked?'🔒':u.icon}</span><span class="gm-tile-lv">${locked?'':'Lv.'+lv}</span></span>
+        <span class="gm-tile-icon">${locked?'🔒':u.icon}</span>
         <span class="gm-tile-name">${u.name}</span>
-        <span class="gm-tile-cost">${locked?rankOf(u.req)[2]+' 달성':maxed?'MAX':'💸'+fmt(c)}</span></button>`;
+        <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
+        <span class="gm-tile-cost">${locked?'':maxed?'MAX':'💸'+fmt(c)}</span></button>`;
     }).join('');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }

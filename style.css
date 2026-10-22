@@ -1550,3 +1550,17 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-tile.locked .gm-tile-cost { font-size:9.5px; font-weight:500; color:var(--text3); }
 .gm-tile-top { padding:0 11px 0 2px; max-width:100%; box-sizing:border-box; }
 .gm-tile-q { width:12px; height:12px; line-height:12px; font-size:8.5px; top:3px; right:3px; }
+
+/* 테스토닉 키우기 — 약 600px 기준 정리: 타일 4줄(겹침 없이), 입력칸 전체 폭, 경험치 수치 */
+.gm-tile { padding:6px 2px 4px; gap:0; line-height:1.25; }
+.gm-tile-icon { font-size:16px; line-height:1.15; }
+.gm-tile-name { font-size:10.5px; margin-top:1px; }
+.gm-tile-lv { font-size:9.5px; }
+.gm-tile-cost { font-size:9.5px; min-height:12px; }
+.gm-tile-q { width:13px; height:13px; line-height:13px; font-size:9px; top:3px; right:3px; }
+.gm-type { margin-top:6px; }
+.gm-keys.words { margin-top:6px; }
+.gm-timer:empty { display:none; }
+#gmRank { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
+.gm-rank-l { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-exp-num { flex-shrink:0; font-size:10.5px; color:var(--text3); font-variant-numeric:tabular-nums; }
