@@ -1634,3 +1634,34 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-isle.art .gm-isle-label { margin-top:-10px; }
 .gm-isle.art .gm-isle-label b { font-size:11.5px; }
 .gm-isle.art .gm-isle-label small { font-size:10px; }
+
+/* 테스토닉 키우기 — 이벤트 띠: 그라데이션이 흐르고 빛이 지나가는 효과 */
+.gm-event { position:relative; overflow:hidden; display:flex; align-items:center; gap:7px; padding:5px 10px; text-align:left; color:#4a2c00;
+  background:linear-gradient(90deg,#ffe082,#ffb74d,#ff8a65,#f48fb1,#ffb74d,#ffe082); background-size:300% 100%;
+  animation:gmEvFlow 6s linear infinite; box-shadow:0 2px 10px rgba(255,150,60,0.35); }
+.gm-event::after { content:''; position:absolute; top:0; bottom:0; width:40%; left:-50%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,0.55),transparent); animation:gmEvShine 2.6s ease-in-out infinite; pointer-events:none; }
+@keyframes gmEvFlow { to { background-position:300% 0; } }
+@keyframes gmEvShine { 0% { left:-50%; } 60%,100% { left:120%; } }
+.gm-ev-ic { height:26px; width:auto; flex-shrink:0; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25)); animation:gmEvBob 1.6s ease-in-out infinite; }
+@keyframes gmEvBob { 50% { transform:translateY(-2px) rotate(-4deg); } }
+.gm-ev-txt { flex:1; min-width:0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gm-ev-left { flex-shrink:0; font-size:11px; font-weight:800; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,0.55); }
+
+/* 직급 배지 / 메뉴 아이콘 / 업무 화면 배경 / 로그인 그림 */
+.gm-avatar i { right:-7px; bottom:-7px; }
+.gm-av-badge { height:22px; width:auto; display:block; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+.gm-row-badge { height:15px; width:auto; vertical-align:-3px; margin-right:3px; }
+.gm-menu-ic { height:15px; width:auto; vertical-align:-3px; margin-right:3px; }
+.gm-pin-ic { height:14px; width:auto; display:block; margin:0 auto; }
+.gm-arena { background:linear-gradient(rgba(20,18,16,0.12),rgba(20,18,16,0.12)), url("assets/game/ui/office-bg.jpg") center 60%/cover no-repeat; border-style:solid; }
+.gm-task { background:rgba(255,255,255,0.82); border-radius:12px; padding:6px 8px 5px; color:#2b2b2b; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+.gm-task .gm-hp-text, .gm-task .gm-mon-name { color:#333; }
+.gm-arena.golden .gm-task { background:rgba(255,246,214,0.92); }
+.gm-arena.boss .gm-task { background:rgba(255,232,232,0.92); }
+.gm-login-hero { height:130px; margin:-4px -4px 10px; border-radius:10px; background:center 40%/cover no-repeat; position:relative; overflow:hidden; }
+.gm-login-hero img { position:absolute; left:50%; bottom:-6px; height:118px; transform:translateX(-50%); filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
+.gm-avatar i img.gm-av-badge { width:auto; height:22px; border:none; border-radius:0; background:none; object-fit:contain; }
+.gm-isle.art.soon { border:none; opacity:1; padding:0; animation:gmIsleBob 3.2s ease-in-out infinite; }
+.gm-isle.art.soon .gm-isle-art { opacity:0.9; }
+.gm-isle.art.soon .gm-isle-label { margin-top:-10px; background:rgba(255,255,255,0.92); box-shadow:0 2px 6px rgba(0,40,80,0.2); padding:3px 10px 4px; }
