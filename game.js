@@ -521,6 +521,7 @@
   let lastTickAt=0;
   let beanAt=0;
   function tick(){
+    if(opened&&!gameAllowed()){ gmClose(); return; } // 관리자 로그아웃 시 바로 닫음
     if(!mon) return;
     const now=Date.now(), dt=Math.min((now-(lastTickAt||now))/1000,5); // 너무 오래 멈췄던 경우는 자리 비움 계산이 처리
     lastTickAt=now;
@@ -633,7 +634,7 @@
     w.id='gmWidget'; w.className='gm-widget'; w.tabIndex=0;
     w.innerHTML=`
       <div class="gm-head">
-        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>테스토닉 키우기</span>
+        <span class="gm-title" onclick="gmTitleClick()"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>테스토닉 키우기</span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
           <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
@@ -901,6 +902,65 @@
     w.appendChild(t);
     setTimeout(()=>t.remove(),ms||2200);
   }
+  /* ---------- 관리 (슈퍼 관리자 전용) ---------- */
+  // 제목을 누르면 열림. 일반 관리자·미인증에게는 아무 일도 일어나지 않음.
+  let adminList=null;
+  const NL2=String.fromCharCode(10,10);
+  window.gmTitleClick=function(){ if(gameSuper()) gmShowAdmin(); };
+  async function gas2(action,extra){ return gas(Object.assign({action,adminToken:gameAdminToken()},extra||{})); }
+  function admWrap(inner){
+    return `<div class="gm-adm-title">${menuIcon('rank')} 게임 관리 <small>슈퍼 관리자</small></div>`+inner+
+      `<div class="gm-adm-btns"><button type="button" class="gm-btn" onclick="gmAdminBackup()">지금 백업</button>`+
+      `<button type="button" class="gm-btn danger" onclick="gmAdminResetAll()">랭킹 전체 초기화</button></div>`+
+      `<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
+  }
+  async function gmShowAdmin(){
+    if(!gameSuper()) return;
+    el('gmBody').innerHTML=admWrap('<div class="gm-intro">불러오는 중…</div>'); lockBodySize();
+    let inner='';
+    try{
+      const j=await gas2('gameAdminList');
+      if(!j.success) throw new Error(j.error||'실패');
+      adminList=j.players||[];
+      inner=adminList.length?`<div class="gm-adm-head"><span>닉네임</span><span>직급/단계</span><span>사장</span><span></span></div>`+
+        adminList.map((x,i)=>`<div class="gm-adm-row">
+          <b title="${escHtml(x.playerId)}">${escHtml(x.nickname)}</b>
+          <span>${rankOf(x.level)[2]} Lv.${x.level} · ${x.stage}단계</span>
+          <span>${x.done}/${x.hired}</span>
+          <span class="gm-adm-acts">
+            <button type="button" title="PIN 잠금 해제" onclick="gmAdminDo('gameAdminUnlock',${i})">🔓</button>
+            <button type="button" title="진행 초기화" onclick="gmAdminDo('gameAdminReset',${i})">↺</button>
+            <button type="button" class="danger" title="계정 삭제" onclick="gmAdminDo('gameAdminDelete',${i})">✕</button>
+          </span></div>`).join('')
+        :'<div class="gm-intro">등록된 플레이어가 없습니다.</div>';
+      inner=`<div class="gm-adm-list">${inner}</div><div class="gm-adm-note">${adminList.length}명 · 최근 저장순이 아니라 성장순입니다</div>`;
+    }catch(e){
+      inner=`<div class="gm-intro">목록을 불러오지 못했습니다. (${escHtml(e&&e.message||'오류')})</div>`;
+    }
+    if(!el('gmBody').querySelector('.gm-adm-title')) return; // 그 사이 다른 화면으로 이동
+    el('gmBody').innerHTML=admWrap(inner); lockBodySize();
+  }
+  window.gmAdminDo=async function(action,i){
+    const p=adminList&&adminList[i]; if(!p) return;
+    const what={gameAdminUnlock:'PIN 잠금을 풀',gameAdminReset:'진행을 처음으로 되돌릴',gameAdminDelete:'계정을 삭제할'}[action]||'';
+    if(action!=='gameAdminUnlock'&&!confirm(`${p.nickname} 님의 ${what} 까요?`+NL2+'이 작업은 되돌릴 수 없습니다.')) return;
+    try{
+      const j=await gas2(action,{playerId:p.playerId});
+      toast(j.success?`✅ ${j.message||'완료'}`:`⚠ ${j.error||'실패'}`,3200);
+    }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
+    gmShowAdmin();
+  };
+  window.gmAdminBackup=async function(){
+    try{ const j=await gas2('gameAdminBackup'); toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500); }
+    catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
+  };
+  window.gmAdminResetAll=async function(){
+    if(!confirm('랭킹을 전체 초기화할까요?'+NL2+'모든 사람의 진행이 사라집니다. (기존 기록은 백업 시트로 남습니다)')) return;
+    if(!confirm('정말 진행할까요? 한 번 더 확인합니다.')) return;
+    try{ const j=await gas2('gameAdminResetAll'); toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,4000); }
+    catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
+    gmShowAdmin();
+  };
   async function gmShowRanking(board){
     board=['stairs','suika','tetris'].includes(board)?board:'promo';
     const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button></div>`;
@@ -909,7 +969,8 @@
     try{
       const j=await gas({action:'gameRanking',playerId:pid,board});
       if(!j.success) throw new Error(j.error);
-      const info=x=>board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+      const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
+      const info=x=>board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
       const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
       html=`<div class="gm-rank-title">${ic(IC[board])}${board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹'} <small>(${j.players}명)</small></div>`+
         (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
@@ -1491,6 +1552,7 @@
 
   /* ---------- 열기/닫기 ---------- */
   async function gmOpen(){
+    if(!gameAllowed()) return;
     buildWidget();
     if(opened){ gmShow(); return; }
     opened=true;
@@ -1638,12 +1700,18 @@
     }
   });
 
+  // 관리자 인증을 거친 사람만 — 휴대폰 등에서 우연히 열리지 않게.
+  // script.js의 전역을 읽는다(둘 다 defer라 script.js가 먼저 실행됨). 없으면 막는 쪽으로 판단.
+  function gameAllowed(){ try{ return typeof adminAuthenticated!=='undefined'&&!!adminAuthenticated; }catch(e){ return false; } }
+  function gameSuper(){ try{ return typeof superAdminAuthenticated!=='undefined'&&!!superAdminAuthenticated; }catch(e){ return false; } }
+  function gameAdminToken(){ try{ return typeof adminToken!=='undefined'?adminToken:''; }catch(e){ return ''; } }
+
   // 이스터에그 — 푸터 AIRMAX를 2초 안에 3번
   let taps=[];
   document.addEventListener('click',e=>{
     if(!e.target.closest('.footer-brand')) return;
     const now=Date.now();
     taps=taps.filter(t=>now-t<2000).concat(now);
-    if(taps.length>=3){ taps=[]; gmOpen(); }
+    if(taps.length>=3){ taps=[]; if(gameAllowed()) gmOpen(); } // 미인증이면 조용히 무시(있는 티를 내지 않음)
   });
 })();

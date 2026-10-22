@@ -82,6 +82,7 @@ try {
     if (action === 'getChecklistPlaces')  return getChecklistPlaces();
     if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
     if (action === 'gameLogin' || action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
+    if (GAME_ADMIN_ACTIONS[action]) return handleGameAdmin(data);
     if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
@@ -1147,6 +1148,76 @@ function gameNewId() { return Utilities.getUuid().replace(/-/g, '') + Utilities.
 function gameReadState(row) {
     try { return JSON.parse(String(row[5] || 'null')); } catch (e) { return null; }
 }
+// ===== 관리 기능 (슈퍼 관리자 전용) =====
+// 목록 조회 / 한 사람 진행 초기화 / 삭제 / PIN 잠금 해제 / 지금 백업 / 전체 랭킹 초기화
+function handleGameAdmin(data) {
+    try {
+        if (getAdminLevel(data.adminToken) !== 'super') {
+            return buildJson({ success: false, code: 'SUPER_REQUIRED', error: '슈퍼 관리자만 사용할 수 있습니다.' });
+        }
+        var sheet = getGameSheet();
+        var last = sheet.getLastRow();
+        var values = last >= 2 ? sheet.getRange(2, 1, last - 1, GAME_HEADERS.length).getValues() : [];
+        var act = data.action;
+
+        if (act === 'gameAdminBackup') return buildJson({ success: true, message: backupGameRanking() });
+
+        if (act === 'gameAdminResetAll') {
+            resetGameRanking();
+            return buildJson({ success: true, message: '랭킹을 초기화했습니다. 기존 기록은 백업 시트로 남아 있습니다.' });
+        }
+
+        if (act === 'gameAdminList') {
+            var list = values.map(function(r, i) {
+                var st = gameReadState(r) || {};
+                var runs = st.runs || [];
+                var done = 0, hired = 0;
+                for (var k = 0; k < runs.length; k++) { if (runs[k]) { hired++; if (runs[k].done) done++; } }
+                return {
+                    row: i + 2, playerId: String(r[0]), nickname: String(r[1]),
+                    stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0,
+                    saved: r[6] ? String(r[6]) : '', created: r[7] ? String(r[7]) : '',
+                    tier: Number(st.tier) || 0, hired: hired, done: done,
+                    stairs: Number(st.stairsBest) || 0, suika: Number(st.suikaBest) || 0, tetris: Number(st.tetrisBest) || 0
+                };
+            });
+            list.sort(function(a, b) { return (b.done - a.done) || (b.level - a.level) || (b.stage - a.stage); });
+            return buildJson({ success: true, players: list });
+        }
+
+        // 아래는 특정 플레이어 대상 — 행이 밀렸을 수 있으므로 playerId로 다시 찾는다
+        var pid = String(data.playerId || '');
+        var idx = gameFindRow(values, pid);
+        if (idx < 0) return buildJson({ success: false, error: '그 플레이어를 찾을 수 없습니다. 목록을 새로고침해주세요.' });
+        var nickname = String(values[idx][1]);
+
+        if (act === 'gameAdminUnlock') {
+            var cache = CacheService.getScriptCache();
+            cache.remove('gmfail_' + gameHash(gameNickKey(nickname)).substring(0, 32));
+            return buildJson({ success: true, message: nickname + ' 님의 PIN 잠금을 풀었습니다.' });
+        }
+
+        var lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        try {
+            if (act === 'gameAdminDelete') {
+                sheet.deleteRow(idx + 2);
+                return buildJson({ success: true, message: nickname + ' 님의 계정을 삭제했습니다.' });
+            }
+            if (act === 'gameAdminReset') {
+                // 닉네임·PIN은 두고 진행만 처음으로 — 세션 토큰을 비워 지금 켜 둔 기기는 자동 로그아웃
+                sheet.getRange(idx + 2, 3, 1, 5).setValues([[1, 1, 0, '', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss')]]);
+                sheet.getRange(idx + 2, 10).setValue('');
+                return buildJson({ success: true, message: nickname + ' 님의 진행을 처음으로 되돌렸습니다.' });
+            }
+        } finally {
+            lock.releaseLock();
+        }
+        return buildJson({ success: false, error: '알 수 없는 관리 요청입니다: ' + act });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    }
+}
 function handleGameAction(data) {
     try {
         var sheet = getGameSheet();
@@ -1360,7 +1431,14 @@ function handleChecklistRecords(data) {
 var ADMIN_ONLY_ACTIONS = {
     addProduct: true, updateProduct: true, deleteProduct: true,
     saveResults: true, getMonthGrid: true, getWeeklyReportDraft: true, saveWeeklyReport: true,
-    getInspectors: true, addInspector: true, removeInspector: true
+    getInspectors: true, addInspector: true, removeInspector: true,
+    gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true
+};
+// 아래 관리 기능은 슈퍼 관리자만 — 남의 기록을 지우는 일이라 일반 관리자에게는 열지 않음
+var GAME_ADMIN_ACTIONS = {
+    gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true
 };
 var ADMIN_TOKENS_PROP = 'ADMIN_TOKENS';
 var ADMIN_TOKEN_LIMIT = 50;          // 저장해 둘 최대 토큰 수 (넘으면 오래된 것부터 정리)

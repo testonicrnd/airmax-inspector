@@ -1727,6 +1727,31 @@ body.checklist-page-active { padding-bottom:46px; }
 }
 
 /* 만렙 스킬 — 맨 아래 한 줄에 작은 아이콘으로 */
+/* 테스토닉 키우기 — 게임 관리(슈퍼 관리자) */
+.gm-adm-title { font-weight:800; font-size:13px; margin:2px 0 8px; display:flex; align-items:center; gap:5px; }
+.gm-adm-title small { font-weight:600; font-size:10px; color:#fff; background:var(--accent); padding:2px 6px; border-radius:99px; }
+.gm-adm-list { border:1px solid var(--border); border-radius:10px; overflow:hidden; max-height:300px; overflow-y:auto; }
+.gm-adm-head, .gm-adm-row { display:grid; grid-template-columns:1fr 1.5fr 42px 74px; gap:4px; align-items:center; padding:6px 8px; font-size:11px; }
+.gm-adm-head { background:var(--input-bg); color:var(--text3); font-weight:700; font-size:10px; position:sticky; top:0; }
+.gm-adm-row { border-top:1px solid var(--border2); }
+.gm-adm-row:hover { background:var(--input-bg); }
+.gm-adm-row b { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-adm-row span { color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gm-adm-acts { display:flex; gap:3px; justify-content:flex-end; }
+.gm-adm-acts button { border:1px solid var(--border); background:var(--surface); border-radius:6px; width:22px; height:22px;
+  font-size:11px; cursor:pointer; color:var(--text2); font-family:inherit; padding:0; }
+.gm-adm-acts button:hover { border-color:var(--accent); color:var(--text); }
+.gm-adm-acts button.danger:hover { border-color:#d93025; color:#d93025; }
+/* 랭킹 — 몇 번째로 키우는 직원인지(입사 차수). 2기부터는 난이도가 달라 구분이 필요 */
+.gm-nth { display:inline-block; font-size:9.5px; font-weight:800; color:#fff; background:var(--text3);
+  padding:1px 4px; border-radius:99px; margin-right:4px; vertical-align:1px; letter-spacing:-0.02em; }
+.gm-rank-row.top1 .gm-nth { background:#d9a23a; }
+.gm-adm-note { font-size:10px; color:var(--text3); margin:5px 2px 0; }
+.gm-adm-btns { display:flex; gap:5px; margin:8px 0 0; }
+.gm-adm-btns .gm-btn { flex:1; margin:0; }
+.gm-btn.danger { border-color:#e2a5a0; color:#c5372c; }
+.gm-btn.danger:hover { background:#fdeceb; border-color:#d93025; }
+.gm-title { cursor:default; }
 .gm-maxrow { grid-column:1/-1; display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding:4px 6px; border-radius:9px;
   background:linear-gradient(90deg,rgba(217,162,58,0.16),rgba(217,162,58,0.04)); border:1px solid rgba(217,162,58,0.45); }
 .gm-maxrow-label { font-size:9.5px; font-weight:800; color:#d9a23a; margin-right:2px; letter-spacing:0.5px; }
