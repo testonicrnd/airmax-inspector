@@ -639,8 +639,10 @@
   function gmShowStairs(){
     if(!stairsUnlocked()){ toast(`🔒 주임(Lv.${STAIRS_REQ})을 달성한 직원이 있으면 열립니다`,2500); return; }
     const c=CHARS[acc.ch]||CHARS[0];
+    // 계단 위에는 전신(바디) 이미지 — 없으면 얼굴, 그것도 없으면 이름
     stairsFace=null;
-    if(c.face){ stairsFace=new Image(); stairsFace.src=c.face; stairsFace.onload=()=>drawStairs(); }
+    const src=c.body||c.face;
+    if(src){ stairsFace=new Image(); stairsFace.src=src; stairsFace.onload=()=>drawStairs(); }
     stairsNew();
     el('gmBody').innerHTML=`
       <div class="gm-st-head"><b>🪜 무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span></div>
@@ -687,7 +689,7 @@
   }
   function drawStairs(){
     const cv=el('gmStCv'); if(!cv||!stairs) return;
-    const g=cv.getContext('2d'), W=cv.width, H=cv.height, SW=96, SH=50, BW=90;
+    const g=cv.getContext('2d'), W=cv.width, H=cv.height, SW=104, SH=58, BW=92;
     g.clearRect(0,0,W,H);
     const cs=getComputedStyle(el('gmWidget'));
     const top=cs.getPropertyValue('--accent').trim()||'#e8732a', side=cs.getPropertyValue('--border').trim()||'#888';
@@ -697,12 +699,21 @@
       g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
       g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1;
     }
-    // 캐릭터 — 얼굴 이미지(없으면 이름)
-    const r=23, hx=cx, hy=cy-8-r;
-    g.save(); g.beginPath(); g.arc(hx,hy,r,0,Math.PI*2); g.closePath();
-    if(stairs.over){ g.globalAlpha=0.45; }
-    if(stairsFace&&stairsFace.complete&&stairsFace.naturalWidth){ g.fillStyle='#f1ede8'; g.fill(); g.clip(); g.drawImage(stairsFace,hx-r,hy-r,r*2,r*2); }
-    else { g.fillStyle=top; g.fill(); g.fillStyle='#fff'; g.font='bold 20px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(charName(acc.ch).slice(1),hx,hy); }
+    // 캐릭터 — 계단 위에 선 전신 이미지. 마지막으로 오른 방향을 바라보도록 좌우 반전(왼쪽으로 오르면 뒤집음)
+    g.save();
+    if(stairs.over) g.globalAlpha=0.45;
+    const img=stairsFace&&stairsFace.complete&&stairsFace.naturalWidth?stairsFace:null;
+    if(img&&CHARS[acc.ch]&&CHARS[acc.ch].body){
+      const h=96, w=Math.min(110,h*img.naturalWidth/img.naturalHeight), footY=cy-8;
+      const face=stairs.count>0?stairs.dirs[stairs.count-1]:1;
+      g.translate(cx,footY); if(face<0) g.scale(-1,1);
+      g.drawImage(img,-w/2,-h,w,h);
+    } else {
+      const r=23, hx=cx, hy=cy-8-r;
+      g.beginPath(); g.arc(hx,hy,r,0,Math.PI*2); g.closePath();
+      if(img){ g.fillStyle='#f1ede8'; g.fill(); g.clip(); g.drawImage(img,hx-r,hy-r,r*2,r*2); }
+      else { g.fillStyle=top; g.fill(); g.fillStyle='#fff'; g.font='bold 20px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(charName(acc.ch).slice(1),hx,hy); }
+    }
     g.restore();
     // 다음 방향 힌트 없음(직접 보고 판단). 층수 표시
     g.fillStyle=cs.getPropertyValue('--text3').trim()||'#999'; g.font='bold 26px sans-serif'; g.textAlign='right'; g.textBaseline='bottom';
