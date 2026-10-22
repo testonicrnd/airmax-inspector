@@ -1670,3 +1670,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-task { position:relative; }
 .gm-timer, .gm-timer:empty { display:block; position:absolute; top:5px; right:8px; min-height:0; margin:0; font-size:11px; font-weight:700; }
 .gm-timer:empty { display:none; }
+.gm-ic { height:16px; width:auto; vertical-align:-3px; margin-right:4px; }
+.gm-st-head .gm-ic, .gm-rank-title .gm-ic { height:18px; vertical-align:-4px; }
+.gm-btn .gm-ic { height:18px; vertical-align:-4px; }
+.gm-stats .gm-ic { height:14px; vertical-align:-2px; margin-right:3px; }
+.gm-chip img { height:22px; width:auto; display:block; }

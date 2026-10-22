@@ -56,6 +56,9 @@
   function rankNo(lv){ let n=1; RANKS.forEach((x,i)=>{ if(lv>=x[0]) n=i+1; }); return n; }
   function rankBadge(lv,cls){ return `<img class="${cls||'gm-badge'}" src="${UI}rank-${rankNo(lv)}.png" alt=""/>`; }
   function menuIcon(n){ return `<img class="gm-menu-ic" src="${UI}menu-${n}.png" alt=""/>`; }
+  // 제목·탭·버튼에 쓰는 작은 그림 아이콘 (이모지 대신)
+  function ic(f){ return `<img class="gm-ic" src="${UI}${f}" alt=""/>`; }
+  const IC={promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
   const artCache={};
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
@@ -497,7 +500,7 @@
       <div class="gm-body" id="gmBody"></div>`;
     document.body.appendChild(w);
     const chip=document.createElement('button');
-    chip.id='gmChip'; chip.className='gm-chip'; chip.type='button'; chip.title='테스토닉 키우기'; chip.textContent='☕';
+    chip.id='gmChip'; chip.className='gm-chip'; chip.type='button'; chip.title='테스토닉 키우기'; chip.innerHTML=`<img src="${UI}skill-auto.png" alt="열기"/>`;
     chip.onclick=()=>gmShow();
     document.body.appendChild(chip);
     // 투명도 — 슬라이더로 정한 값을 마우스를 올리거나 플레이 중에도 그대로 유지(예전 '반투명' 켜 둔 기기는 35%로 시작)
@@ -557,7 +560,7 @@
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
-      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span id="gmStage"></span><span id="gmDps"></span></div>
+      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         ${bodyHtml(acc.ch)}
         <div class="gm-task">
@@ -627,8 +630,8 @@
       `<span class="gm-exp-num">${st.lv>=BOSS_LV?'만렙':`${fmt(Math.floor(st.exp))} / ${fmt(need)} (${pct.toFixed(1)}%)`}</span>`;
     el('gmExpBar').style.width=(st.lv>=BOSS_LV?100:Math.min(100,st.exp/expNeed(st.lv)*100))+'%';
     el('gmGold').textContent=fmt(st.gold);
-    el('gmStage').textContent=`📂 ${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
-    el('gmDps').textContent=`☕ 초당 ${fmt(autoDps(st))}`;
+    el('gmStage').textContent=`${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
+    el('gmDps').textContent=`초당 ${fmt(autoDps(st))}`;
     const ev=currentEvent(), eb=el('gmEvent');
     if(eb){ if(ev){ eb.style.display='';
         if(eb.dataset.id!==ev.id){ eb.innerHTML=`<img class="gm-ev-ic" src="${UI}${ev.img}.png" alt=""/><span class="gm-ev-txt"><b>${ev.name}</b> · ${ev.desc}</span><span class="gm-ev-left" id="gmEvLeft"></span>`; eb.dataset.id=ev.id; }
@@ -661,7 +664,7 @@
     const tip=el('gmTip'), box=el('gmUps'), w=el('gmWidget');
     if(!tip||!box||tipIdx<0){ if(tip) tip.style.display='none'; return; }
     const u=UPGRADES[tipIdx], lv=st[u.key]||0, maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
-    tip.innerHTML=`<b>${u.icon} ${u.name}</b> <span>Lv.${lv}${maxed?' (MAX)':''}</span><br>`+
+    tip.innerHTML=`<b>${SKILL_IMG[u.key]?ic('skill-'+SKILL_IMG[u.key]+'.png'):u.icon} ${u.name}</b> <span>Lv.${lv}${maxed?' (MAX)':''}</span><br>`+
       (locked?`🔒 ${rankOf(u.req)[2]}(Lv.${u.req}) 달성 시 열림<br>`:'')+
       `현재: ${u.desc(lv)}`+(maxed?'':`<br>다음: ${u.desc(lv+1)}`);
     tip.style.display='';
@@ -698,7 +701,7 @@
   }
   async function gmShowRanking(board){
     board=['stairs','suika','tetris'].includes(board)?board:'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">🏆 승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">🪜 계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">🍉 수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">🧱 테트리스</button></div>`;
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button></div>`;
     el('gmBody').innerHTML=tabs+'<div class="gm-intro">랭킹 불러오는 중…</div>'; lockBodySize();
     let html='';
     try{
@@ -706,7 +709,7 @@
       if(!j.success) throw new Error(j.error);
       const info=x=>board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
       const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
-      html=`<div class="gm-rank-title">${board==='stairs'?'🪜 무한의 계단 최고 기록':board==='suika'?'🍉 수박 게임 최고 점수':board==='tetris'?'🧱 테트리스 최고 점수':'🏆 승진 랭킹'} <small>(${j.players}명)</small></div>`+
+      html=`<div class="gm-rank-title">${ic(IC[board])}${board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹'} <small>(${j.players}명)</small></div>`+
         (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
         j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
         (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
@@ -764,12 +767,12 @@
     if(src){ stairsFace=new Image(); stairsFace.src=src; stairsFace.onload=()=>drawStairs(); }
     stairsNew();
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>🪜 무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span></div>
+      <div class="gm-st-head"><b>${ic(IC.stairs)}무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span></div>
       <canvas class="gm-st-cv" id="gmStCv"></canvas>
       <div class="gm-bar st"><i id="gmStTime" style="width:100%"></i></div>
       <div class="gm-st-info" id="gmStInfo">${isTouchDevice()?'◀ ▶ 버튼으로':'← → (또는 A / D) 키로'} 다음 계단 방향을 누르면 시작</div>
       <div class="gm-st-btns"><button type="button" onpointerdown="event.preventDefault();gmStep(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();gmStep(1)">▶</button></div>
-      <button type="button" class="gm-btn" onclick="gmStairsExit()">🗺️ 월드로 돌아가기</button>`;
+      <button type="button" class="gm-btn" onclick="gmStairsExit()">${ic(IC.world)}월드로 돌아가기</button>`;
     lockBodySize();
     const cv=el('gmStCv'); cv.width=Math.round(cv.clientWidth*2)||540; cv.height=Math.round(cv.clientHeight*2)||340;
     drawStairs();
@@ -899,10 +902,10 @@
     if(suika) cancelAnimationFrame(suika.raf);
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; }
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>🍉 수박 게임</b><span>점수 <b id="gmSkScore">0</b> · 최고 <b id="gmSkBest">${(acc.suikaBest||0).toLocaleString()}</b></span></div>
+      <div class="gm-st-head"><b>${ic(IC.suika)}수박 게임</b><span>점수 <b id="gmSkScore">0</b> · 최고 <b id="gmSkBest">${(acc.suikaBest||0).toLocaleString()}</b></span></div>
       <canvas class="gm-st-cv gm-sk-cv" id="gmSkCv"></canvas>
       <div class="gm-st-info" id="gmSkInfo">${isTouchDevice()?'떨어뜨릴 곳을 탭하세요':'← → 로 옮기고 Space(또는 ↓)로 떨어뜨리기 · 마우스로도 가능'}</div>
-      <button type="button" class="gm-btn" onclick="gmSuikaExit()">🗺️ 그만하고 월드로</button>`;
+      <button type="button" class="gm-btn" onclick="gmSuikaExit()">${ic(IC.world)}그만하고 월드로</button>`;
     lockBodySize();
     const cv=el('gmSkCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
     suika={W:cv.width,H:cv.height,balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
@@ -1038,11 +1041,11 @@
     if(tetris) cancelAnimationFrame(tetris.raf);
     const touch=isTouchDevice();
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>🧱 테트리스</b><span>최고 <b id="gmTtBest">${(acc.tetrisBest||0).toLocaleString()}</b>점</span></div>
+      <div class="gm-st-head"><b>${ic(IC.tetris)}테트리스</b><span>최고 <b id="gmTtBest">${(acc.tetrisBest||0).toLocaleString()}</b>점</span></div>
       <canvas class="gm-st-cv gm-tt-cv" id="gmTtCv"></canvas>
       <div class="gm-st-info" id="gmTtInfo">${touch?'아래 버튼으로 조작하세요':'← → 이동 · ↑ 회전 · ↓ 내리기 · Space 바로 내리기'}</div>
       ${touch?`<div class="gm-st-btns gm-tt-btns"><button type="button" onpointerdown="event.preventDefault();ttMove(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();ttRotate(1)">⟳</button><button type="button" onpointerdown="event.preventDefault();ttMove(1)">▶</button><button type="button" onpointerdown="event.preventDefault();ttSoft()">▼</button><button type="button" onpointerdown="event.preventDefault();tetris&&tetris.over?gmShowTetris():ttHard()">⤓</button></div>`:''}
-      <button type="button" class="gm-btn" onclick="gmTetrisExit()">🗺️ 그만하고 월드로</button>`;
+      <button type="button" class="gm-btn" onclick="gmTetrisExit()">${ic(IC.world)}그만하고 월드로</button>`;
     lockBodySize();
     const cv=el('gmTtCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
     tetris={grid:Array.from({length:TT_H},()=>Array(TT_W).fill(null)),bag:[],next:null,cur:null,score:0,lines:0,level:1,dropT:0,lockT:0,over:false,lastT:performance.now(),raf:0,flash:null};
@@ -1156,7 +1159,7 @@
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
     const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>🗺️ 미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
+      <div class="gm-st-head"><b>${ic(IC.world)}미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
       <div class="gm-world" id="gmWorld">
         <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i>
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
@@ -1189,7 +1192,7 @@
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
   function gmShowChars(){
     const hire=canHire();
-    el('gmBody').innerHTML=`<div class="gm-rank-title">👥 직원 <small>${hire?'🎫 입사권 1장 — 원하는 직원을 고르세요':'사장 1명 달성마다 원하는 직원 1명 입사'}</small></div>`+
+    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic(IC.staff)}직원 <small>${hire?'🎫 입사권 1장 — 원하는 직원을 고르세요':'사장 1명 달성마다 원하는 직원 1명 입사'}</small></div>`+
       CHARS.map((c,i)=>{
         const r=acc.runs[i], open=!!r||hire, cur=i===acc.ch;
         const diff=`업무량 ×${fmt(Math.pow(HP_STEP,r?r.tier:hiredCount()))}`;
