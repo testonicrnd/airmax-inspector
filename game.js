@@ -110,9 +110,9 @@
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
-    {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}% (한 판 최대 레벨의 ${Math.round(Math.min(1,0.18*(1+0.2*lv))*100)}%)`, base:3000, grow:1.45, max:25, req:12},
-    {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}% (한 판 최대 레벨의 ${Math.round(Math.min(1,0.18*(1+0.2*lv))*100)}%)`, base:250000, grow:1.45, max:25, req:22},
-    {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}% (한 판 최대 레벨의 ${Math.round(Math.min(1,0.18*(1+0.2*lv))*100)}%)`, base:30000000, grow:1.45, max:25, req:35},
+    {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
+    {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
+    {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -806,12 +806,16 @@
   // 틀리거나 시간이 다 되면 끝 → 층수 × 지금 단계 × 0.05 경험치 (단어 입력의 약 30% 효율)
   // 아이템: 앞쪽 계단 몇 군데에 놓이고 밟으면 발동 — 🚀 로켓 +10층 / ⏰ 시계 시간 가득 / 🛡️ 방패 실수·시간 초과 1번 막음
   const STAIRS_REQ=12, STAIRS_BASE=100;
-  // 미니게임 경험치 — '지금 레벨 1개에 필요한 경험치'의 비율로 줌(점수×단계로 곱하면 후반에 폭발해서).
-  // 기준 점수에서 레벨의 6%, 점수는 루트로 완만하게(최대 3배 = 18%), 효율 스킬 반영 후에도 한 판에 레벨 1개를 넘지 않음
-  function miniExp(score,base,skillLv){
-    if(score<=0) return 0;
-    const perf=Math.min(3,Math.sqrt(score/base));
-    return Math.round(Math.min(1,0.06*perf*(1+0.2*(skillLv||0)))*expNeed(st.lv));
+  // 미니게임 경험치 — '레벨 몇 개분'으로 계산(점수×단계로 곱하면 후반에 폭발해서).
+  // 기준 점수에서 레벨 0.06개, 점수에 거의 비례(0.8제곱), 효율 스킬 +20%/레벨.
+  // 한 판 한도(cap, 레벨 개수)는 그 판에서 멀리 갈수록 열림 — 테트리스 단계·수박 최대 공·계단 층수
+  function miniExp(score,base,skillLv,cap){
+    if(score<=0||st.lv>=BOSS_LV) return 0;
+    let L=Math.min(cap,0.06*Math.pow(score/base,0.8)*(1+0.2*(skillLv||0)));
+    // 레벨 L개분을 실제 경험치로 — 레벨마다 필요한 양을 차례로 더함
+    let exp=0, lv=st.lv, need=expNeed(lv)-st.exp;
+    while(L>0&&lv<BOSS_LV){ const full=expNeed(lv), part=Math.min(L,need/full); exp+=part*full; L-=part; lv++; need=expNeed(lv); }
+    return Math.round(exp);
   }
   let stairs=null, stairsFace=null;
   function stairsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=STAIRS_REQ); }
@@ -900,7 +904,7 @@
   function stairsEnd(why){
     if(!stairs||stairs.over) return;
     stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
-    const n=stairs.count, exp=st.lv>=BOSS_LV?0:miniExp(n,STAIRS_BASE,st.stairLv); // 계단 단련으로 증가
+    const n=stairs.count, exp=miniExp(n,STAIRS_BASE,st.stairLv,1+0.5*Math.floor(n/100)); // 계단 단련으로 증가, 100층마다 한도 +0.5레벨
     const best=n>(acc.stairsBest||0);
     if(best) acc.stairsBest=n;
     if(exp>0) gainExp(exp);
@@ -1069,6 +1073,7 @@
   function skMerge(a,b){
     a.dead=b.dead=true;
     const t=a.t+1, x=(a.x+b.x)/2, y=(a.y+b.y)/2;
+    suika.maxT=Math.max(suika.maxT||0,Math.min(t,SK_NAMES.length-1));
     if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 신동준 합체! +100',until:performance.now()+1500}; }
     else { suika.score+=t*(t+1)/2; const nr=skR(t);
       suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:nr,t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
@@ -1081,7 +1086,7 @@
   function skEnd(why){
     if(!suika||suika.over) return;
     suika.over=true;
-    const n=suika.score, exp=st.lv>=BOSS_LV?0:miniExp(n,SUIKA_BASE,st.suikaLv); // 수박 장인으로 증가
+    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,0.6+0.3*(suika.maxT||0)); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가
     const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
@@ -1154,7 +1159,7 @@
       <div class="gm-st-head"><b>${ic(IC.tetris)}테트리스</b><span>최고 <b id="gmTtBest">${(acc.tetrisBest||0).toLocaleString()}</b>점</span></div>
       <canvas class="gm-st-cv gm-tt-cv" id="gmTtCv"></canvas>
       <div class="gm-st-info" id="gmTtInfo">${touch?'아래 버튼으로 조작하세요':'← → 이동 · ↑ 회전 · ↓ 내리기 · Space 바로 내리기'}</div>
-      ${touch?`<div class="gm-st-btns gm-tt-btns"><button type="button" onpointerdown="event.preventDefault();ttMove(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();ttRotate(1)">⟳</button><button type="button" onpointerdown="event.preventDefault();ttMove(1)">▶</button><button type="button" onpointerdown="event.preventDefault();ttSoft()">▼</button><button type="button" onpointerdown="event.preventDefault();tetris&&tetris.over?gmShowTetris():ttHard()">⤓</button></div>`:''}
+      ${touch?`<div class="gm-st-btns gm-tt-btns"><button type="button" onpointerdown="event.preventDefault();ttMove(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();ttRotate(1)">⟳</button><button type="button" onpointerdown="event.preventDefault();ttMove(1)">▶</button><button type="button" onpointerdown="event.preventDefault();ttSoft()">▼</button><button type="button" onpointerdown="event.preventDefault();ttDrop()">⤓</button></div>`:''}
       <button type="button" class="gm-btn" onclick="gmTetrisExit()">${ic(IC.world)}그만하고 월드로</button>`;
     lockBodySize();
     const cv=el('gmTtCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
@@ -1200,7 +1205,7 @@
   function ttEnd(why){
     const t=tetris; if(!t||t.over) return;
     t.over=true;
-    const n=t.score, exp=st.lv>=BOSS_LV?0:miniExp(n,TT_BASE,st.tetrisLv); // 테트리스 고수로 증가
+    const n=t.score, exp=miniExp(n,TT_BASE,st.tetrisLv,1+0.35*(t.level-1)); // 테트리스 고수로 증가, 테트리스 단계마다 한도 +0.35레벨
     const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
@@ -1248,6 +1253,7 @@
   }
   window.gmShowTetris=gmShowTetris;
   window.ttMove=ttMove; window.ttRotate=ttRotate; window.ttSoft=ttSoft; window.ttHard=ttHard;
+  window.ttDrop=()=>{ lastInput=Date.now(); if(tetris&&tetris.over) gmShowTetris(); else ttHard(); };
   window.gmTetrisExit=function(){ if(tetris){ cancelAnimationFrame(tetris.raf); if(!tetris.over&&tetris.score>0) ttEnd('그만함'); } tetris=null; gmShowWorld(); };
 
   /* ---------- 미니게임 월드 ---------- */

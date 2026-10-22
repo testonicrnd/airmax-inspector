@@ -1786,3 +1786,9 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-st-btns button { border:none; border-radius:14px; color:#fff; font-weight:800; background:linear-gradient(180deg,#5c6bc0,#3949ab);
   box-shadow:0 4px 0 #283593, 0 6px 12px rgba(0,0,0,0.25); }
 .gm-st-btns button:active { transform:translateY(3px); box-shadow:0 1px 0 #283593; background:linear-gradient(180deg,#5c6bc0,#3949ab); }
+
+/* 테트리스(휴대폰) — 게임판이 줄어들 수 있게 해서 아래 조작 버튼이 잘리지 않게 */
+.gm-body.fixed .gm-tt-cv { min-height:0; }
+.gm-tt-btns { gap:5px; }
+.gm-tt-btns button { padding:7px 0; font-size:15px; }
+.gm-body.fixed > .gm-tt-btns + .gm-btn { margin-top:6px; }
