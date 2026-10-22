@@ -110,9 +110,9 @@
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>`${Math.round(critChance(lv)*100)}% 확률로 3배 처리`, base:60, grow:1.11, max:97},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`, base:60, grow:1.3, max:46},
-    {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
-    {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
-    {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
+    {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}% (한 판 최대 레벨의 ${Math.round(Math.min(1,0.18*(1+0.2*lv))*100)}%)`, base:3000, grow:1.45, max:25, req:12},
+    {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}% (한 판 최대 레벨의 ${Math.round(Math.min(1,0.18*(1+0.2*lv))*100)}%)`, base:250000, grow:1.45, max:25, req:22},
+    {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}% (한 판 최대 레벨의 ${Math.round(Math.min(1,0.18*(1+0.2*lv))*100)}%)`, base:30000000, grow:1.45, max:25, req:35},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -805,7 +805,14 @@
   // 다음 계단이 왼쪽/오른쪽 어느 쪽인지 맞춰 누르며 오르기. 시간 막대는 오를수록 빨리 줄고, 맞게 누르면 조금 회복.
   // 틀리거나 시간이 다 되면 끝 → 층수 × 지금 단계 × 0.05 경험치 (단어 입력의 약 30% 효율)
   // 아이템: 앞쪽 계단 몇 군데에 놓이고 밟으면 발동 — 🚀 로켓 +10층 / ⏰ 시계 시간 가득 / 🛡️ 방패 실수·시간 초과 1번 막음
-  const STAIRS_REQ=12, STAIRS_EXP=0.05;
+  const STAIRS_REQ=12, STAIRS_BASE=100;
+  // 미니게임 경험치 — '지금 레벨 1개에 필요한 경험치'의 비율로 줌(점수×단계로 곱하면 후반에 폭발해서).
+  // 기준 점수에서 레벨의 6%, 점수는 루트로 완만하게(최대 3배 = 18%), 효율 스킬 반영 후에도 한 판에 레벨 1개를 넘지 않음
+  function miniExp(score,base,skillLv){
+    if(score<=0) return 0;
+    const perf=Math.min(3,Math.sqrt(score/base));
+    return Math.round(Math.min(1,0.06*perf*(1+0.2*(skillLv||0)))*expNeed(st.lv));
+  }
   let stairs=null, stairsFace=null;
   function stairsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=STAIRS_REQ); }
   function stairsNew(){
@@ -893,7 +900,7 @@
   function stairsEnd(why){
     if(!stairs||stairs.over) return;
     stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
-    const n=stairs.count, exp=Math.round(n*Math.max(1,st.stage)*STAIRS_EXP*(1+0.2*(st.stairLv||0))); // 계단 단련으로 증가
+    const n=stairs.count, exp=st.lv>=BOSS_LV?0:miniExp(n,STAIRS_BASE,st.stairLv); // 계단 단련으로 증가
     const best=n>(acc.stairsBest||0);
     if(best) acc.stairsBest=n;
     if(exp>0) gainExp(exp);
@@ -967,7 +974,7 @@
   /* ---------- 수박 게임 ---------- */
   // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 오찬근 이용훈 천병석 하문숙 신원옥 강옥남 신원철 신동준.
   // 신동준 둘이 합쳐지면 사라지며 보너스. 공이 위쪽 선을 넘은 채 잠시 머물면 끝 → 점수 × 지금 단계 × 0.05 경험치
-  const SUIKA_REQ=22, SUIKA_EXP=0.05;
+  const SUIKA_REQ=22, SUIKA_BASE=500;
   const SK_NAMES=['오찬근','이용훈','천병석','하문숙','신원옥','강옥남','신원철','신동준'];
   const SK_R=[0.042,0.056,0.072,0.09,0.11,0.135,0.164,0.198]; // 판 폭 대비 반지름
   const SK_COLORS=['#9ad1ff','#7fd99a','#ffd166','#ff9f6e','#f78fb3','#b392f0','#5ec2c2','#ff6b6b'];
@@ -1074,7 +1081,7 @@
   function skEnd(why){
     if(!suika||suika.over) return;
     suika.over=true;
-    const n=suika.score, exp=Math.round(n*Math.max(1,st.stage)*SUIKA_EXP*(1+0.2*(st.suikaLv||0))); // 수박 장인으로 증가
+    const n=suika.score, exp=st.lv>=BOSS_LV?0:miniExp(n,SUIKA_BASE,st.suikaLv); // 수박 장인으로 증가
     const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
@@ -1122,7 +1129,7 @@
   /* ---------- 테트리스 ---------- */
   // 10×20 판, 7종 블록(7개 묶음 무작위), 고스트(착지 위치), 다음 블록, 착지 후 0.5초 유예. 10줄마다 레벨 업(빨라짐).
   // 점수: 1·2·3·4줄 = 100·300·500·800 × 레벨, 천천히 내리기 +1/칸, 바로 내리기 +2/칸 → 점수 × 지금 단계 × 0.012 경험치
-  const TT_REQ=35, TT_EXP=0.012, TT_W=10, TT_H=20;
+  const TT_REQ=35, TT_BASE=5000, TT_W=10, TT_H=20;
   const TT_PIECES={
     I:{n:4,c:[[0,1],[1,1],[2,1],[3,1]],col:'#4fc3f7'}, O:{n:2,c:[[0,0],[1,0],[0,1],[1,1]],col:'#ffd54f'},
     T:{n:3,c:[[1,0],[0,1],[1,1],[2,1]],col:'#ba68c8'}, S:{n:3,c:[[1,0],[2,0],[0,1],[1,1]],col:'#81c784'},
@@ -1193,7 +1200,7 @@
   function ttEnd(why){
     const t=tetris; if(!t||t.over) return;
     t.over=true;
-    const n=t.score, exp=Math.round(n*Math.max(1,st.stage)*TT_EXP*(1+0.2*(st.tetrisLv||0))); // 테트리스 고수로 증가
+    const n=t.score, exp=st.lv>=BOSS_LV?0:miniExp(n,TT_BASE,st.tetrisLv); // 테트리스 고수로 증가
     const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
