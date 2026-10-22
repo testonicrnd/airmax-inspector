@@ -412,8 +412,8 @@
   function bindUpgradeHold(box){
     // 설명 말풍선 — 마우스가 ? 위에 있을 때만. 타일이 새로 그려져도(강화·비용 변경) 목록 단위로 판단하므로 남지 않음
     box.addEventListener('mouseover',e=>{
-      const q=e.target.closest('.gm-tile-q');
-      if(q){ const i=+q.closest('.gm-tile').dataset.i; if(tipIdx!==i||tipSticky){ tipIdx=i; tipSticky=false; renderTip(); } }
+      const q=e.target.closest('.gm-tile-q, .gm-maxchip');
+      if(q){ const i=+q.closest('[data-i]').dataset.i; if(tipIdx!==i||tipSticky){ tipIdx=i; tipSticky=false; renderTip(); } }
       else if(tipIdx>=0&&!tipSticky){ tipIdx=-1; renderTip(); }
     });
     box.addEventListener('pointerdown',e=>{
@@ -429,7 +429,7 @@
     });
   }
   window.addEventListener('pointerup',holdStop);
-  document.addEventListener('pointerdown',e=>{ if(tipIdx>=0&&!e.target.closest('.gm-tile-q')){ tipIdx=-1; tipSticky=false; renderTip(); } },true);
+  document.addEventListener('pointerdown',e=>{ if(tipIdx>=0&&!e.target.closest('.gm-tile-q, .gm-maxchip')){ tipIdx=-1; tipSticky=false; renderTip(); } },true);
   window.addEventListener('pointercancel',holdStop);
   window.addEventListener('blur',holdStop);
   // 게임이 비활성이던 동안 — 커피 수혈이 10% 효율로 실제로 업무를 처리한 것처럼 계산 (최대 누적 시간은 야근 강화로 늘어남).
@@ -498,7 +498,7 @@
         <span class="gm-title">테스토닉 키우기</span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
-          <button type="button" title="투명도" onclick="gmToggleDim()">◐</button>
+          <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
           <button type="button" title="숨기기 (Esc)" onclick="gmHide()">−</button>
           <button type="button" title="닫기" onclick="gmClose()">×</button>
         </span>
@@ -649,8 +649,11 @@
       el('gmTimer').textContent=mon.boss?`⏱ ${Math.max(0,Math.ceil((mon.deadline-Date.now())/1000))}초`:'';
     }
     // 강화 타일 — 바뀐 게 있을 때만 다시 그림(누르는 도중에 버튼이 새로 그려져 클릭이 씹히지 않게)
+    // 만렙 스킬은 큰 타일에서 빼서 맨 아래 작은 아이콘 줄(MAX)로 모음
+    const maxedList=UPGRADES.map((u,i)=>[u,i]).filter(([u])=>(st[u.key]||0)>=u.max);
     const ups=UPGRADES.map((u,i)=>{
       const lv=st[u.key]||0, c=costOf(u,lv), maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
+      if(maxed) return '';
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
       return `<button type="button" class="gm-tile${cls}" data-i="${i}">
         <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
@@ -658,7 +661,8 @@
         <span class="gm-tile-name">${u.name}</span>
         <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
         <span class="gm-tile-cost">${locked?'':maxed?'MAX':MONEY+fmt(c)}</span></button>`;
-    }).join('');
+    }).join('')+(maxedList.length?`<div class="gm-maxrow"><span class="gm-maxrow-label">MAX</span>${maxedList.map(([u,i])=>
+      `<span class="gm-maxchip" data-i="${i}" title="${u.name} (MAX)">${SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon}</span>`).join('')}</div>`:'');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }
     if(tipIdx>=0) renderTip();
@@ -917,7 +921,7 @@
     g.strokeText(stairs.count.toLocaleString()+'층',W-16,H-12); g.fillStyle='#fff'; g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
   }
   window.gmShowStairs=gmShowStairs;
-  if(window.__GM_TEST) window.__gmStairs=()=>stairs; // 자동 테스트에서만 내부 상태 확인용
+  if(window.__GM_TEST){ window.__gmStairs=()=>stairs; window.__gmSuika=()=>suika; } // 자동 테스트에서만 내부 상태 확인용
 
   /* ---------- 수박 게임 ---------- */
   // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 오찬근 이용훈 천병석 하문숙 신원옥 강옥남 신원철 신동준.
@@ -943,7 +947,7 @@
       <button type="button" class="gm-btn" onclick="gmSuikaExit()">${ic(IC.world)}그만하고 월드로</button>`;
     lockBodySize();
     const cv=el('gmSkCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
-    suika={W:cv.width,H:cv.height,balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
+    suika={W:cv.width,H:cv.height,L:Math.round(cv.width*0.075),R:Math.round(cv.width*0.925),F:Math.round(cv.height*0.93),T:Math.round(cv.height*0.17),balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
       imgs:skImgs(),keys:{},lastT:performance.now(),raf:0,id:0};
     cv.addEventListener('pointermove',e=>{ const r=cv.getBoundingClientRect(); suika&&(suika.dropX=(e.clientX-r.left)/r.width*suika.W); });
     cv.addEventListener('pointerdown',e=>{ e.preventDefault(); lastInput=Date.now(); if(!suika) return; if(suika.over){ gmShowSuika(); return; }
@@ -954,7 +958,7 @@
   function skR(t){ return SK_R[t]*suika.W; }
   function skDrop(){
     if(!suika||suika.over||suika.cool>0) return;
-    const r=skR(suika.cur), x=Math.min(suika.W-r,Math.max(r,suika.dropX));
+    const r=skR(suika.cur), x=Math.min(suika.R-r,Math.max(suika.L+r,suika.dropX));
     suika.balls.push({id:++suika.id,x,y:r+6,vx:0,vy:0,r,t:suika.cur,age:0});
     suika.cur=suika.next; suika.next=skNextTier(); suika.cool=0.45;
   }
@@ -967,7 +971,7 @@
       const mv=(suika.keys.L?-1:0)+(suika.keys.R?1:0); if(mv) suika.dropX=Math.min(suika.W,Math.max(0,suika.dropX+mv*suika.W*0.9*dt));
       for(let k=0;k<4;k++) skStep(dt/4);
       // 위쪽 선을 넘은 공이 1.5초 넘게 머물면 끝
-      const line=suika.H*0.16;
+      const line=suika.T;
       const above=suika.balls.some(b=>b.age>1.2&&b.y-b.r<line);
       suika.danger=above?suika.danger+dt:0;
       if(suika.danger>1.5) skEnd('공이 넘쳤습니다!');
@@ -977,10 +981,13 @@
   }
   function skStep(dt){
     const S=suika, G=S.H*3.2, B=S.balls;
-    // 회전: 공(원판)의 각속도 w, 각도 a. 바닥·벽·다른 공과 닿은 면의 미끄러짐을 마찰로 줄이면서 구르게 함 (관성모멘트 = 질량·r²/2)
-    for(const b of B){ b.age+=dt; b.vy+=G*dt; b.vx*=0.995; b.w=(b.w||0)*0.995; b.x+=b.vx*dt; b.y+=b.vy*dt; b.a=(b.a||0)+b.w*dt;
-      if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.3; b.w*=0.8; } if(b.x>S.W-b.r){ b.x=S.W-b.r; b.vx=-Math.abs(b.vx)*0.3; b.w*=0.8; }
-      if(b.y>S.H-b.r){ b.y=S.H-b.r; b.vy=-Math.abs(b.vy)*0.15;
+    // 무게 = 부피(반지름³) — 큰 공일수록 훨씬 무거워서, 큰 공이 작은 공을 치면 작은 공이 툭 밀려나고 쌓이면 아래를 눌러 비집고 들어감.
+    // 회전: 각속도 w, 각도 a. 바닥·벽·다른 공과 닿은 면의 미끄러짐을 마찰로 줄이면서 구르게 함 (관성모멘트 = 질량·r²/2)
+    const SK_E=0.35, SK_E_FLOOR=0.25; // 공끼리 / 바닥 튕김
+    for(const b of B){ b.age+=dt; b.vy+=G*dt; b.vx*=0.999; b.w=(b.w||0)*0.998; b.x+=b.vx*dt; b.y+=b.vy*dt; b.a=(b.a||0)+b.w*dt;
+      // 벽·바닥은 배경 그림의 나무 상자 안쪽(L·R·F)
+      if(b.x<S.L+b.r){ b.x=S.L+b.r; b.vx=Math.abs(b.vx)*0.45; b.w*=0.8; } if(b.x>S.R-b.r){ b.x=S.R-b.r; b.vx=-Math.abs(b.vx)*0.45; b.w*=0.8; }
+      if(b.y>S.F-b.r){ b.y=S.F-b.r; b.vy=Math.abs(b.vy)>S.H*0.08?-Math.abs(b.vy)*SK_E_FLOOR:0; // 세게 떨어지면 통, 살살 닿으면 멈춤
         const slip=b.vx-b.w*b.r, jt=-slip/3*0.6; // 바닥 마찰 — 미끄러짐을 줄이고 그만큼 회전
         b.vx+=jt; b.w-=2*jt/b.r; b.vx*=0.985; } }
     for(let it=0;it<3;it++){
@@ -989,10 +996,13 @@
           const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy), m=a.r+b.r;
           if(a.t===b.t&&d<m+S.W*0.004){ skMerge(a,b); break; } // 같은 공은 닿기만 해도 합체
           if(d>=m||d===0) continue;
-          const nx=dx/d, ny=dy/d, ov=m-d, ma=a.r*a.r, mb=b.r*b.r;
-          a.x-=nx*ov*mb/(ma+mb); a.y-=ny*ov*mb/(ma+mb); b.x+=nx*ov*ma/(ma+mb); b.y+=ny*ov*ma/(ma+mb);
+          const nx=dx/d, ny=dy/d, ov=m-d, ma=a.r*a.r*a.r, mb=b.r*b.r*b.r;
+          // 겹친 만큼 밀어냄 — 가벼운 쪽이 더 많이 밀림(무거운 공이 내려앉으며 작은 공을 비켜냄)
+          const pc=Math.min(ov,S.W*0.03)*0.85;
+          a.x-=nx*pc*mb/(ma+mb); a.y-=ny*pc*mb/(ma+mb); b.x+=nx*pc*ma/(ma+mb); b.y+=ny*pc*ma/(ma+mb);
           const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
-          if(rv<0){ const jj=-(1.15)*rv/(1/ma+1/mb); a.vx-=jj/ma*nx; a.vy-=jj/ma*ny; b.vx+=jj/mb*nx; b.vy+=jj/mb*ny; }
+          if(rv<0){ const e=rv<-S.H*0.12?SK_E:0.05; // 세게 부딪히면 튕기고, 살살 닿아 있으면 거의 안 튕김(떨림 방지)
+            const jj=-(1+e)*rv/(1/ma+1/mb); a.vx-=jj/ma*nx; a.vy-=jj/ma*ny; b.vx+=jj/mb*nx; b.vy+=jj/mb*ny; }
           // 맞닿은 면의 마찰 — 접선 방향 상대 속도(회전 포함)를 일부 줄이며 서로 돌림
           const tx=-ny, ty=nx, vt=(b.vx-a.vx)*tx+(b.vy-a.vy)*ty-(a.w||0)*a.r-(b.w||0)*b.r;
           const jt=-vt/(3*(1/ma+1/mb))*0.3;
@@ -1001,12 +1011,21 @@
         } }
       S.balls=S.balls.filter(b=>!b.dead);
     }
+    // 충돌 정리 뒤 다시 상자 안으로, 거의 멈춘 공은 더 빨리 가라앉혀 제자리 떨림 방지
+    for(const b of S.balls){
+      if(b.x<S.L+b.r) b.x=S.L+b.r; if(b.x>S.R-b.r) b.x=S.R-b.r; if(b.y>S.F-b.r){ b.y=S.F-b.r; if(b.vy>0) b.vy=0; }
+      if(Math.hypot(b.vx,b.vy)<S.H*0.07){ b.vx*=0.9; b.vy*=0.9; b.w*=0.9; }
+    }
   }
   function skMerge(a,b){
     a.dead=b.dead=true;
     const t=a.t+1, x=(a.x+b.x)/2, y=(a.y+b.y)/2;
     if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 신동준 합체! +100',until:performance.now()+1500}; }
-    else { suika.score+=t*(t+1)/2; suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:skR(t),t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
+    else { suika.score+=t*(t+1)/2; const nr=skR(t);
+      suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2-suika.H*0.25,r:nr,t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
+      // 합체 순간 주변 공을 바깥으로 툭 (가까울수록, 가벼울수록 많이)
+      suika.balls.forEach(o=>{ if(o.dead||o===a||o===b) return; const dx=o.x-x, dy=o.y-y, d=Math.hypot(dx,dy)||1, reach=nr+o.r+suika.W*0.04;
+        if(d<reach){ const k=(1-d/reach)*suika.H*0.9*Math.min(1,(nr/o.r)*0.6); o.vx+=dx/d*k; o.vy+=dy/d*k-suika.H*0.1; } });
       if(t>=5) suika.flash={text:`${SK_NAMES[t]} 등장!`,until:performance.now()+1200}; }
     const sc=el('gmSkScore'); if(sc) sc.textContent=suika.score.toLocaleString();
   }
@@ -1028,6 +1047,7 @@
     g.beginPath(); g.arc(0,0,r,0,Math.PI*2); g.closePath(); g.fillStyle='#f1ede8'; g.fill();
     if(im&&im.complete&&im.naturalWidth){ g.save(); g.clip(); g.drawImage(im,-r,-r,r*2,r*2); g.restore(); }
     else { g.fillStyle=SK_COLORS[t]; g.fill(); g.fillStyle='#fff'; g.font=`bold ${Math.round(r*0.55)}px sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(SK_NAMES[t].slice(1),0,0); }
+    g.lineWidth=Math.max(3,r*0.09)+3; g.strokeStyle='rgba(255,255,255,0.9)'; g.stroke();
     g.lineWidth=Math.max(3,r*0.09); g.strokeStyle=SK_COLORS[t]; g.stroke();
     g.restore();
   }
@@ -1035,10 +1055,16 @@
     const cv=el('gmSkCv'); if(!cv) return;
     const g=cv.getContext('2d'), S=suika; g.clearRect(0,0,S.W,S.H);
     const bg=art('suika-bg.jpg'); if(artReady(bg)) drawCover(g,bg,S.W,S.H); // 과수원 나무 상자 배경
-    const line=S.H*0.16;
-    g.save(); g.setLineDash([12,10]); g.strokeStyle=S.danger>0?'#d93025':'rgba(150,150,150,0.5)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,line); g.lineTo(S.W,line); g.stroke(); g.restore();
+    const line=S.T;
+    // 상자 바깥은 어둡게 — 공이 노는 곳이 잘 보이게
+    g.fillStyle='rgba(0,0,0,0.32)'; g.fillRect(0,0,S.L,S.H); g.fillRect(S.R,0,S.W-S.R,S.H); g.fillRect(S.L,S.F,S.R-S.L,S.H-S.F);
+    g.strokeStyle='rgba(255,240,210,0.55)'; g.lineWidth=3; g.strokeRect(S.L,-4,S.R-S.L,S.F+4);
+    // 넘침 선 — 위험할 땐 빨갛게 깜빡
+    const warn=S.danger>0&&Math.floor(performance.now()/200)%2===0;
+    g.save(); g.setLineDash([16,10]); g.lineWidth=5; g.strokeStyle='rgba(0,0,0,0.35)'; g.beginPath(); g.moveTo(S.L,line+2); g.lineTo(S.R,line+2); g.stroke();
+    g.lineWidth=3; g.strokeStyle=S.danger>0?(warn?'#ff3b30':'#ffd166'):'rgba(255,255,255,0.85)'; g.beginPath(); g.moveTo(S.L,line); g.lineTo(S.R,line); g.stroke(); g.restore();
     if(!S.over){
-      const r=skR(S.cur), x=Math.min(S.W-r,Math.max(r,S.dropX));
+      const r=skR(S.cur), x=Math.min(S.R-r,Math.max(S.L+r,S.dropX));
       g.save(); g.strokeStyle='rgba(150,150,150,0.35)'; g.lineWidth=2; g.beginPath(); g.moveTo(x,r*2+8); g.lineTo(x,S.H); g.stroke(); g.restore();
       skBall(g,null,S.cur,x,r+6,r,S.cool>0?0.45:0.95);
       // 다음 공 미리보기 (오른쪽 위)
@@ -1145,9 +1171,10 @@
     const t=tetris, g=cv.getContext('2d'), W=cv.width, H=cv.height;
     g.clearRect(0,0,W,H);
     const cs=Math.floor(Math.min((H-16)/TT_H,(W*0.66)/TT_W)), bw=cs*TT_W, bh=cs*TT_H, bx=12, by=Math.floor((H-bh)/2);
-    const css=getComputedStyle(el('gmWidget')), line=css.getPropertyValue('--border2').trim()||'#444', text=css.getPropertyValue('--text2').trim()||'#aaa';
+    const line='rgba(255,255,255,0.07)', text='rgba(230,235,255,0.72)', strong='#ffffff'; // 밤 배경 위라 테마와 상관없이 밝은 글자
     const bgi=art('tetris-bg.jpg'); if(artReady(bgi)) drawCover(g,bgi,W,H); // 밤 사무실 창밖 배경
-    g.fillStyle='rgba(8,12,30,0.55)'; g.fillRect(bx,by,bw,bh);
+    g.fillStyle='rgba(8,12,30,0.72)'; g.fillRect(bx,by,bw,bh);
+    g.strokeStyle='rgba(140,170,255,0.55)'; g.lineWidth=3; g.strokeRect(bx-1.5,by-1.5,bw+3,bh+3);
     g.strokeStyle=line; g.lineWidth=1;
     for(let i=0;i<=TT_W;i++){ g.beginPath(); g.moveTo(bx+i*cs+0.5,by); g.lineTo(bx+i*cs+0.5,by+bh); g.stroke(); }
     for(let j=0;j<=TT_H;j++){ g.beginPath(); g.moveTo(bx,by+j*cs+0.5); g.lineTo(bx+bw,by+j*cs+0.5); g.stroke(); }
@@ -1159,13 +1186,14 @@
     }
     // 오른쪽 — 다음 블록, 점수
     const px=bx+bw+18, pw=W-px-10;
+    g.fillStyle='rgba(8,12,30,0.6)'; g.fillRect(px-8,by,pw+4,cs*10.6); // 점수판 바탕
     g.fillStyle=text; g.font=`bold ${Math.round(cs*0.62)}px sans-serif`; g.textAlign='left'; g.textBaseline='top';
     g.fillText('다음',px,by);
     const N=TT_PIECES[t.next], ns=Math.min(Math.floor(pw/4.5),cs);
     N.c.forEach(([x,y])=>ttCell(g,px+x*ns,by+cs*1.1+y*ns,ns,t.next,1));
     const rows=[['점수',t.score.toLocaleString()],['줄',t.lines],['레벨',t.level]];
     rows.forEach(([k,v],i)=>{ const y=by+cs*4.2+i*cs*2.1; g.fillStyle=text; g.font=`${Math.round(cs*0.55)}px sans-serif`; g.fillText(k,px,y);
-      g.font=`bold ${Math.round(cs*0.75)}px sans-serif`; g.fillStyle=css.getPropertyValue('--text').trim()||'#fff'; g.fillText(String(v),px,y+cs*0.75); });
+      g.font=`bold ${Math.round(cs*0.75)}px sans-serif`; g.fillStyle=strong; g.fillText(String(v),px,y+cs*0.75); });
     if(t.flash){ if(performance.now()>t.flash.until) t.flash=null;
       else { g.font=`bold ${Math.round(cs*0.9)}px sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText(t.flash.text,bx+bw/2,by+bh*0.35); g.fillStyle='#ffcf4a'; g.fillText(t.flash.text,bx+bw/2,by+bh*0.35); } }
   }
