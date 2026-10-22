@@ -299,6 +299,7 @@
     const g=rewardOf(st.stage,mon.boss)*(mon.golden?10:1);
     if(mon.golden) floatText('🌟 황금 업무! 실적 ×10',true,true);
     st.gold+=g; st.totalGold+=g;
+    fxPop('fx-coin',{cls:'coin',gap:250,ms:800});
     gainExp(mon.boss?st.stage*6:st.stage);
     if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); }
     else st.kills++;
@@ -311,12 +312,14 @@
       st.exp-=expNeed(st.lv); st.lv++;
       if(st.lv>=BOSS_LV) st.exp=0;
       const before=rankOf(st.lv-1), now=rankOf(st.lv);
-      if(before[2]!==now[2]&&!quiet) toast(`${now[1]} ${now[2]}(으)로 승진했습니다!`);
+      if(before[2]!==now[2]&&!quiet){ toast(`${now[2]}(으)로 승진했습니다!`); promoFx(st.lv); }
+      else if(!quiet) fxPop('fx-levelup',{x:4,cls:'lvup',gap:400,ms:1000});
     }
     // 사장 달성 → 원하는 직원 한 명 입사권
     if(st.lv>=BOSS_LV&&!st.done){
       st.done=true;
-      toast(canHire()?`🚀 ${charName(acc.ch)} 사장 달성! 👥 직원에서 원하는 직원을 한 명 입사시킬 수 있습니다`:`🏆 ${charName(acc.ch)} 사장 달성!`,6000);
+      const c=CHARS[acc.ch]||CHARS[0];
+      gmScene('scene-ceo.jpg',`<b>${escHtml(charName(acc.ch))} 사장 달성!</b><br>${canHire()?'직원 화면에서 원하는 직원을 한 명 입사시킬 수 있습니다.':'모든 직원을 사장으로 키웠습니다. 축하합니다!'}`,c.body);
     }
   }
   // 한 번 처리 — 키 입력 성공(콤보 배율) 또는 휴대폰 탭
@@ -328,8 +331,9 @@
   }
   // 직접 처리 한 번 — 프로젝트 달성(20배)이 먼저, 아니면 몰입(3배) 판정
   function strike(base){
-    if(Math.random()<projChance(st.projLv||0)){ floatText('🏆 프로젝트 달성!',true,true); hit(base*20,true,true); return; }
+    if(Math.random()<projChance(st.projLv||0)){ floatText('🏆 프로젝트 달성!',true,true); fxPop('fx-project',{cls:'big',ms:1200}); hit(base*20,true,true); return; }
     const crit=Math.random()<critChance(st.critLv);
+    if(crit) fxPop('fx-crit',{gap:120});
     hit(base*(crit?3:1),crit,true);
   }
   function afterWork(){
@@ -377,11 +381,13 @@
     return true;
   }
   let lastTickAt=0;
+  let beanAt=0;
   function tick(){
     if(!mon) return;
     const now=Date.now(), dt=Math.min((now-(lastTickAt||now))/1000,5); // 너무 오래 멈췄던 경우는 자리 비움 계산이 처리
     lastTickAt=now;
     hit(autoDps(st)*dt,false,false);
+    if(now-beanAt>4000&&st.autoLv>0){ beanAt=now; fxPop('fx-coffee',{x:6+Math.random()*10,cls:'bean',ms:1600}); }
     if(mon&&mon.boss&&Date.now()>mon.deadline){
       st.bossFails++; st.kills=0;
       toast(`⏰ ${mon.name} 실패… 실력을 더 쌓고 다시 도전`);
@@ -452,7 +458,7 @@
     st.gold+=gold; st.totalGold+=gold; dirty=true;
     const awayText=away/60>capMin?`${fmtMin(Math.round(away/60))} 중 ${fmtMin(capMin)}`:fmtMin(Math.max(1,Math.round(away/60)));
     const extra=(st.stage>startStage?` · ${startStage}→${st.stage}단계`:'')+(rankOf(st.lv)[2]!==rankOf(startLv)[2]?` · ${rankOf(st.lv)[2]} 승진!`:'');
-    toast(`☕ 자리 비운 ${awayText} 동안 커피 힘으로 업무 ${tasks.toLocaleString()}건 처리 · 실적 +${fmt(gold)}${extra}`,5000);
+    gmScene('scene-away.jpg',`<b>자리 비운 ${awayText} 동안</b><br>커피 힘으로 업무 <b>${tasks.toLocaleString()}건</b> 처리 · 실적 +${fmt(gold)}${extra}`);
   }
   // 캐릭터 바꾸기 — 입사한 직원끼리는 언제든. 입사 안 한 직원은 입사권이 있을 때 골라서 입사(인턴부터, 입사 순서만큼 어려움)
   function switchChar(i){
@@ -461,7 +467,7 @@
       if(!canHire()) return;
       if(!confirm(`${charName(i)}을(를) 입사시킬까요?\n입사권은 사장 달성 1번에 1명입니다. (업무량 ×${fmt(Math.pow(HP_STEP,hiredCount()))})`)) return;
       acc.runs[i]=Object.assign(run0(),{tier:hiredCount()});
-      toast(`🎉 ${charName(i)} 입사! 인턴부터 시작합니다`,3000);
+      gmScene('scene-hire.jpg',`<b>${escHtml(charName(i))} 입사!</b><br>인턴부터 다시 시작합니다. 잘 부탁드립니다!`,(CHARS[i]||{}).body);
     }
     acc.ch=i; st=acc.runs[i]; combo=0; dirty=true;
     spawn(st.kills>=10);
@@ -682,6 +688,35 @@
   function renderSaveState(){
     const s=el('gmSave'); if(!s) return;
     s.textContent=serverOk===false?'기기에만 저장 중':(serverOk?'자동 저장됨':'');
+  }
+  // 효과 그림 — 업무 칸 위에 잠깐 튀어나왔다 사라짐(자주 터지는 효과는 간격 제한)
+  const fxLast={};
+  function fxPop(name,opt){
+    opt=opt||{}; const layer=el('gmFloat'); if(!layer||!isVisible()) return;
+    const now=Date.now(); if(opt.gap&&now-(fxLast[name]||0)<opt.gap) return; fxLast[name]=now;
+    const im=document.createElement('img');
+    im.className='gm-fx '+(opt.cls||''); im.src=UI+name+'.png'; im.alt='';
+    im.style.left=(opt.x!=null?opt.x:45+Math.random()*35)+'%'; if(opt.y!=null) im.style.top=opt.y+'%';
+    layer.appendChild(im);
+    setTimeout(()=>im.remove(),opt.ms||900);
+  }
+  // 승진 연출 — 꽃가루 + 새 직급 배지 + 문구 (창 위에 잠깐, 클릭은 통과)
+  function promoFx(lv){
+    const w=el('gmWidget'); if(!w||!isVisible()) return;
+    const d=document.createElement('div'); d.className='gm-promo';
+    d.innerHTML=`<img class="gm-promo-conf" src="${UI}fx-confetti.png" alt=""/>${rankBadge(lv,'gm-promo-badge')}<b>${rankOf(lv)[2]} 승진!</b>`;
+    w.appendChild(d); setTimeout(()=>d.remove(),2600);
+  }
+  // 장면 카드 — 큰 순간(사장 달성·자리 비운 동안·새 직원 입사)을 그림과 함께. 누르면 닫힘(8초 뒤 자동)
+  function gmScene(img,html,body){
+    const w=el('gmWidget'); if(!w) return;
+    w.querySelector('.gm-scene')?.remove();
+    const d=document.createElement('div'); d.className='gm-scene';
+    d.innerHTML=`<div class="gm-scene-card"><div class="gm-scene-art" style="background-image:url('${UI}${img}')">${body?`<img src="${body}" alt=""/>`:''}</div>
+      <div class="gm-scene-txt">${html}</div><button type="button" class="gm-btn primary">확인</button></div>`;
+    const close=()=>{ d.remove(); if(el('gmType')) focusPlay(); };
+    d.addEventListener('click',close); setTimeout(close,8000);
+    w.appendChild(d);
   }
   function floatText(text,crit,big){
     const layer=el('gmFloat'); if(!layer) return;
@@ -1065,7 +1100,7 @@
   function ttLock(){
     const t=tetris, c=t.cur, col=TT_PIECES[c.k].col;
     let out=false;
-    c.cells.forEach(([cx,cy])=>{ const gy=c.y+cy; if(gy<0) out=true; else t.grid[gy][c.x+cx]=col; });
+    c.cells.forEach(([cx,cy])=>{ const gy=c.y+cy; if(gy<0) out=true; else t.grid[gy][c.x+cx]=c.k; });
     if(out){ ttEnd('천장까지 쌓였습니다!'); return; }
     const full=t.grid.map((r,i)=>r.every(Boolean)?i:-1).filter(i=>i>=0);
     if(full.length){
@@ -1098,9 +1133,11 @@
     if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · ${t.lines}줄 · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'⤓ 버튼':'Space'}으로 다시 시작</small>`;
     if(el('gmTtBest')) el('gmTtBest').textContent=(acc.tetrisBest||0).toLocaleString();
   }
-  function ttCell(g,x,y,s,col,alpha){
-    g.globalAlpha=alpha; g.fillStyle=col; g.fillRect(x+1,y+1,s-2,s-2);
-    g.fillStyle='rgba(255,255,255,0.28)'; g.fillRect(x+1,y+1,s-2,Math.max(2,s*0.18));
+  // 블록 한 칸 — 젤리 블록 그림(없으면 색 칸)
+  function ttCell(g,x,y,s,k,alpha){
+    g.globalAlpha=alpha; const im=art('tt-'+k+'.png');
+    if(artReady(im)) g.drawImage(im,x,y,s,s);
+    else { g.fillStyle=TT_PIECES[k].col; g.fillRect(x+1,y+1,s-2,s-2); g.fillStyle='rgba(255,255,255,0.28)'; g.fillRect(x+1,y+1,s-2,Math.max(2,s*0.18)); }
     g.globalAlpha=1;
   }
   function ttDraw(){
@@ -1114,18 +1151,18 @@
     g.strokeStyle=line; g.lineWidth=1;
     for(let i=0;i<=TT_W;i++){ g.beginPath(); g.moveTo(bx+i*cs+0.5,by); g.lineTo(bx+i*cs+0.5,by+bh); g.stroke(); }
     for(let j=0;j<=TT_H;j++){ g.beginPath(); g.moveTo(bx,by+j*cs+0.5); g.lineTo(bx+bw,by+j*cs+0.5); g.stroke(); }
-    t.grid.forEach((r,y)=>r.forEach((col,x)=>{ if(col) ttCell(g,bx+x*cs,by+y*cs,cs,col,t.over?0.45:1); }));
+    t.grid.forEach((r,y)=>r.forEach((k,x)=>{ if(k) ttCell(g,bx+x*cs,by+y*cs,cs,k,t.over?0.45:1); }));
     if(!t.over&&t.cur){
       const c=t.cur, col=TT_PIECES[c.k].col; let gy=c.y; while(!ttHit(c.cells,c.x,gy+1)) gy++;
       c.cells.forEach(([cx,cy])=>{ if(gy+cy>=0){ g.strokeStyle=col; g.lineWidth=2; g.strokeRect(bx+(c.x+cx)*cs+3,by+(gy+cy)*cs+3,cs-6,cs-6); } }); // 고스트
-      c.cells.forEach(([cx,cy])=>{ if(c.y+cy>=0) ttCell(g,bx+(c.x+cx)*cs,by+(c.y+cy)*cs,cs,col,1); });
+      c.cells.forEach(([cx,cy])=>{ if(c.y+cy>=0) ttCell(g,bx+(c.x+cx)*cs,by+(c.y+cy)*cs,cs,c.k,1); });
     }
     // 오른쪽 — 다음 블록, 점수
     const px=bx+bw+18, pw=W-px-10;
     g.fillStyle=text; g.font=`bold ${Math.round(cs*0.62)}px sans-serif`; g.textAlign='left'; g.textBaseline='top';
     g.fillText('다음',px,by);
     const N=TT_PIECES[t.next], ns=Math.min(Math.floor(pw/4.5),cs);
-    N.c.forEach(([x,y])=>ttCell(g,px+x*ns,by+cs*1.1+y*ns,ns,N.col,1));
+    N.c.forEach(([x,y])=>ttCell(g,px+x*ns,by+cs*1.1+y*ns,ns,t.next,1));
     const rows=[['점수',t.score.toLocaleString()],['줄',t.lines],['레벨',t.level]];
     rows.forEach(([k,v],i)=>{ const y=by+cs*4.2+i*cs*2.1; g.fillStyle=text; g.font=`${Math.round(cs*0.55)}px sans-serif`; g.fillText(k,px,y);
       g.font=`bold ${Math.round(cs*0.75)}px sans-serif`; g.fillStyle=css.getPropertyValue('--text').trim()||'#fff'; g.fillText(String(v),px,y+cs*0.75); });

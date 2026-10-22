@@ -1675,3 +1675,34 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-btn .gm-ic { height:18px; vertical-align:-4px; }
 .gm-stats .gm-ic { height:14px; vertical-align:-2px; margin-right:3px; }
 .gm-chip img { height:22px; width:auto; display:block; }
+
+/* 테스토닉 키우기 — 효과 그림 */
+.gm-fx { position:absolute; top:18%; height:56px; width:auto; transform:translate(-50%,0) scale(0.4); pointer-events:none; z-index:3;
+  animation:gmFxPop 0.9s ease-out forwards; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
+.gm-fx.big { height:104px; top:0; animation-duration:1.2s; }
+.gm-fx.coin { height:30px; top:46%; animation-name:gmFxCoin; }
+.gm-fx.lvup { height:62px; top:10%; transform:none; animation-name:gmFxUp; }
+.gm-fx.bean { height:26px; top:62%; transform:none; opacity:0.85; animation-name:gmFxBean; }
+@keyframes gmFxPop { 0% { transform:translate(-50%,0) scale(0.4); opacity:0; } 25% { transform:translate(-50%,0) scale(1.1); opacity:1; } 70% { opacity:1; } 100% { transform:translate(-50%,-14px) scale(1); opacity:0; } }
+@keyframes gmFxCoin { 0% { transform:translate(-50%,0) scale(0.6); opacity:0; } 20% { opacity:1; transform:translate(-50%,-6px) scale(1); } 100% { transform:translate(-50%,-46px) scale(0.8); opacity:0; } }
+@keyframes gmFxUp { 0% { transform:translateY(20px); opacity:0; } 30% { opacity:1; } 100% { transform:translateY(-24px); opacity:0; } }
+@keyframes gmFxBean { 0% { transform:translateY(0) rotate(0); opacity:0; } 25% { opacity:0.85; } 100% { transform:translateY(-60px) rotate(40deg); opacity:0; } }
+
+/* 승진 연출 */
+.gm-promo { position:absolute; left:0; right:0; top:70px; z-index:30; display:flex; flex-direction:column; align-items:center; pointer-events:none; animation:gmPromo 2.6s ease-out forwards; }
+.gm-promo-conf { position:absolute; top:-30px; height:170px; width:auto; opacity:0.95; }
+.gm-promo-badge { height:76px; width:auto; position:relative; filter:drop-shadow(0 4px 10px rgba(0,0,0,0.35)); animation:gmPromoBadge 0.6s ease-out; }
+.gm-promo b { position:relative; margin-top:4px; padding:4px 14px; border-radius:14px; font-size:15px; color:#4a2c00; background:linear-gradient(90deg,#ffe082,#ffb74d); box-shadow:0 3px 10px rgba(0,0,0,0.25); }
+@keyframes gmPromo { 0% { opacity:0; transform:translateY(10px); } 12% { opacity:1; transform:none; } 80% { opacity:1; } 100% { opacity:0; transform:translateY(-12px); } }
+@keyframes gmPromoBadge { 0% { transform:scale(0.3) rotate(-20deg); } 70% { transform:scale(1.15) rotate(4deg); } 100% { transform:none; } }
+
+/* 장면 카드 (사장 달성 / 자리 비운 동안 / 새 직원 입사) */
+.gm-scene { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; animation:gmFade 0.2s; }
+@keyframes gmFade { from { opacity:0; } }
+.gm-scene-card { width:88%; border-radius:14px; overflow:hidden; background:var(--surface); box-shadow:0 12px 30px rgba(0,0,0,0.4); animation:gmSceneIn 0.35s ease-out; }
+@keyframes gmSceneIn { from { transform:scale(0.85) translateY(10px); opacity:0; } }
+.gm-scene-art { position:relative; height:120px; background:center/cover no-repeat; }
+.gm-scene-art img { position:absolute; left:50%; bottom:-4px; height:112px; transform:translateX(-50%); filter:drop-shadow(0 4px 8px rgba(0,0,0,0.4)); }
+.gm-scene-txt { padding:12px 14px 2px; text-align:center; font-size:13px; line-height:1.6; color:var(--text2); word-break:keep-all; }
+.gm-scene-txt b { color:var(--text); }
+.gm-scene-card .gm-btn { width:calc(100% - 28px); margin:10px 14px 14px; }
