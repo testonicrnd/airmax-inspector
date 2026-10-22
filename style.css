@@ -1733,3 +1733,56 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-head-btns { display:flex; align-items:center; gap:2px; }
 .gm-head-btns button { display:flex; align-items:center; justify-content:center; width:26px; height:24px; padding:0; line-height:1; font-size:16px; }
 .gm-head-btns button img, .gm-head-btns .gm-pin-ic { width:16px; height:16px; object-fit:contain; margin:0; }
+
+/* 테스토닉 키우기 — 아이콘 7종 + 그림 없는 UI 다듬기 */
+.gm-title { display:flex; align-items:center; gap:6px; }
+.gm-logo { height:22px; width:auto; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25)); }
+.gm-tile-icon img[src$="lock.png"] { height:18px; opacity:0.8; }
+.gm-medal { height:22px; width:auto; display:block; }
+.gm-rank-row { align-items:center; border-radius:8px; }
+.gm-rank-row span:first-child { width:24px; display:flex; justify-content:center; }
+.gm-rank-row.top { font-weight:700; padding:6px 4px; }
+.gm-rank-row.top1 { background:linear-gradient(90deg,rgba(255,200,60,0.22),transparent 80%); }
+.gm-rank-row.top2 { background:linear-gradient(90deg,rgba(190,200,215,0.22),transparent 80%); }
+.gm-rank-row.top3 { background:linear-gradient(90deg,rgba(205,130,70,0.2),transparent 80%); }
+.gm-rank-row.me { box-shadow:inset 3px 0 0 var(--accent); }
+
+/* 콤보 배지 */
+.gm-combo { display:inline-flex; align-items:center; gap:2px; padding:2px 8px 2px 3px; border-radius:12px; background:linear-gradient(90deg,rgba(255,140,40,0.2),rgba(255,140,40,0.05)); }
+.gm-combo img { height:18px; width:auto; }
+.gm-combo b { font-size:13px; color:#ff7a1a; }
+.gm-combo.hot img { animation:gmFlame 0.5s ease-in-out infinite alternate; }
+@keyframes gmFlame { to { transform:scale(1.18) rotate(-6deg); } }
+
+/* 남은 업무 막대 — 그라데이션 + 흐르는 빛, 보스는 붉게 맥박 */
+.gm-bar.hp { height:9px; border-radius:6px; background:rgba(0,0,0,0.12); overflow:hidden; position:relative; }
+.gm-bar.hp i { background:linear-gradient(90deg,#ff8a50,#e53935); border-radius:6px; transition:width 0.15s ease-out; position:relative; overflow:hidden; display:block; height:100%; }
+.gm-bar.hp i::after { content:''; position:absolute; inset:0; background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,0.45) 50%,transparent 70%); background-size:200% 100%; animation:gmBarShine 1.8s linear infinite; }
+@keyframes gmBarShine { from { background-position:150% 0; } to { background-position:-50% 0; } }
+.gm-bar.hp.boss i { background:linear-gradient(90deg,#c62828,#7b1fa2); animation:gmBossPulse 0.9s ease-in-out infinite; }
+@keyframes gmBossPulse { 50% { filter:brightness(1.35); } }
+
+/* 단어 칩 — 지금 칠 단어를 크고 또렷하게 */
+.gm-keys.words .gm-key { height:30px; border-radius:15px; font-weight:600; }
+.gm-keys.words .gm-key.now { font-size:16px; padding:0 14px; box-shadow:0 0 0 3px rgba(232,115,42,0.18), 0 3px 8px rgba(232,115,42,0.25); animation:gmKeyIn 0.18s ease-out; }
+@keyframes gmKeyIn { from { transform:scale(0.8); opacity:0; } }
+.gm-keys.words .gm-key.done { text-decoration:line-through; }
+.gm-wordpop { position:absolute; z-index:25; transform:translateX(-50%); font-weight:800; font-size:16px; color:#2e9e5b; pointer-events:none; animation:gmWordPop 0.5s ease-out forwards; white-space:nowrap; }
+@keyframes gmWordPop { 0% { opacity:1; transform:translate(-50%,0) scale(1); } 100% { opacity:0; transform:translate(-50%,-26px) scale(1.25); } }
+
+/* 알림 — 카드형 */
+.gm-toast { display:flex; align-items:center; gap:8px; left:12px; right:12px; padding:9px 12px; border-radius:12px; background:var(--surface); color:var(--text);
+  border:1.5px solid var(--accent); box-shadow:0 8px 20px rgba(0,0,0,0.28); font-size:12.5px; line-height:1.45; animation:gmToastIn 0.25s ease-out; }
+.gm-toast-ic { font-size:20px; flex-shrink:0; }
+@keyframes gmToastIn { from { transform:translateY(-8px); opacity:0; } }
+
+/* 로그인 입력칸·버튼 */
+#gmNick, #gmPin { border-radius:12px; padding:11px 14px; font-size:14px; transition:border-color 0.15s, box-shadow 0.15s; }
+#gmNick:focus, #gmPin:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(232,115,42,0.18); }
+#gmStartBtn { border:none; border-radius:12px; padding:12px; font-weight:800; color:#fff; background:linear-gradient(90deg,#ff9a3c,#e8732a); box-shadow:0 4px 12px rgba(232,115,42,0.35); }
+#gmStartBtn:active { transform:translateY(1px); box-shadow:0 2px 6px rgba(232,115,42,0.35); }
+
+/* 휴대폰 조작 버튼 — 게임패드 느낌 */
+.gm-st-btns button { border:none; border-radius:14px; color:#fff; font-weight:800; background:linear-gradient(180deg,#5c6bc0,#3949ab);
+  box-shadow:0 4px 0 #283593, 0 6px 12px rgba(0,0,0,0.25); }
+.gm-st-btns button:active { transform:translateY(3px); box-shadow:0 1px 0 #283593; background:linear-gradient(180deg,#5c6bc0,#3949ab); }

@@ -350,12 +350,21 @@
       st.keys++;
       strike(power(st)*want.length*1.3*comboMult());
       afterWork();
+      wordPop(want);
       if(mon&&seqPos>=seq.length){ if(seq.length>1) floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
       combo=0;
       const k=el('gmKeys'); if(k){ k.classList.remove('miss'); void k.offsetWidth; k.classList.add('miss'); }
       renderKeys();
     }
+  }
+  // 맞힌 단어가 위로 착 날아가며 사라지는 효과
+  function wordPop(word){
+    const k=el('gmKeys'); if(!k) return;
+    const r=k.getBoundingClientRect(), wr=el('gmWidget').getBoundingClientRect();
+    const d=document.createElement('span'); d.className='gm-wordpop'; d.textContent=word;
+    d.style.left=(r.left-wr.left+r.width/2)+'px'; d.style.top=(r.top-wr.top)+'px';
+    el('gmWidget').appendChild(d); setTimeout(()=>d.remove(),500);
   }
   let enterPending=false;
   // 단어와 똑같아지면 Space/Enter 없이 바로 처리.
@@ -505,7 +514,7 @@
     w.id='gmWidget'; w.className='gm-widget'; w.tabIndex=0;
     w.innerHTML=`
       <div class="gm-head">
-        <span class="gm-title">테스토닉 키우기</span>
+        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>테스토닉 키우기</span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
           <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
@@ -559,7 +568,7 @@
     el('gmBody').innerHTML=`
       <div class="gm-login-hero" style="background-image:url('${UI}login-bg.jpg')"><img src="${CHARS[0].body}" alt=""/></div>
       <div class="gm-intro"><span>테스토닉에 신입 <b>${CHARS[0].name}</b>이 입사했습니다.<br>
-        화면에 뜨는 키(방향키·알파벳)를 순서대로 눌러 업무를 처리하고, 사장까지 승진시켜 주세요. 사장이 되면 다음 직원이 입사합니다.</span></div>
+        화면에 뜨는 단어를 입력해(휴대폰은 탭) 업무를 처리하고, 사장까지 승진시켜 주세요. 사장이 되면 다음 직원이 입사합니다.</span></div>
       <input class="gm-input" id="gmNick" maxlength="12" placeholder="닉네임 (랭킹에 표시)" autocomplete="off" value="${escHtml(guess)}" onkeydown="if(event.key==='Enter')document.getElementById('gmPin').focus()"/>
       <input class="gm-input" id="gmPin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN 숫자 4~6자리" autocomplete="off" onkeydown="if(event.key==='Enter')gmStart()"/>
       <div class="gm-login-msg" id="gmLoginMsg">처음 쓰는 닉네임이면 새로 입사, 이미 있는 닉네임이면 PIN으로 이어하기</div>
@@ -619,7 +628,7 @@
   function renderKeys(){
     const k=el('gmKeys'); if(!k) return;
     k.innerHTML=seq.map((x,i)=>`<span class="gm-key${i<seqPos?' done':i===seqPos?' now':''}">${escHtml(typeof x==='string'?x:x[1])}</span>`).join('')+
-      (combo>1?`<span class="gm-combo">${combo} 콤보 ×${comboMult().toFixed(2)}</span>`:'');
+      (combo>1?`<span class="gm-combo${combo>=20?' hot':''}"><img src="${UI}combo.png" alt=""/><b>${combo}</b> 콤보 ×${comboMult().toFixed(2)}</span>`:'');
   }
   // 터치 화면(휴대폰·태블릿)인지 — 화면 폭이 아니라 입력 장치로 판단(PC 브라우저 창을 좁혀도 PC 방식 유지)
   function isTouchDevice(){ return window.matchMedia('(pointer:coarse)').matches||window.matchMedia('(hover:none)').matches; }
@@ -658,6 +667,7 @@
       else { eb.style.display='none'; eb.dataset.id=''; } }
     if(mon){
       el('gmHpBar').style.width=Math.max(0,mon.hp/mon.max*100)+'%';
+      el('gmHpBar').parentElement.classList.toggle('boss',!!mon.boss);
       el('gmHpText').textContent=`남은 업무 ${fmt(Math.max(0,Math.ceil(mon.hp)))} / ${fmt(mon.max)}`;
       el('gmTimer').textContent=mon.boss?`⏱ ${Math.max(0,Math.ceil((mon.deadline-Date.now())/1000))}초`:'';
     }
@@ -670,7 +680,7 @@
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
       return `<button type="button" class="gm-tile${cls}" data-i="${i}">
         <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
-        <span class="gm-tile-icon">${locked?'🔒':SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon}</span>
+        <span class="gm-tile-icon">${locked?`<img src="${UI}lock.png" alt=""/>`:SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon}</span>
         <span class="gm-tile-name">${u.name}</span>
         <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
         <span class="gm-tile-cost">${locked?'':maxed?'MAX':MONEY+fmt(c)}</span></button>`;
@@ -688,7 +698,7 @@
     if(!tip||!box||tipIdx<0){ if(tip) tip.style.display='none'; return; }
     const u=UPGRADES[tipIdx], lv=st[u.key]||0, maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
     tip.innerHTML=`<b>${SKILL_IMG[u.key]?ic('skill-'+SKILL_IMG[u.key]+'.png'):u.icon} ${u.name}</b> <span>Lv.${lv}${maxed?' (MAX)':''}</span><br>`+
-      (locked?`🔒 ${rankOf(u.req)[2]}(Lv.${u.req}) 달성 시 열림<br>`:'')+
+      (locked?`${ic('lock.png')}${rankOf(u.req)[2]}(Lv.${u.req}) 달성 시 열림<br>`:'')+
       `현재: ${u.desc(lv)}`+(maxed?'':`<br>다음: ${u.desc(lv+1)}`);
     tip.style.display='';
     const wr=w.getBoundingClientRect(), br=box.getBoundingClientRect();
@@ -747,7 +757,9 @@
   function toast(text,ms){
     const w=el('gmWidget'); if(!w) return;
     const t=document.createElement('div');
-    t.className='gm-toast'; t.textContent=text;
+    t.className='gm-toast';
+    const m=String(text).match(/^(\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*)\s*/u); // 맨 앞 이모지는 왼쪽 아이콘 자리로
+    t.innerHTML=(m?`<span class="gm-toast-ic">${m[1]}</span>`:'')+`<span>${escHtml(m?text.slice(m[0].length):text)}</span>`;
     w.appendChild(t);
     setTimeout(()=>t.remove(),ms||2200);
   }
@@ -763,7 +775,7 @@
       const mine=board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
       html=`<div class="gm-rank-title">${ic(IC[board])}${board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹'} <small>(${j.players}명)</small></div>`+
         (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
-        j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}"><span>${i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
+        j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
         (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
     }catch(e){
       const why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
@@ -1243,7 +1255,7 @@
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
             ${w.img?`<img class="gm-isle-art" src="${UI}${w.img}" alt=""/>`:`<span class="gm-isle-icon">${w.icon}</span>`}
-            <span class="gm-isle-label"><b>${o||soon?w.name:'🔒 '+w.name}</b><small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
+            <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
             ${o||soon?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
       </div>
       <div class="gm-st-info" id="gmWorldMsg">섬을 눌러 미니게임에 들어가세요</div>
@@ -1257,7 +1269,7 @@
     lastInput=Date.now();
     if(w.req==null){ if(msg) msg.textContent='❓ 다음 미니게임은 곧 추가됩니다!'; return; }
     if(!acc.runs.some(r=>r&&r.lv>=w.req)){
-      if(msg) msg.innerHTML=`🔒 <b>'${rankOf(w.req)[2]}'</b> 이상 달성 시 자동으로 해금됩니다.`;
+      if(msg) msg.innerHTML=`${ic('lock.png')}<b>'${rankOf(w.req)[2]}'</b> 이상 달성 시 자동으로 해금됩니다.`;
       const b=document.querySelectorAll('.gm-isle')[i]; if(b){ b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); }
       return;
     }
@@ -1270,11 +1282,11 @@
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
   function gmShowChars(){
     const hire=canHire();
-    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic(IC.staff)}직원 <small>${hire?'🎫 입사권 1장 — 원하는 직원을 고르세요':'사장 1명 달성마다 원하는 직원 1명 입사'}</small></div>`+
+    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic(IC.staff)}직원 <small>${hire?ic('ticket.png')+'입사권 1장 — 원하는 직원을 고르세요':'사장 1명 달성마다 원하는 직원 1명 입사'}</small></div>`+
       CHARS.map((c,i)=>{
         const r=acc.runs[i], open=!!r||hire, cur=i===acc.ch;
         const diff=`업무량 ×${fmt(Math.pow(HP_STEP,r?r.tier:hiredCount()))}`;
-        const info=r?`${rankBadge(r.lv,'gm-row-badge')}${rankOf(r.lv)[2]} Lv.${r.lv} · ${r.stage}단계${r.done?' · 🚀 사장 달성':''}`:hire?'🎫 눌러서 입사시키기':'🔒 사장을 달성하면 입사 가능';
+        const info=r?`${rankBadge(r.lv,'gm-row-badge')}${rankOf(r.lv)[2]} Lv.${r.lv} · ${r.stage}단계${r.done?' · 🚀 사장 달성':''}`:hire?ic('ticket.png')+'눌러서 입사시키기':ic('lock.png')+'사장을 달성하면 입사 가능';
         return `<button type="button" class="gm-char-row${cur?' cur':''}${open?'':' locked'}" ${open&&!cur?`onclick="gmSwitchChar(${i})"`:'disabled'}>
           <span class="gm-avatar">${faceHtml(i)}</span>
           <span class="gm-char-row-text"><b>${escHtml(c.name)}${cur?' (키우는 중)':''}</b><small>${info}</small></span>
