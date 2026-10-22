@@ -23,7 +23,7 @@
    ===================================================================== */
 (function(){
   // 닉네임+PIN 계정으로 바꾸면서 저장 키를 새로 씀 — 예전(닉네임만) 기기 저장은 이어받지 않고 새로 시작(랭킹 초기화와 함께)
-  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy', LS_LOCK='airmax_game_lock';
+  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy', LS_LOCK='airmax_game_lock', LS_OPACITY='airmax_game_opacity';
   const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_HIDE=60000;
   // 게임이 비활성(숨김/닫힘/페이지 닫힘)일 때 커피 수혈은 10% 효율로, 최대 누적 시간은 야근 강화로 10분부터 5분씩 늘어남
   const OFFLINE_RATE=0.1, OFFLINE_BASE_MIN=10, OFFLINE_STEP_MIN=5;
@@ -465,7 +465,7 @@
         <span class="gm-title">테스토닉 키우기</span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()">📌</button>
-          <button type="button" title="반투명" onclick="gmToggleDim()">◐</button>
+          <button type="button" title="투명도" onclick="gmToggleDim()">◐</button>
           <button type="button" title="숨기기 (Esc)" onclick="gmHide()">−</button>
           <button type="button" title="닫기" onclick="gmClose()">×</button>
         </span>
@@ -476,7 +476,13 @@
     chip.id='gmChip'; chip.className='gm-chip'; chip.type='button'; chip.title='테스토닉 키우기'; chip.textContent='☕';
     chip.onclick=()=>gmShow();
     document.body.appendChild(chip);
-    if(lsGet(LS_POS,false)) w.classList.add('dim');
+    // 투명도 — 슬라이더로 정한 값을 마우스를 올리거나 플레이 중에도 그대로 유지(예전 '반투명' 켜 둔 기기는 35%로 시작)
+    const head0=w.querySelector('.gm-head');
+    head0.insertAdjacentHTML('afterend',`<div class="gm-opbar" id="gmOpBar" style="display:none"><span>투명도</span><input type="range" id="gmOpRange" min="20" max="100" step="5"/><b id="gmOpVal"></b></div>`);
+    let op=Number(lsGet(LS_OPACITY,0))||(lsGet(LS_POS,false)?35:100);
+    const applyOp=v=>{ op=Math.min(100,Math.max(20,v)); w.style.opacity=op/100; el('gmOpRange').value=op; el('gmOpVal').textContent=op+'%'; };
+    applyOp(op);
+    el('gmOpRange').addEventListener('input',e=>{ applyOp(+e.target.value); lsSet(LS_OPACITY,op); lastInput=Date.now(); });
     w.classList.toggle('locked',locked);
     w.addEventListener('pointerdown',()=>{ lastInput=Date.now(); });
     // 제목줄을 끌어서 창 이동 — 위치는 기억해 두고 다음에 열 때 그 자리에. 더블클릭하면 기본 위치(오른쪽 아래)로
@@ -1073,7 +1079,7 @@
     el('gmWidget').classList.toggle('locked',locked);
     toast(locked?'📌 고정 — 입력이 없어도 창을 숨기지 않습니다':'고정 해제 — 1분 동안 입력이 없으면 숨깁니다',2200);
   };
-  window.gmToggleDim=function(){ const w=el('gmWidget'); w.classList.toggle('dim'); lsSet(LS_POS,w.classList.contains('dim')); };
+  window.gmToggleDim=function(){ const b=el('gmOpBar'); if(b) b.style.display=b.style.display==='none'?'':'none'; };
 
   // 키보드 — 게임 창에 포커스가 있을 때만(대시보드 입력칸 타이핑과 섞이지 않게). Esc는 보스 키
   document.addEventListener('keydown',e=>{

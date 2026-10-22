@@ -1365,7 +1365,6 @@ body.checklist-page-active { padding-bottom:46px; }
   background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
 .gm-widget.dim { opacity:0.35; }
-.gm-widget.dim:hover { opacity:1; }
 .gm-head { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:var(--input-bg); border-bottom:1px solid var(--border); }
 .gm-title { font-weight:700; font-size:13px; }
 .gm-head-btns button { background:none; border:none; color:var(--text3); font-size:15px; width:24px; height:22px; cursor:pointer; border-radius:4px; font-family:inherit; }
@@ -1564,3 +1563,8 @@ body.checklist-page-active { padding-bottom:46px; }
 #gmRank { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
 .gm-rank-l { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-exp-num { flex-shrink:0; font-size:10.5px; color:var(--text3); font-variant-numeric:tabular-nums; }
+
+/* 테스토닉 키우기 — 투명도 슬라이더 (마우스를 올려도 유지) */
+.gm-opbar { display:flex; align-items:center; gap:8px; padding:6px 14px; border-bottom:1px solid var(--border2); font-size:11.5px; color:var(--text3); }
+.gm-opbar input { flex:1; accent-color:var(--accent); }
+.gm-opbar b { width:36px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums; }
