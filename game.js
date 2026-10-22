@@ -42,12 +42,21 @@
   // 그림 리소스(assets/game/ui) — 스킬·업무·아이템 아이콘, 월드 지도, 계단 배경·발판
   const UI='assets/game/ui/';
   const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay'};
-  const TASK_IMG={'어항 청소':'fishbowl','어항 물갈기':'fishbowl','사장님 차 세차':'bucket','사장님 댁 김장':'cabbage','사장님 강아지 산책':'collar',
-    '법인카드 영수증 풀칠':'receipts','정수기 물통 교체':'waterjug','회식 2차 노래방':'mic','팀장님 결재':'binder','회장님 방문':'cane'};
+  const TASK_IMG={'메일 폭탄':'mail','엑셀 정리':'excel','주간 보고서':'report','고객 전화':'phone','서류 더미':'papers','첨부 누락':'clip',
+    '프린터 고장':'printer','회의록':'notebook','시스템 오류':'laptop','점검표 취합':'clipboard',
+    '어항 청소':'fishbowl','어항 물갈기':'fishbowl','사장님 차 세차':'bucket','사장님 개인 심부름':'shopping','손님 커피 타기':'coffee2',
+    '사무실 화분 물주기':'plant','화장실 휴지 채우기':'tissue','정수기 물통 교체':'waterjug','택배 상하차':'boxes','퇴근 전 사무실 청소':'broom',
+    '탕비실 설거지':'dishes','사장님 골프 예약':'golf','사장님 자녀 숙제':'backpack','사장님 댁 김장':'cabbage','사장님 댁 이삿짐':'moving',
+    '명절 선물 포장':'gift','경조사 대리 참석':'flowers','형광등 교체':'bulb','사장님 차 대리 주차':'carkey','은행 심부름':'bank',
+    '회식 자리 예약':'beer','회식 2차 노래방':'mic','주말 출근':'calendar','행사 의자 나르기':'chairs','회사 블로그 사진':'camera',
+    '사장님 강아지 산책':'collar','법인카드 영수증 풀칠':'receipts','고장 난 의자 수리':'chair','에어컨 필터 청소':'filter','팩스 보내기':'fax',
+    '사장님 휴대폰 설정':'phone2','거래처 접대 운전':'sedan',
+    '팀장님 결재':'binder','부장님 검토':'review','분기 실적 보고':'chart','본부장 회의':'meeting','사장님 가족 행사':'party','회장님 방문':'cane','사장님 보고':'briefcase'};
   const MONEY=`<img class="gm-money" src="${UI}skill-bonus.png" alt="실적"/>`;
   const artCache={};
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
-  function artReady(im){ return im&&im.complete&&im.naturalWidth>0; } // 사장 = 만렙(150)
+  function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
+  function drawCover(g,im,W,H){ const k=Math.max(W/im.naturalWidth,H/im.naturalHeight), w=im.naturalWidth*k, h=im.naturalHeight*k; g.drawImage(im,(W-w)/2,(H-h)/2,w,h); } // 사장 = 만렙(150)
   // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
   const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png?v=2'},{name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png?v=2'},{name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png'},{name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png'},{name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png?v=2'},{name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png'},{name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png'}];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
@@ -980,6 +989,7 @@
   function skDraw(){
     const cv=el('gmSkCv'); if(!cv) return;
     const g=cv.getContext('2d'), S=suika; g.clearRect(0,0,S.W,S.H);
+    const bg=art('suika-bg.jpg'); if(artReady(bg)) drawCover(g,bg,S.W,S.H); // 과수원 나무 상자 배경
     const line=S.H*0.16;
     g.save(); g.setLineDash([12,10]); g.strokeStyle=S.danger>0?'#d93025':'rgba(150,150,150,0.5)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,line); g.lineTo(S.W,line); g.stroke(); g.restore();
     if(!S.over){
@@ -987,8 +997,8 @@
       g.save(); g.strokeStyle='rgba(150,150,150,0.35)'; g.lineWidth=2; g.beginPath(); g.moveTo(x,r*2+8); g.lineTo(x,S.H); g.stroke(); g.restore();
       skBall(g,null,S.cur,x,r+6,r,S.cool>0?0.45:0.95);
       // 다음 공 미리보기 (오른쪽 위)
-      const nr=Math.min(skR(S.next),S.W*0.045); g.font='bold 20px sans-serif'; g.fillStyle='rgba(150,150,150,0.9)'; g.textAlign='right'; g.textBaseline='middle';
-      g.fillText('다음',S.W-nr*2-22,nr+12); skBall(g,null,S.next,S.W-nr-10,nr+12,nr,0.9);
+      const nr=Math.min(skR(S.next),S.W*0.045); g.font='bold 22px sans-serif'; g.textAlign='right'; g.textBaseline='middle'; g.lineWidth=5; g.strokeStyle='rgba(0,0,0,0.55)';
+      g.strokeText('다음',S.W-nr*2-22,nr+12); g.fillStyle='#fff'; g.fillText('다음',S.W-nr*2-22,nr+12); skBall(g,null,S.next,S.W-nr-10,nr+12,nr,0.9);
     }
     for(const b of S.balls) skBall(g,b,b.t,b.x,b.y,b.r,S.over?0.5:1);
     if(S.flash){ if(performance.now()>S.flash.until) S.flash=null;
@@ -1089,7 +1099,8 @@
     g.clearRect(0,0,W,H);
     const cs=Math.floor(Math.min((H-16)/TT_H,(W*0.66)/TT_W)), bw=cs*TT_W, bh=cs*TT_H, bx=12, by=Math.floor((H-bh)/2);
     const css=getComputedStyle(el('gmWidget')), line=css.getPropertyValue('--border2').trim()||'#444', text=css.getPropertyValue('--text2').trim()||'#aaa';
-    g.fillStyle='rgba(0,0,0,0.18)'; g.fillRect(bx,by,bw,bh);
+    const bgi=art('tetris-bg.jpg'); if(artReady(bgi)) drawCover(g,bgi,W,H); // 밤 사무실 창밖 배경
+    g.fillStyle='rgba(8,12,30,0.55)'; g.fillRect(bx,by,bw,bh);
     g.strokeStyle=line; g.lineWidth=1;
     for(let i=0;i<=TT_W;i++){ g.beginPath(); g.moveTo(bx+i*cs+0.5,by); g.lineTo(bx+i*cs+0.5,by+bh); g.stroke(); }
     for(let j=0;j<=TT_H;j++){ g.beginPath(); g.moveTo(bx,by+j*cs+0.5); g.lineTo(bx+bw,by+j*cs+0.5); g.stroke(); }
