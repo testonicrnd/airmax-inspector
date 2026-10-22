@@ -38,7 +38,16 @@
   const BOSSES=[['👔','팀장님 결재'],['🧐','부장님 검토'],['📈','분기 실적 보고'],['🏢','본부장 회의'],['👨‍👩‍👧','사장님 가족 행사'],['🧓','회장님 방문'],['💼','사장님 보고']];
   // 레벨 → 직급 (노가다 감성으로 승진 간격이 점점 길어짐). 마지막 '사장'을 달성하면 다음 캐릭터 해금
   const RANKS=[[1,'🧑‍🎓','인턴'],[5,'🧑‍💻','사원'],[12,'🧑‍💼','주임'],[22,'👨‍💼','대리'],[35,'🕴️','과장'],[50,'🎩','차장'],[70,'👑','부장'],[95,'🦸','이사'],[112,'💼','상무이사'],[130,'🎖️','전무이사'],[150,'🚀','사장']];
-  const BOSS_LV=RANKS[RANKS.length-1][0]; // 사장 = 만렙(150)
+  const BOSS_LV=RANKS[RANKS.length-1][0];
+  // 그림 리소스(assets/game/ui) — 스킬·업무·아이템 아이콘, 월드 지도, 계단 배경·발판
+  const UI='assets/game/ui/';
+  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay'};
+  const TASK_IMG={'어항 청소':'fishbowl','어항 물갈기':'fishbowl','사장님 차 세차':'bucket','사장님 댁 김장':'cabbage','사장님 강아지 산책':'collar',
+    '법인카드 영수증 풀칠':'receipts','정수기 물통 교체':'waterjug','회식 2차 노래방':'mic','팀장님 결재':'binder','회장님 방문':'cane'};
+  const MONEY=`<img class="gm-money" src="${UI}skill-bonus.png" alt="실적"/>`;
+  const artCache={};
+  function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
+  function artReady(im){ return im&&im.complete&&im.naturalWidth>0; } // 사장 = 만렙(150)
   // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
   const CHARS=[{name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png'},{name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png?v=2'},{name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png?v=2'},{name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png'},{name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png'},{name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png?v=2'},{name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png'},{name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png'}];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
@@ -535,7 +544,7 @@
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
-      <div class="gm-stats"><span>💸 <b id="gmGold"></b></span><span id="gmStage"></span><span id="gmDps"></span></div>
+      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span id="gmStage"></span><span id="gmDps"></span></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         ${bodyHtml(acc.ch)}
         <div class="gm-task">
@@ -588,7 +597,8 @@
   }
   function renderMonster(){
     if(!mon||!el('gmMonster')) return;
-    el('gmMonster').textContent=mon.emoji;
+    const ti=TASK_IMG[mon.name];
+    if(ti) el('gmMonster').innerHTML=`<img src="${UI}task-${ti}.png" alt=""/>`; else el('gmMonster').textContent=mon.emoji;
     el('gmMonName').textContent=(mon.boss?'⚠ 보스 · ':mon.golden?'🌟 황금 · ':'')+mon.name;
     el('gmArena').classList.toggle('golden',!!mon.golden);
     el('gmArena').classList.toggle('boss',mon.boss);
@@ -619,10 +629,10 @@
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
       return `<button type="button" class="gm-tile${cls}" data-i="${i}">
         <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
-        <span class="gm-tile-icon">${locked?'🔒':u.icon}</span>
+        <span class="gm-tile-icon">${locked?'🔒':SKILL_IMG[u.key]?`<img src="${UI}skill-${SKILL_IMG[u.key]}.png" alt=""/>`:u.icon}</span>
         <span class="gm-tile-name">${u.name}</span>
         <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
-        <span class="gm-tile-cost">${locked?'':maxed?'MAX':'💸'+fmt(c)}</span></button>`;
+        <span class="gm-tile-cost">${locked?'':maxed?'MAX':MONEY+fmt(c)}</span></button>`;
     }).join('');
     const box=el('gmUps');
     if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }
@@ -800,6 +810,11 @@
     g.clearRect(0,0,W,H);
     const cs=getComputedStyle(el('gmWidget'));
     const top=cs.getPropertyValue('--accent').trim()||'#e8732a', side=cs.getPropertyValue('--border').trim()||'#888';
+    // 배경 — 세로로 긴 그림을 폭에 맞춰, 300층까지 오를수록 위쪽(하늘 → 우주)이 보이게
+    const bg=art('stairs-bg.jpg');
+    if(artReady(bg)){ const bh=bg.naturalHeight*W/bg.naturalWidth, prog=Math.min(1,stairs.count/300), sy=(bh-H)*(1-prog);
+      g.drawImage(bg,0,-sy,W,bh); }
+    const step=art('step.png'), stepOk=artReady(step);
     // 카메라 위치 f — 평소엔 지금 층, 로켓 비행 중엔 출발 층→도착 층으로 부드럽게
     let f=stairs.count, flyK=0;
     if(stairs.fly){ flyK=Math.min(1,(performance.now()-stairs.fly.t0)/stairs.fly.dur); const e=1-Math.pow(1-flyK,3); f=stairs.fly.from+(stairs.count-stairs.fly.from)*e; }
@@ -809,9 +824,12 @@
       const x=cx+(stairs.xs[i]-px)*SW, y=cy-(i-f)*SH;
       if(y<-40) break;
       if(stairs.grace&&i===stairs.count+1){ g.save(); g.shadowColor='#ffcf4a'; g.shadowBlur=24; g.fillStyle='#ffcf4a'; g.fillRect(x-BW/2-4,y-12,BW+8,18); g.restore(); }
-      g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
-      g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1;
-      if(stairs.items[i]&&i>stairs.count){ g.font='34px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.fillText(STAIR_ITEMS[stairs.items[i]],x,y-10); }
+      if(stepOk){ const sw=BW*1.12, sh=sw*step.naturalHeight/step.naturalWidth; g.globalAlpha=i<stairs.count?0.55:1; g.drawImage(step,x-sw/2,y-10,sw,sh); g.globalAlpha=1; }
+      else { g.fillStyle=side; g.fillRect(x-BW/2,y,BW,20);
+        g.fillStyle=i<stairs.count?side:top; g.globalAlpha=i<stairs.count?0.5:1; g.fillRect(x-BW/2,y-8,BW,10); g.globalAlpha=1; }
+      if(stairs.items[i]&&i>stairs.count){ const it=art('item-'+stairs.items[i]+'.png');
+        if(artReady(it)){ const ih=46, iw=ih*it.naturalWidth/it.naturalHeight; g.drawImage(it,x-iw/2,y-10-ih,iw,ih); }
+        else { g.font='34px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.fillText(STAIR_ITEMS[stairs.items[i]],x,y-10); } }
     }
     // 캐릭터 — 계단 위에 선 전신 이미지. 마지막으로 오른 방향을 바라보도록 좌우 반전(왼쪽으로 오르면 뒤집음)
     g.save();
@@ -821,8 +839,11 @@
       const h=96, w=Math.min(110,h*img.naturalWidth/img.naturalHeight), footY=cy-8;
       const face=stairs.count>0?stairs.dirs[stairs.count-1]:1;
       g.translate(cx,footY-(stairs.fly?Math.sin(flyK*Math.PI)*30:0)); // 비행 중엔 살짝 떠오름
-      if(stairs.fly){ g.font='40px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.fillText('🚀',0,-6); }
-      if(stairs.shield>0&&!stairs.over){ g.font='30px sans-serif'; g.textAlign='left'; g.textBaseline='middle'; g.fillText('🛡️'+(stairs.shield>1?'×'+stairs.shield:''),w/2+2,-h*0.55); } // 방패 보유 표시
+      if(stairs.fly){ const rk=art('item-rocket.png'); if(artReady(rk)){ const rh=58, rw=rh*rk.naturalWidth/rk.naturalHeight; g.drawImage(rk,-rw/2,-8,rw,rh); } else { g.font='40px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.fillText('🚀',0,-6); } }
+      if(stairs.shield>0&&!stairs.over){ const sd=art('item-shield.png'); // 방패 보유 표시
+        if(artReady(sd)){ const sh2=36, sw2=sh2*sd.naturalWidth/sd.naturalHeight; g.drawImage(sd,w/2+2,-h*0.55-sh2/2,sw2,sh2);
+          if(stairs.shield>1){ g.font='bold 22px sans-serif'; g.textAlign='left'; g.textBaseline='middle'; g.lineWidth=4; g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText('×'+stairs.shield,w/2+sw2+4,-h*0.55); g.fillStyle='#fff'; g.fillText('×'+stairs.shield,w/2+sw2+4,-h*0.55); } }
+        else { g.font='30px sans-serif'; g.textAlign='left'; g.textBaseline='middle'; g.fillText('🛡️'+(stairs.shield>1?'×'+stairs.shield:''),w/2+2,-h*0.55); } }
       if(face<0) g.scale(-1,1);
       g.drawImage(img,-w/2,-h,w,h);
     } else {
@@ -838,8 +859,8 @@
       else { g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)'; g.strokeText(stairs.flash.text,W/2,16); g.fillStyle='#ffcf4a'; g.fillText(stairs.flash.text,W/2,16); }
     }
     // 다음 방향 힌트 없음(직접 보고 판단). 층수 표시
-    g.fillStyle=cs.getPropertyValue('--text3').trim()||'#999'; g.font='bold 26px sans-serif'; g.textAlign='right'; g.textBaseline='bottom';
-    g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
+    g.font='bold 28px sans-serif'; g.textAlign='right'; g.textBaseline='bottom'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)';
+    g.strokeText(stairs.count.toLocaleString()+'층',W-16,H-12); g.fillStyle='#fff'; g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
   }
   window.gmShowStairs=gmShowStairs;
   if(window.__GM_TEST) window.__gmStairs=()=>stairs; // 자동 테스트에서만 내부 상태 확인용
@@ -1096,12 +1117,23 @@
 
   /* ---------- 미니게임 월드 ---------- */
   // 구름 섬 지도. 열린 섬은 둥실둥실 + 최고 기록, 잠긴 섬은 안개 + 🔒(누르면 해금 직급 안내). 준비 중 섬으로 다음 게임 예고
+  // pos: 지도 그림(world-map.jpg) 안 빈 섬의 위치(가로·세로 비율). 본사 섬에서 점선을 따라 계단 → 수박 → 테트리스
   const WORLD=[
-    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),pos:[27,30]},
-    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), pos:[73,42]},
-    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),pos:[30,68]},
-    {id:'soon',  icon:'❓',name:'준비 중',    req:null,      best:()=>'',go:null,pos:[72,80]},
+    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),pos:[0.645,0.545],img:'isle-stairs.png',ar:1.42,top:0.62},
+    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), pos:[0.32,0.345],img:'isle-suika.png',ar:1.07,top:0.45},
+    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),pos:[0.645,0.16],img:'isle-tetris.png',ar:1.11,top:0.45},
+    {id:'soon',  icon:'❓',name:'준비 중',    req:null,      best:()=>'',go:null,pos:[0.2,0.2]},
   ];
+  const MAP_W=760, MAP_H=1064; // world-map.jpg 크기
+  // 지도 그림을 영역에 꽉 채웠을 때(cover, 세로는 위쪽 20% 기준 — CSS background-position과 같게) 섬 위치를 화면 좌표로.
+  // 섬 그림은 잔디 윗면(top: 그림 높이 대비 위치)이 지도 속 빈 섬 위에 오도록 배치
+  function placeIsles(){
+    const box=el('gmWorld'); if(!box) return;
+    const W=box.clientWidth, H=box.clientHeight, k=Math.max(W/MAP_W,H/MAP_H), ox=(W-MAP_W*k)/2, oy=(H-MAP_H*k)*0.2;
+    box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], x=ox+w.pos[0]*MAP_W*k, y=oy+w.pos[1]*MAP_H*k;
+      if(w.img){ const iw=Math.round(0.30*MAP_W*k); b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*w.ar*w.top)+'px'; }
+      else { b.style.left=x+'px'; b.style.top=y+'px'; } });
+  }
   function gmShowWorld(){
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
     const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
@@ -1110,14 +1142,15 @@
       <div class="gm-world" id="gmWorld">
         <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i>
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
-          return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}" style="left:${w.pos[0]}%;top:${w.pos[1]}%;animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
-            <span class="gm-isle-icon">${w.icon}</span><b>${w.name}</b>
-            <small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`🔒 ${rankOf(w.req)[2]} 이상`}</small>
-            ${o?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
+          return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
+            ${w.img?`<img class="gm-isle-art" src="${UI}${w.img}" alt=""/>`:`<span class="gm-isle-icon">${w.icon}</span>`}
+            <span class="gm-isle-label"><b>${o||soon?w.name:'🔒 '+w.name}</b><small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
+            ${o||soon?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
       </div>
-      <div class="gm-st-info" id="gmWorldMsg">구름 섬을 눌러 미니게임에 들어가세요</div>
+      <div class="gm-st-info" id="gmWorldMsg">섬을 눌러 미니게임에 들어가세요</div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
+    placeIsles();
   }
   window.gmShowWorld=gmShowWorld;
   window.gmWorldGo=function(i){
