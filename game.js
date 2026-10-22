@@ -521,7 +521,6 @@
   let lastTickAt=0;
   let beanAt=0;
   function tick(){
-    if(opened&&!gameAllowed()){ gmClose(); return; } // 관리자 로그아웃 시 바로 닫음
     if(!mon) return;
     const now=Date.now(), dt=Math.min((now-(lastTickAt||now))/1000,5); // 너무 오래 멈췄던 경우는 자리 비움 계산이 처리
     lastTickAt=now;
@@ -1700,11 +1699,42 @@
     }
   });
 
-  // 관리자 인증을 거친 사람만 — 휴대폰 등에서 우연히 열리지 않게.
-  // script.js의 전역을 읽는다(둘 다 defer라 script.js가 먼저 실행됨). 없으면 막는 쪽으로 판단.
-  function gameAllowed(){ try{ return typeof adminAuthenticated!=='undefined'&&!!adminAuthenticated; }catch(e){ return false; } }
+  // 이 기기에서 한 번이라도 관리 코드를 넣었는지 — 휴대폰 등에서 우연히 열리지 않게.
+  // 코드는 소스에 그대로 두지 않고 섞은 값으로만 비교한다(저장소를 훑어도 눈에 띄지 않게).
+  const LS_PASS='airmax_mg_ok', CODE_H=1722942;
+  function codeHash(v){ let h=0; const t=String(v||'').trim(); for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; return h; }
+  function gameAllowed(){ try{ return lsGet(LS_PASS,false)===true; }catch(e){ return false; } }
+  // 관리 화면은 여전히 슈퍼 관리자만 (script.js의 전역을 읽음 — 둘 다 defer라 script.js가 먼저 실행됨)
   function gameSuper(){ try{ return typeof superAdminAuthenticated!=='undefined'&&!!superAdminAuthenticated; }catch(e){ return false; } }
   function gameAdminToken(){ try{ return typeof adminToken!=='undefined'?adminToken:''; }catch(e){ return ''; } }
+
+  // 관리 코드 입력 창 — 겉보기로는 내부 관리 기능처럼만 보이게
+  function askCode(){
+    if(document.getElementById('mgAsk')) return;
+    const d=document.createElement('div');
+    d.id='mgAsk'; d.className='mg-ask';
+    d.innerHTML=`<div class="mg-ask-box">
+        <div class="mg-ask-t">관리 코드 입력</div>
+        <input type="password" id="mgAskIn" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="코드"/>
+        <div class="mg-ask-err" id="mgAskErr"></div>
+        <div class="mg-ask-btns">
+          <button type="button" class="mg-ask-no" id="mgAskNo">취소</button>
+          <button type="button" class="mg-ask-ok" id="mgAskOk">확인</button>
+        </div></div>`;
+    document.body.appendChild(d);
+    const inp=d.querySelector('#mgAskIn'), err=d.querySelector('#mgAskErr');
+    const close=()=>d.remove();
+    const submit=()=>{
+      if(codeHash(inp.value)===CODE_H){ try{ lsSet(LS_PASS,true); }catch(e){} close(); gmOpen(); return; }
+      err.textContent='코드가 올바르지 않습니다.';
+      inp.value=''; inp.focus();
+    };
+    d.querySelector('#mgAskOk').addEventListener('click',submit);
+    d.querySelector('#mgAskNo').addEventListener('click',close);
+    d.addEventListener('click',e=>{ if(e.target===d) close(); });
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submit(); } if(e.key==='Escape') close(); });
+    setTimeout(()=>inp.focus(),30);
+  }
 
   // 이스터에그 — 푸터 AIRMAX를 2초 안에 3번
   let taps=[];
@@ -1712,6 +1742,6 @@
     if(!e.target.closest('.footer-brand')) return;
     const now=Date.now();
     taps=taps.filter(t=>now-t<2000).concat(now);
-    if(taps.length>=3){ taps=[]; if(gameAllowed()) gmOpen(); } // 미인증이면 조용히 무시(있는 티를 내지 않음)
+    if(taps.length>=3){ taps=[]; if(gameAllowed()) gmOpen(); else askCode(); }
   });
 })();

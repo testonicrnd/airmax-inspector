@@ -1361,6 +1361,21 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
 
 /* ===== 숨은 미니 게임 "테스토닉 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
+/* 관리 코드 입력 — 겉보기로는 내부 관리 기능처럼만 보이게(게임 티를 내지 않음) */
+.mg-ask { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; }
+.mg-ask-box { width:260px; background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:12px;
+  box-shadow:0 12px 32px rgba(0,0,0,0.28); padding:16px 16px 13px; font-size:13px; }
+.mg-ask-t { font-weight:700; font-size:13px; margin-bottom:10px; }
+.mg-ask-box input { width:100%; box-sizing:border-box; padding:8px 10px; border:1.5px solid var(--border); border-radius:8px;
+  background:var(--input-bg); color:var(--text); font-family:inherit; font-size:14px; letter-spacing:3px; text-align:center; }
+.mg-ask-box input:focus { outline:none; border-color:var(--accent); }
+.mg-ask-err { min-height:15px; font-size:11px; color:#d93025; margin:5px 1px 0; }
+.mg-ask-btns { display:flex; gap:6px; margin-top:7px; }
+.mg-ask-btns button { flex:1; padding:7px 0; border-radius:8px; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; }
+.mg-ask-no { border:1.5px solid var(--border); background:var(--surface); color:var(--text2); }
+.mg-ask-no:hover { border-color:var(--text3); color:var(--text); }
+.mg-ask-ok { border:1.5px solid var(--accent); background:var(--accent); color:#fff; }
+.mg-ask-ok:hover { filter:brightness(1.07); }
 .gm-widget { position:fixed; right:16px; bottom:48px; z-index:900; width:400px; max-width:calc(100vw - 32px); max-height:calc(100vh - 64px);
   background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.25); font-size:13px; overflow:hidden; transition:opacity 0.2s; user-select:none; }
