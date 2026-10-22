@@ -42,23 +42,30 @@
     '볼복귀','스프링','외관','청소','먼지','포집','누적','가동','가동시간','점검구분','소모품교체','제품종류','담당자','확인자'];
   const WORD_MIN=2, WORD_MAX=6, BOSS_WORDS=3;
   let words=WORD_BASE.slice();
+  // 점검표에 오타로 올라간 장소 단어 고치기 (시트를 고쳐도 남아 있는 기록이 있을 수 있어서)
+  const WORD_FIX={'운동잠현관':'운동장현관','운동잠':'운동장'};
   function placeWords(list){
     const out=new Set();
     (list||[]).forEach(p=>[p&&p.name,...((p&&p.areas)||[])].forEach(t=>String(t||'').split(/[\s()\[\]{}·,.\/\-_~!?:;'"]+/).forEach(w=>{
+      w=WORD_FIX[w]||w;
       if(w.length>=WORD_MIN&&w.length<=WORD_MAX&&/[가-힣]/.test(w)&&!/^\d/.test(w)) out.add(w);
     })));
     return [...out];
   }
+  function setWords(list){ words=[...new Set(WORD_BASE.concat(placeWords(list)))]; }
+  // 기기에 저장된 장소 목록으로 먼저 만들고, 게임을 열 때마다 서버의 최신 목록(시트에서 고친 내용 포함)으로 다시 만듦
   function refreshWords(){
     let list=[];
     try{ list=(typeof clPlaces!=='undefined'&&clPlaces.length)?clPlaces:(lsGet('airmax_checklist_places',[])||[]); }catch(e){}
-    const pw=placeWords(list);
-    words=[...new Set(WORD_BASE.concat(pw,pw))]; // 장소 단어도 고르게 섞이도록
-    if(!pw.length&&!refreshWords.fetched){
-      // 이 기기에서 점검표를 열어본 적이 없으면 장소 목록을 한 번 받아 옴
-      refreshWords.fetched=true;
-      gas({action:'getChecklistPlaces'}).then(j=>{ if(j&&j.success&&Array.isArray(j.places)) words=[...new Set(WORD_BASE.concat(placeWords(j.places)))]; }).catch(()=>{});
-    }
+    setWords(list);
+    gas({action:'getChecklistPlaces'}).then(j=>{
+      if(!j||!j.success||!Array.isArray(j.places)) return;
+      setWords(j.places);
+      lsSet('airmax_checklist_places',j.places); // 점검표 장소 목록 캐시도 최신으로
+      try{ if(typeof clPlaces!=='undefined') clPlaces=j.places; }catch(e){}
+      // 지금 화면의 단어가 고쳐진 단어 목록에 없으면(오타 등) 새 단어로
+      if(usingWords()&&typeof seq[seqPos]==='string'&&!words.includes(seq[seqPos])){ seq[seqPos]=words[Math.floor(Math.random()*words.length)]; renderKeys(); }
+    }).catch(()=>{});
   }
   function usingWords(){ return !isTouchDevice(); }
   // 휴대폰 탭용 키 — 방향키 + 알파벳
