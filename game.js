@@ -337,6 +337,12 @@
   let holdTimer=0;
   function holdStop(){ clearTimeout(holdTimer); holdTimer=0; }
   function bindUpgradeHold(box){
+    // 설명 말풍선 — 마우스가 ? 위에 있을 때만. 타일이 새로 그려져도(강화·비용 변경) 목록 단위로 판단하므로 남지 않음
+    box.addEventListener('mouseover',e=>{
+      const q=e.target.closest('.gm-tile-q');
+      if(q){ const i=+q.closest('.gm-tile').dataset.i; if(tipIdx!==i||tipSticky){ tipIdx=i; tipSticky=false; renderTip(); } }
+      else if(tipIdx>=0&&!tipSticky){ tipIdx=-1; renderTip(); }
+    });
     box.addEventListener('pointerdown',e=>{
       const tile=e.target.closest('.gm-tile'); if(!tile||e.target.closest('.gm-tile-q')) return;
       if(e.button>0) return;
@@ -350,6 +356,7 @@
     });
   }
   window.addEventListener('pointerup',holdStop);
+  document.addEventListener('pointerdown',e=>{ if(tipIdx>=0&&!e.target.closest('.gm-tile-q')){ tipIdx=-1; tipSticky=false; renderTip(); } },true);
   window.addEventListener('pointercancel',holdStop);
   window.addEventListener('blur',holdStop);
   // 게임이 비활성이던 동안 — 커피 수혈이 10% 효율로 실제로 업무를 처리한 것처럼 계산 (최대 누적 시간은 야근 강화로 늘어남).
@@ -469,6 +476,7 @@
   }
   function setLoginMsg(text,err){ const m=el('gmLoginMsg'); if(m){ m.textContent=text; m.classList.toggle('err',!!err); } }
   function renderPlay(){
+    tipIdx=-1; tipSticky=false;
     el('gmBody').innerHTML=`
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
@@ -548,7 +556,7 @@
       const lv=st[u.key]||0, c=costOf(u,lv), maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
       const cls=locked?' locked':maxed?' maxed':st.gold<c?' off':'';
       return `<button type="button" class="gm-tile${cls}" data-i="${i}">
-        <span class="gm-tile-q" onmouseenter="gmTip(event,${i},true)" onclick="gmTip(event,${i})">?</span>
+        <span class="gm-tile-q" onclick="gmTip(event,${i})">?</span>
         <span class="gm-tile-icon">${locked?'🔒':u.icon}</span>
         <span class="gm-tile-name">${u.name}</span>
         <span class="gm-tile-lv">${locked?rankOf(u.req)[2]+' 달성':'Lv.'+lv}</span>
@@ -572,11 +580,14 @@
     const wr=w.getBoundingClientRect(), br=box.getBoundingClientRect();
     tip.style.top=Math.max(4,br.top-wr.top-tip.offsetHeight-6)+'px';
   }
-  window.gmTip=function(e,i,hover){
-    e.stopPropagation(); if(!hover) e.preventDefault();
-    tipIdx=(!hover&&tipIdx===i)?-1:i; renderTip();
+  // ? 클릭/탭 — 고정해서 열기(다시 누르면 닫힘). 마우스 올림은 bindUpgradeHold에서 목록 단위로 처리
+  let tipSticky=false;
+  window.gmTip=function(e,i){
+    e.stopPropagation(); e.preventDefault();
+    if(tipIdx===i&&tipSticky){ tipIdx=-1; tipSticky=false; } else { tipIdx=i; tipSticky=true; }
+    renderTip();
   };
-  window.gmTipHide=function(){ tipIdx=-1; renderTip(); };
+  window.gmTipHide=function(){ if(tipSticky) return; tipIdx=-1; renderTip(); };
   function renderSaveState(){
     const s=el('gmSave'); if(!s) return;
     s.textContent=serverOk===false?'기기에만 저장 중':(serverOk?'자동 저장됨':'');
