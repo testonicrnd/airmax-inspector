@@ -428,6 +428,7 @@
           <div class="gm-mon-name" id="gmMonName"></div>
           <div class="gm-monster" id="gmMonster"></div>
           <div class="gm-bar hp"><i id="gmHpBar"></i></div>
+          <div class="gm-hp-text" id="gmHpText"></div>
           <div class="gm-timer" id="gmTimer"></div>
         </div>
         <div class="gm-float-layer" id="gmFloat"></div>
@@ -482,15 +483,19 @@
     el('gmDps').textContent=`☕ 초당 ${fmt(autoDps(st))}`;
     if(mon){
       el('gmHpBar').style.width=Math.max(0,mon.hp/mon.max*100)+'%';
+      el('gmHpText').textContent=`남은 업무 ${fmt(Math.max(0,Math.ceil(mon.hp)))} / ${fmt(mon.max)}`;
       el('gmTimer').textContent=mon.boss?`⏱ ${Math.max(0,Math.ceil((mon.deadline-Date.now())/1000))}초`:'';
     }
-    el('gmUps').innerHTML=UPGRADES.map((u,i)=>{
+    // 강화 목록 — 바뀐 게 있을 때만 다시 그림(누르는 도중에 버튼이 새로 그려져 클릭이 씹히지 않게)
+    const ups=UPGRADES.map((u,i)=>{
       const lv=st[u.key], c=costOf(u,lv), maxed=lv>=u.max;
       return `<button type="button" class="gm-up" ${maxed||st.gold<c?'disabled':''} onclick="gmBuy(${i})">
         <span class="gm-up-icon">${u.icon}</span>
         <span class="gm-up-text"><b>${u.name} Lv.${lv}</b><small>${maxed?'':'다음: '}${u.desc(lv+(maxed?0:1))}</small></span>
         <span class="gm-up-cost">${maxed?'MAX':'💰'+fmt(c)}</span></button>`;
     }).join('');
+    const box=el('gmUps');
+    if(box.dataset.html!==ups){ box.innerHTML=ups; box.dataset.html=ups; }
     renderSaveState();
   }
   function renderSaveState(){

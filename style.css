@@ -1474,3 +1474,10 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-type:focus { outline:none; border-color:var(--accent, #e8732a); }
 #gmLockBtn { opacity:0.35; filter:grayscale(1); }
 .gm-widget.locked #gmLockBtn { opacity:1; filter:none; }
+
+/* 테스토닉 키우기 — 남은 업무 수치 / 강화 목록은 창 안에서 스크롤 (창이 계속 길어지지 않게) */
+.gm-hp-text { font-size:10.5px; color:var(--text3); margin-top:2px; font-variant-numeric:tabular-nums; }
+.gm-ups { max-height:150px; overflow-y:auto; overscroll-behavior:contain; padding-right:2px; }
+.gm-ups::-webkit-scrollbar { width:5px; }
+.gm-ups::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+.gm-ups .gm-up { flex-shrink:0; }
