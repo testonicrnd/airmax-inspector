@@ -2,7 +2,7 @@
    숨은 미니 게임 — "좆좋소 키우기" (이스터에그)
    하단 푸터의 AIRMAX 글자를 2초 안에 3번 누르면 오른쪽 아래에 작은 창으로 열림.
    대시보드 표를 가리지 않도록 작은 창 + 반투명 전환, Esc 또는 [−]로 즉시 숨기기(보스 키).
-   1분 동안 입력이 없으면 자동 저장 후 창을 숨김.
+   고정 안 했을 때 1분 동안 입력이 없으면 5% 투명(마우스 올리면 복귀), 5분이면 자동 저장 후 창을 숨김.
 
    조작(PC): 업무마다 뜨는 단어(점검 장소·구분·항목·결과 등 짧은 단어)를 입력칸에 치고 Space/Enter — 옆에서 보면 일하는 모습.
    보스(결재)는 단어 여러 개. 맞게 이어서 치면 콤보로 처리량 증가, 틀리면 콤보 초기화. 긴 단어일수록 한 번에 많이 처리.
@@ -26,7 +26,7 @@
 (function(){
   // 닉네임+PIN 계정으로 바꾸면서 저장 키를 새로 씀 — 예전(닉네임만) 기기 저장은 이어받지 않고 새로 시작(랭킹 초기화와 함께)
   const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy', LS_LOCK='airmax_game_lock', LS_OPACITY='airmax_game_opacity';
-  const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_HIDE=60000;
+  const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_DIM=60000, IDLE_HIDE=300000; // 고정 안 했을 때: 1분 무입력 → 5% 투명, 5분 → 숨김
   // 게임이 비활성(숨김/닫힘/페이지 닫힘)일 때 커피 수혈은 10% 효율로, 최대 누적 시간은 야근 강화로 10분부터 5분씩 늘어남
   const OFFLINE_RATE=0.1, OFFLINE_BASE_MIN=10, OFFLINE_STEP_MIN=5;
   // 업무 — [아이콘, 이름, 최소 직급, 최대 직급]. 직급(rankNo 1=인턴 … 11=사장)에 맞는 업무만 나옴.
@@ -587,8 +587,10 @@
       toast(`⏰ ${mon.name} 실패… 실력을 더 쌓고 다시 도전`);
       spawn(false);
     }
-    // 1분 동안 입력이 없으면 저장하고 숨김 (📌 고정 중이면 숨기지 않음)
-    if(!locked&&isVisible()&&Date.now()-lastInput>IDLE_HIDE) gmHide();
+    // 1분 무입력 → 5% 투명, 5분 → 저장하고 숨김 (📌 고정 중이면 둘 다 안 함)
+    { const idle=Date.now()-lastInput, w=el('gmWidget');
+      if(w) w.classList.toggle('idle',!locked&&idle>IDLE_DIM); // 손 놓으면 거의 안 보이게
+      if(!locked&&isVisible()&&idle>IDLE_HIDE) gmHide(); }
     if(Date.now()-lastRender>200) render();
     // 이벤트 시작/종료 알림
     const ev=currentEvent(), id=ev?ev.id+kst().key+ev.h:'';
@@ -712,6 +714,8 @@
     el('gmOpRange').addEventListener('input',e=>{ applyOp(+e.target.value); lsSet(LS_OPACITY,op); lastInput=Date.now(); });
     w.classList.toggle('locked',locked);
     w.addEventListener('pointerdown',()=>{ lastInput=Date.now(); });
+    // 마우스를 올리면 바로 원래 투명도로
+    w.addEventListener('pointerenter',()=>{ lastInput=Date.now(); w.classList.remove('idle'); });
     // 제목줄을 끌어서 창 이동 — 위치는 기억해 두고 다음에 열 때 그 자리에. 더블클릭하면 기본 위치(오른쪽 아래)로
     const head=w.querySelector('.gm-head');
     let drag=null;
@@ -1936,7 +1940,7 @@
   window.gmToggleLock=function(){
     locked=!locked; lsSet(LS_LOCK,locked); lastInput=Date.now();
     el('gmWidget').classList.toggle('locked',locked);
-    toast(locked?'📌 고정 — 입력이 없어도 창을 숨기지 않습니다':'고정 해제 — 1분 동안 입력이 없으면 숨깁니다',2200);
+    toast(locked?'📌 고정 — 입력이 없어도 창을 숨기지 않습니다':'고정 해제 — 1분 쉬면 흐려지고, 5분 쉬면 숨깁니다',2200);
   };
   window.gmToggleDim=function(){ const b=el('gmOpBar'); if(b) b.style.display=b.style.display==='none'?'':'none'; };
 

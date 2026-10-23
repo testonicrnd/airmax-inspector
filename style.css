@@ -2049,3 +2049,6 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-crew-m.oops > i { animation:gmOopsIco 1.2s ease-out; }
 @keyframes gmCrewOops { 10%,30%,50%,70% { transform:translateX(-3px) rotate(-5deg); } 20%,40%,60% { transform:translateX(3px) rotate(5deg); } }
 @keyframes gmOopsIco { 0% { opacity:0; transform:translate(-50%,4px) scale(0.5); } 20% { opacity:1; transform:translate(-50%,-4px) scale(1.2); } 80% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-10px); } }
+/* 고정 안 했을 때 1분 쉬면 거의 안 보이게 — 사용자 투명도 설정보다 우선, 마우스를 올리면 복귀 */
+.gm-widget.idle { opacity:0.05 !important; transition:opacity 0.6s; }
+.gm-widget.idle:hover { opacity:1 !important; }
