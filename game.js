@@ -170,7 +170,7 @@
     {key:'offLv',   icon:'🌙', name:'야근',        desc:lv=>lv?`자리를 비워도 최대 ${fmtMin(offlineCapMin(lv))} 동안 커피 수혈(${Math.round(offRate(st.payLv)*100)}%)`:'아직 효과 없음 — 1레벨부터 10분', base:60, grow:1.3, max:47},
     {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
     {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
-    {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
+    {key:'tetrisLv',icon:'🧱', name:'블록 고수', desc:lv=>`테트리스·블록 블라스트 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
     {key:'bsLv',    icon:'🚢', name:'해전 제독', desc:lv=>`해전 경험치 +${lv*20}%`, base:5000, grow:1.45, max:25, req:12},
     {key:'ocLv',    icon:'🃏', name:'원카드 타짜', desc:lv=>`원카드 경험치 +${lv*20}%`, base:2000000000, grow:1.45, max:25, req:50},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
@@ -1112,13 +1112,13 @@
   // 원카드 전적 — 12승 8패 · 60%
   function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
   async function gmShowRanking(board){
-    board=['stairs','suika','tetris','onecard','battleship'].includes(board)?board:'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button><button type="button" class="${board==='battleship'?'on':''}" onclick="gmShowRanking('battleship')">${ic(IC.battleship)}해전</button></div>`;
+    board=['stairs','suika','tetris','block','onecard','battleship'].includes(board)?board:'promo';
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='block'?'on':''}" onclick="gmShowRanking('block')">🧩블록</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button><button type="button" class="${board==='battleship'?'on':''}" onclick="gmShowRanking('battleship')">${ic(IC.battleship)}해전</button></div>`;
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
-    const info=x=>board==='onecard'||board==='battleship'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-    const mine=board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
-    const title=board==='onecard'?'원카드 전적 (같이 하기)':board==='battleship'?'해전 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
-    const body=(j,stale)=>`<div class="gm-rank-title">${IC[board]?ic(IC[board]):'<span class="bs-ic">🚢</span>'}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
+    const info=x=>board==='block'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.block||0).toLocaleString()}점`:board==='onecard'||board==='battleship'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+    const mine=board==='block'?`${(acc.bbBest||0).toLocaleString()}점`:board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
+    const title=board==='block'?'블록 블라스트 최고 점수':board==='onecard'?'원카드 전적 (같이 하기)':board==='battleship'?'해전 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
+    const body=(j,stale)=>`<div class="gm-rank-title">${IC[board]?ic(IC[board]):'<span class="bs-ic">🧩</span>'}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
       (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
       j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
       (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${(board==='onecard'||board==='battleship')&&j.mine?ocRecord(j.mine.w,j.mine.g):mine}</span></div>`:'')+
@@ -2464,6 +2464,139 @@
   }
   window.gmBattleshipExit=function(){ bsLeave(); saveServer(true); gmShowWorld(); };
 
+  // ===== 블록 블라스트 — 테트리스와 같은 조건(과장)으로 열림, 경험치 스킬도 테트리스와 같이 씀(블록 고수). 8×8 판에 블록 3개씩 끌어다 놓기, 가로·세로 한 줄이 차면 지워짐 =====
+  // 연속으로 줄을 지우면 콤보(3번 놓는 동안 못 지우면 끊김). 남은 블록을 어디에도 못 놓으면 끝
+  const BB_REQ=TT_REQ, BB_BASE=1500, BB_N=8;
+  const BB_TILES=['I','J','L','O','S','T','Z']; // 테트리스 젤리 블록 그림 재사용(tt-*.png)
+  // 모양 — [행,열] 목록, w: 나올 확률 가중치
+  const BB_SHAPES=[
+    {c:[[0,0]],w:4},
+    {c:[[0,0],[0,1]],w:5},{c:[[0,0],[1,0]],w:5},
+    {c:[[0,0],[0,1],[0,2]],w:5},{c:[[0,0],[1,0],[2,0]],w:5},
+    {c:[[0,0],[0,1],[0,2],[0,3]],w:4},{c:[[0,0],[1,0],[2,0],[3,0]],w:4},
+    {c:[[0,0],[0,1],[0,2],[0,3],[0,4]],w:2},{c:[[0,0],[1,0],[2,0],[3,0],[4,0]],w:2},
+    {c:[[0,0],[0,1],[1,0],[1,1]],w:6},
+    {c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],w:3},{c:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],w:3},
+    {c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],w:2},
+    {c:[[0,0],[1,0],[1,1]],w:3},{c:[[0,0],[0,1],[1,0]],w:3},{c:[[0,0],[0,1],[1,1]],w:3},{c:[[0,1],[1,0],[1,1]],w:3},
+    {c:[[0,0],[1,0],[2,0],[2,1]],w:2},{c:[[0,1],[1,1],[2,1],[2,0]],w:2},{c:[[0,0],[0,1],[0,2],[1,0]],w:2},{c:[[0,0],[0,1],[0,2],[1,2]],w:2},
+    {c:[[0,0],[0,1],[1,1],[2,1]],w:2},{c:[[0,0],[0,1],[1,0],[2,0]],w:2},{c:[[0,2],[1,0],[1,1],[1,2]],w:2},{c:[[0,0],[1,0],[1,1],[1,2]],w:2},
+    {c:[[0,0],[0,1],[0,2],[1,1]],w:2},{c:[[0,1],[1,0],[1,1],[1,2]],w:2},{c:[[0,0],[1,0],[2,0],[1,1]],w:2},{c:[[0,1],[1,0],[1,1],[2,1]],w:2},
+    {c:[[0,1],[0,2],[1,0],[1,1]],w:2},{c:[[0,0],[0,1],[1,1],[1,2]],w:2},{c:[[0,0],[1,0],[1,1],[2,1]],w:2},{c:[[0,1],[1,0],[1,1],[2,0]],w:2},
+    {c:[[0,0],[1,0],[2,0],[2,1],[2,2]],w:1},{c:[[0,0],[0,1],[0,2],[1,0],[2,0]],w:1},{c:[[0,2],[1,2],[2,0],[2,1],[2,2]],w:1},{c:[[0,0],[0,1],[0,2],[1,2],[2,2]],w:1},
+  ];
+  let bb=null; // {grid:[64], tray:[3], score, combo, miss, lines, over, drag}
+  function bbUnlocked(){ return acc.runs.some(r=>r&&r.lv>=BB_REQ); }
+  function bbRand(){ let t=Math.random()*BB_SHAPES.reduce((a,s)=>a+s.w,0);
+    for(const s of BB_SHAPES){ t-=s.w; if(t<0) return {c:s.c,k:Math.floor(Math.random()*BB_TILES.length)}; } return {c:BB_SHAPES[0].c,k:0}; }
+  function bbFits(p,r0,c0){ return p.c.every(([r,c])=>{ const rr=r0+r, cc=c0+c; return rr>=0&&rr<BB_N&&cc>=0&&cc<BB_N&&!bb.grid[rr*BB_N+cc]; }); }
+  function bbCanPlace(p){ for(let r=0;r<BB_N;r++) for(let c=0;c<BB_N;c++) if(bbFits(p,r,c)) return true; return false; }
+  function bbNewTray(){ // 셋 중 하나는 꼭 놓을 수 있게(여러 번 뽑아 봄)
+    for(let t=0;t<30;t++){ const tray=[bbRand(),bbRand(),bbRand()]; if(tray.some(bbCanPlace)) return tray; }
+    return [bbRand(),bbRand(),bbRand()];
+  }
+  function gmShowBlock(){
+    if(!bbUnlocked()){ toast(`🔒 과장(Lv.${BB_REQ}) 이상 달성 시 자동으로 해금됩니다`,2500); return; }
+    bbCleanup();
+    bb={grid:new Array(BB_N*BB_N).fill(0),tray:null,score:0,combo:0,miss:0,lines:0,over:false,drag:null};
+    bb.tray=bbNewTray();
+    el('gmBody').innerHTML=`
+      <div class="gm-st-head"><b>${IC.block?ic(IC.block):'🧩'}블록 블라스트</b><span>점수 <b id="bbScore">0</b> · 최고 <b id="bbBest">${(acc.bbBest||0).toLocaleString()}</b></span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('block')">✕ 나가기</button></div>
+      <div class="bb-main"><div class="bb-board" id="bbBoard">${Array.from({length:BB_N*BB_N},(_,i)=>`<i data-i="${i}"></i>`).join('')}<div class="bb-fx" id="bbFx"></div></div>
+      <div class="bb-tray" id="bbTray"></div></div>
+      <div class="gm-st-info" id="bbInfo">블록을 끌어다 판에 놓으세요 · 가로나 세로 한 줄을 채우면 지워져요</div>`;
+    lockBodySize();
+    bbRender();
+    document.addEventListener('pointermove',bbMove); document.addEventListener('pointerup',bbUp); document.addEventListener('pointercancel',bbUp);
+  }
+  function bbCleanup(){ document.removeEventListener('pointermove',bbMove); document.removeEventListener('pointerup',bbUp); document.removeEventListener('pointercancel',bbUp);
+    if(bb&&bb.drag&&bb.drag.el) bb.drag.el.remove(); }
+  function bbPieceHtml(p,cell){ const rows=Math.max(...p.c.map(x=>x[0]))+1, cols=Math.max(...p.c.map(x=>x[1]))+1;
+    return `<span class="bb-piece" style="width:${cols*cell}px;height:${rows*cell}px">${p.c.map(([r,c])=>`<i class="bb-t" style="left:${c*cell}px;top:${r*cell}px;width:${cell}px;height:${cell}px;background-image:url(${UI}tt-${BB_TILES[p.k]}.png)"></i>`).join('')}</span>`; }
+  function bbRender(){
+    const cells=el('bbBoard').querySelectorAll(':scope > i');
+    cells.forEach((x,i)=>{ const v=bb.grid[i]; x.className=v?'on':''; x.style.backgroundImage=v?`url(${UI}tt-${BB_TILES[v-1]}.png)`:''; });
+    el('bbTray').innerHTML=bb.tray.map((p,i)=>`<div class="bb-slot${p&&!bbCanPlace(p)?' no':''}" data-i="${i}">${p?bbPieceHtml(p,18):''}</div>`).join('');
+    el('bbTray').querySelectorAll('.bb-slot').forEach(s=>s.addEventListener('pointerdown',bbDown));
+    const sc=el('bbScore'); if(sc) sc.textContent=bb.score.toLocaleString();
+  }
+  // ---- 끌기: 손가락이 블록을 가리지 않게 터치일 땐 블록을 손가락 위로 띄움
+  function bbCell(){ const b=el('bbBoard'); return b?b.querySelector(':scope > i').getBoundingClientRect().width+2:30; }
+  function bbDown(e){
+    if(!bb||bb.over) return; const i=+e.currentTarget.dataset.i, p=bb.tray[i]; if(!p) return;
+    e.preventDefault(); lastInput=Date.now();
+    const cell=bbCell(), d=document.createElement('div'); d.className='bb-drag'; d.innerHTML=bbPieceHtml(p,cell-2); document.body.appendChild(d);
+    const rows=Math.max(...p.c.map(x=>x[0]))+1, cols=Math.max(...p.c.map(x=>x[1]))+1;
+    bb.drag={i,p,el:d,w:cols*(cell-2),h:rows*(cell-2),lift:e.pointerType==='touch'?cell*1.6+rows*(cell-2)/2:0,at:null};
+    e.currentTarget.classList.add('lifted'); bbMove(e);
+  }
+  function bbMove(e){
+    const D=bb&&bb.drag; if(!D) return;
+    const x=e.clientX-D.w/2, y=e.clientY-D.h/2-D.lift; D.el.style.left=x+'px'; D.el.style.top=y+'px';
+    const br=el('bbBoard').getBoundingClientRect(), cell=bbCell(), pad=(br.width-cell*BB_N)/2;
+    const c0=Math.round((x-br.left-pad)/cell), r0=Math.round((y-br.top-pad)/cell);
+    D.at=bbFits(D.p,r0,c0)?[r0,c0]:null;
+    bbGhost(D.at?D.p:null,r0,c0);
+  }
+  function bbGhost(p,r0,c0){ // 놓일 자리 + 지워질 줄 미리 보기
+    const cells=el('bbBoard').querySelectorAll(':scope > i');
+    cells.forEach(x=>x.classList.remove('ghost','clear'));
+    if(!p) return;
+    const g=bb.grid.slice(); p.c.forEach(([r,c])=>{ g[(r0+r)*BB_N+c0+c]=p.k+1; cells[(r0+r)*BB_N+c0+c].classList.add('ghost'); });
+    bbFull(g).forEach(i=>cells[i].classList.add('clear'));
+  }
+  function bbFull(g){ const out=new Set();
+    for(let r=0;r<BB_N;r++){ let f=true; for(let c=0;c<BB_N;c++) if(!g[r*BB_N+c]){ f=false; break; } if(f) for(let c=0;c<BB_N;c++) out.add(r*BB_N+c); }
+    for(let c=0;c<BB_N;c++){ let f=true; for(let r=0;r<BB_N;r++) if(!g[r*BB_N+c]){ f=false; break; } if(f) for(let r=0;r<BB_N;r++) out.add(r*BB_N+c); }
+    return [...out]; }
+  function bbUp(){
+    const D=bb&&bb.drag; if(!D) return; bb.drag=null; D.el.remove(); bbGhost(null);
+    if(D.at) bbPlace(D.i,D.at[0],D.at[1]); else bbRender();
+  }
+  function bbPlace(i,r0,c0){
+    const p=bb.tray[i]; bb.tray[i]=null;
+    p.c.forEach(([r,c])=>{ bb.grid[(r0+r)*BB_N+c0+c]=p.k+1; });
+    bb.score+=p.c.length;
+    // 지울 줄 세기(가로·세로 따로)
+    let rows=0, cols=0;
+    for(let r=0;r<BB_N;r++) if([...Array(BB_N).keys()].every(c=>bb.grid[r*BB_N+c])) rows++;
+    for(let c=0;c<BB_N;c++) if([...Array(BB_N).keys()].every(r=>bb.grid[r*BB_N+c])) cols++;
+    const full=bbFull(bb.grid), n=rows+cols;
+    if(n){ bb.combo++; bb.miss=0; bb.lines+=n;
+      const pts=10*n*n*bb.combo; bb.score+=pts; // 한 번에 여러 줄·연속 콤보일수록 크게
+      full.forEach(k=>{ bb.grid[k]=0; });
+      bbPop(full,n,pts);
+    } else if(++bb.miss>=3){ bb.combo=0; } // 3번 연속 못 지우면 콤보 끊김
+    if(bb.tray.every(x=>!x)) bb.tray=bbNewTray();
+    bbRender();
+    const flash=el('bbBoard'); flash.classList.remove('placed'); void flash.offsetWidth; flash.classList.add('placed');
+    if(!bb.tray.some(x=>x&&bbCanPlace(x))) setTimeout(()=>bbEnd(),450);
+  }
+  function bbPop(cells,n,pts){
+    const b=el('bbBoard'), list=b.querySelectorAll(':scope > i');
+    cells.forEach(k=>{ const x=list[k]; x.classList.remove('boom'); void x.offsetWidth; x.classList.add('boom'); });
+    const fx=el('bbFx'), d=document.createElement('div'); d.className='bb-pts';
+    d.innerHTML=`${n>1?`<b>${n}줄!</b> `:''}${bb.combo>1?`<em>콤보 ×${bb.combo}</em> `:''}+${pts}`; fx.appendChild(d); setTimeout(()=>d.remove(),1100);
+    if(n>=3||bb.combo>=4) fxPop('fx-combo',{ms:900,x:50});
+  }
+  function bbEnd(){
+    if(!bb||bb.over) return; bb.over=true;
+    const n=bb.score, exp=miniExp(n,BB_BASE,st.tetrisLv,2+bb.lines/8), refs=earnRefs(n,BB_BASE); // 지운 줄이 많을수록 한도 증가
+    const best=n>(acc.bbBest||0); if(best) acc.bbBest=n; if(el('bbBest')) el('bbBest').textContent=(acc.bbBest||0).toLocaleString();
+    if(exp>0) gainExp(exp);
+    dirty=true; saveServer(true);
+    const d=document.createElement('div'); d.className='oc-result'+(best&&n?' win':'');
+    d.innerHTML=`<div class="oc-result-card"><div class="oc-result-rank">${best&&n?'🎉 최고 기록!':'🧩 더 놓을 곳이 없어요'}</div>
+      <small>지운 줄 ${bb.lines}줄 · 최고 ${(acc.bbBest||0).toLocaleString()}점</small>
+      <div>점수 <b>${n.toLocaleString()}</b> · 경험치 +${fmt(exp)}${refs?` · ${ic('ticket.png')}추천서 +${refs}`:''}</div>
+      <div class="oc-result-btns"><button type="button" class="gm-btn primary" onclick="gmShowBlock()">한 판 더</button><button type="button" class="gm-btn" onclick="gmShowWorld()">월드로</button></div></div>`;
+    el('gmBody').appendChild(d);
+    if(best&&n) fxPop('fx-confetti',{cls:'big',ms:1500,x:50});
+  }
+  window.gmShowBlock=gmShowBlock;
+  if(window.__GM_TEST){ window.__bb=()=>bb; window.__bbPlace=bbPlace; window.__bbRender=bbRender; } // 자동 테스트에서만
+  window.gmBlockExit=function(){ if(bb&&!bb.over&&bb.score>0) bbEnd(); bbCleanup(); bb=null; gmShowWorld(); };
+
   // 태양계처럼 본사 섬을 가운데 두고 미니게임 섬들이 궤도 위에 떠 있음. orb: [몇 번째 궤도, 각도(0=오른쪽, -90=위)]
   // 새 미니게임은 바깥 궤도 빈 자리에 각도만 정해서 추가하면 됨. 궤도가 꽉 차면 WORLD_ORBITS에 한 줄 더
   const WORLD=[
@@ -2471,6 +2604,7 @@
     {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[0,-22],img:'isle-suika.png',ar:1.07},
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
     {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-72],img:'isle-battleship.png',ar:1.01,size:1.05},
+    {id:'block', icon:'🧩',name:'블록 블라스트',req:BB_REQ,best:()=>(acc.bbBest||0).toLocaleString()+'점',go:()=>gmShowBlock(),orb:[1,100]},
     {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
   ];
   const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
@@ -2483,7 +2617,7 @@
       b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*(w.ar||1)*0.5)+'px'; });
   }
   function gmShowWorld(){
-    ocStop(); oc=null; if(bs) bsLeave();
+    ocStop(); oc=null; if(bs) bsLeave(); if(bb){ bbCleanup(); bb=null; }
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
     const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
     el('gmBody').innerHTML=`
@@ -2519,6 +2653,7 @@
   window.gmStep=gmStep;
   // 미니게임 나가기 — 제목 줄의 작은 버튼. 진행 중이면 한 번 더 확인(조작하다 잘못 눌러 꺼지는 것 방지)
   window.gmExitAsk=function(kind){
+    if(kind==='block'){ if(bb&&!bb.over&&bb.score>0&&!confirm('이번 판을 여기서 끝낼까요? (지금 점수로 보상)')) return; gmBlockExit(); return; }
     if(kind==='battleship'){ const playing=bs&&(bs.mode==='solo'||bs.mode==='multi')&&!bs.done;
       if(playing&&!confirm(bs.mode==='multi'?'해전에서 나갈까요? (패로 기록되고 내 함대는 컴퓨터가 이어받습니다)':'진행 중인 해전을 그만할까요? (패로 기록, 보상 없음)')) return;
       gmBattleshipExit(); return; }
@@ -2817,7 +2952,7 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ if(bs) bsLeave(); if(oc){ if((oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; } if((oc.mode==='room'||oc.mode==='multi')&&!oc.done){ gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{}); roomClear('oc'); } ocStop(); oc=null; } if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
+  window.gmBack=function(){ if(bs) bsLeave(); if(bb){ bbCleanup(); bb=null; } if(oc){ if((oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; } if((oc.mode==='room'||oc.mode==='multi')&&!oc.done){ gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{}); roomClear('oc'); } ocStop(); oc=null; } if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
