@@ -1290,7 +1290,7 @@ function handleGameAction(data) {
             // 랭킹은 모두가 같은 결과를 보므로 잠깐 캐시 — 시트를 매번 훑지 않아 눈에 띄게 빨라진다.
             // 내 순위는 사람마다 다르므로 캐시에는 목록만 담고 순위는 아래에서 다시 계산한다.
             var rkCache = CacheService.getScriptCache();
-            var rkKey = 'gmrank_' + (['stairs','suika','tetris'].indexOf(data.board) >= 0 ? data.board : 'promo');
+            var rkKey = 'gmrank_' + (['stairs','suika','tetris','onecard'].indexOf(data.board) >= 0 ? data.board : 'promo'); // onecard가 빠져 있어 승진 랭킹 캐시와 섞이던 문제 수정
             var cached = null;
             try { cached = JSON.parse(rkCache.get(rkKey) || 'null'); } catch (e) { cached = null; }
             if (cached && cached.all) {
@@ -1302,9 +1302,12 @@ function handleGameAction(data) {
             var board = ['stairs', 'suika', 'tetris', 'onecard'].indexOf(data.board) >= 0 ? data.board : 'promo';
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
                 var s = gameReadState(r) || {};
-                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: Number(s.ocWins) || 0 };
+                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: Number(s.ocWins) || 0, ocGames: Math.max(Number(s.ocGames) || 0, Number(s.ocWins) || 0) };
             });
-            if (board !== 'promo') {
+            if (board === 'onecard') { // 원카드: 한 판이라도 한 사람 — 승리 수 → 승률 → 판 수 적은 순
+                list = list.filter(function(x) { return x.ocGames > 0; });
+                list.sort(function(a, b) { return (b.onecard - a.onecard) || (b.onecard / b.ocGames - a.onecard / a.ocGames) || (a.ocGames - b.ocGames); });
+            } else if (board !== 'promo') {
                 list = list.filter(function(x) { return x[board] > 0; });
                 list.sort(function(a, b) { return b[board] - a[board]; });
             } else {

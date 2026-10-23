@@ -1104,13 +1104,15 @@
     catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
     gmShowAdmin();
   };
+  // 원카드 전적 — 12승 8패 · 60%
+  function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
   async function gmShowRanking(board){
     board=['stairs','suika','tetris','onecard'].includes(board)?board:'promo';
     const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button></div>`;
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
-    const info=x=>board==='onecard'?`${escHtml(charName(x.ch||0))} · ${(x.onecard||0).toLocaleString()}승`:board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-    const mine=board==='onecard'?`${(acc.ocWins||0).toLocaleString()}승`:board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
-    const title=board==='onecard'?'원카드 승리 수':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
+    const info=x=>board==='onecard'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+    const mine=board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
+    const title=board==='onecard'?'원카드 전적':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
     const body=(j,stale)=>`<div class="gm-rank-title">${ic(IC[board])}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
       (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
       j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
@@ -1830,7 +1832,7 @@
   function ocHead(info){ return `<div class="gm-st-head"><b>${ic('skill-onecard.png')}원카드</b><span>${info||''}</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('onecard')">✕ 나가기</button></div>`; }
   function ocLobbyRender(rooms){
     if(!oc||oc.mode!=='lobby') return;
-    ocSetBody(ocHead(`승리 <b>${(acc.ocWins||0).toLocaleString()}</b>회`)+`
+    ocSetBody(ocHead(ocRecord(acc.ocWins,acc.ocGames))+`
       <div class="oc-lobby">
         <div class="oc-modes">
           <button type="button" class="oc-mode solo" onclick="ocStartSolo()"><b>🤖 혼자 하기</b><small>컴퓨터 3명과 바로 시작</small></button>
@@ -2045,6 +2047,7 @@
   window.gmShowOneCard=gmShowOneCard;
   if(window.__GM_TEST){ window.__oc=()=>oc; window.__ocEng={ocView,ocPlay,ocTake,ocCanPlay}; } // 자동 테스트에서만
   window.gmOneCardExit=function(){
+    if(oc&&(oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; saveServer(true); } // 하다가 나가면 패(승률 지키려고 나가는 것 방지)
     if(oc&&(oc.mode==='room'||oc.mode==='multi')&&!oc.done) gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{});
     ocStop(); oc=null; gmShowWorld();
   };
@@ -2057,7 +2060,7 @@
     {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[0,168],img:'isle-stairs.png',ar:1.42},
     {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[0,-22],img:'isle-suika.png',ar:1.07},
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
   ];
   const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비)
   function placeIsles(){
@@ -2083,7 +2086,7 @@
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
             ${w.img?`<img class="gm-isle-art" src="${UI}${w.img}" alt=""/>`:`<span class="gm-isle-icon">${w.icon}</span>`}
-            <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
+            <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o?(w.rec?'':'최고 ')+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
             ${o||soon?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
       </div>
       <div class="gm-st-info" id="gmWorldMsg">섬을 눌러 미니게임에 들어가세요</div>
@@ -2346,7 +2349,7 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ if(oc){ if((oc.mode==='room'||oc.mode==='multi')&&!oc.done) gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{}); ocStop(); oc=null; } if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
+  window.gmBack=function(){ if(oc){ if((oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; } if((oc.mode==='room'||oc.mode==='multi')&&!oc.done) gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{}); ocStop(); oc=null; } if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행
