@@ -189,7 +189,7 @@
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
   const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0,team:[]});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
-  const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
+  const acc0=()=>({v:4,ch:0,refs:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
   let seq=[], seqPos=0, combo=0, lastInput=Date.now(), locked=!!lsGet(LS_LOCK,false);
 
@@ -1101,6 +1101,13 @@
   // 미니게임 경험치 — '레벨 몇 개분'으로 계산(점수×단계로 곱하면 후반에 폭발해서).
   // 기준 점수에서 레벨 0.15개, 점수에 거의 비례(0.8제곱), 효율 스킬 +20%/레벨. 잘한 판은 10레벨 안팎까지.
   // 한 판 한도(cap, 레벨 개수)는 그 판에서 멀리 갈수록 열림 — 테트리스 단계·수박 최대 공·계단 층수
+  // 사원 뽑기용 추천서 — 세 미니게임이 같은 기준(기준점수 대비 성적)으로 비슷하게 얻음. 기준점수면 3장, 10배면 약 19장
+  function earnRefs(score,base){
+    if(score<=0) return 0;
+    const n=Math.floor(3*Math.pow(score/base,0.8));
+    if(n>0){ acc.refs=(acc.refs||0)+n; dirty=true; }
+    return n;
+  }
   function miniExp(score,base,skillLv,cap){
     if(score<=0||st.lv>=BOSS_LV) return 0;
     let L=Math.min(cap,0.15*Math.pow(score/base,0.8)*(1+0.2*(skillLv||0)));
@@ -1196,13 +1203,13 @@
   function stairsEnd(why){
     if(!stairs||stairs.over) return;
     stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
-    const n=stairs.count, exp=miniExp(n,STAIRS_BASE,st.stairLv,1+Math.floor(n/50)); // 계단 단련으로 증가, 50층마다 한도 +1레벨
+    const n=stairs.count, exp=miniExp(n,STAIRS_BASE,st.stairLv,1+Math.floor(n/50)), refs=earnRefs(n,STAIRS_BASE); // 계단 단련으로 증가, 50층마다 한도 +1레벨
     const best=n>(acc.stairsBest||0);
     if(best) acc.stairsBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const info=el('gmStInfo');
-    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}층</b> · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>아무 방향이나 누르면 다시 시작</small>`;
+    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}층</b> · 경험치 +${fmt(exp)}${refs?` · ${ic('ticket.png')}추천서 +${refs}`:''}${best&&n?' · 🎉 최고 기록!':''}<br><small>아무 방향이나 누르면 다시 시작</small>`;
     if(el('gmStBest')) el('gmStBest').textContent=(acc.stairsBest||0).toLocaleString();
     drawStairs();
   }
@@ -1414,12 +1421,12 @@
   function skEnd(why){
     if(!suika||suika.over) return;
     suika.over=true;
-    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,1+1.3*(suika.maxT||0)); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가(쉰동준 약 10레벨)
+    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,1+1.3*(suika.maxT||0)), refs=earnRefs(n,SUIKA_BASE); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가(쉰동준 약 10레벨)
     const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const info=el('gmSkInfo');
-    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'탭':'Space 또는 클릭'}하면 다시 시작</small>`;
+    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · 경험치 +${fmt(exp)}${refs?` · ${ic('ticket.png')}추천서 +${refs}`:''}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'탭':'Space 또는 클릭'}하면 다시 시작</small>`;
     if(el('gmSkBest')) el('gmSkBest').textContent=(acc.suikaBest||0).toLocaleString();
   }
   function skBall(g,b,t,x,y,r,alpha){
@@ -1539,12 +1546,12 @@
   function ttEnd(why){
     const t=tetris; if(!t||t.over) return;
     t.over=true;
-    const n=t.score, exp=miniExp(n,TT_BASE,st.tetrisLv,Math.max(1,t.level)); // 테트리스 고수로 증가, 테트리스 단계 수만큼 한도(10단계 → 10레벨)
+    const n=t.score, exp=miniExp(n,TT_BASE,st.tetrisLv,Math.max(1,t.level)), refs=earnRefs(n,TT_BASE); // 테트리스 고수로 증가, 테트리스 단계 수만큼 한도(10단계 → 10레벨)
     const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const info=el('gmTtInfo');
-    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · ${t.lines}줄 · 경험치 +${fmt(exp)}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'⤓ 버튼':'Space'}으로 다시 시작</small>`;
+    if(info) info.innerHTML=`${why} <b>${n.toLocaleString()}점</b> · ${t.lines}줄 · 경험치 +${fmt(exp)}${refs?` · ${ic('ticket.png')}추천서 +${refs}`:''}${best&&n?' · 🎉 최고 기록!':''}<br><small>${isTouchDevice()?'⤓ 버튼':'Space'}으로 다시 시작</small>`;
     if(el('gmTtBest')) el('gmTtBest').textContent=(acc.tetrisBest||0).toLocaleString();
   }
   // 블록 한 칸 — 젤리 블록 그림(없으면 색 칸)
@@ -1677,7 +1684,7 @@
   };
   const TEAM_PULL={
     intern:{name:'인턴 뽑기', rank:'인턴', cost:40,  odds:[0,50,30,15,4.5,0.5], miss:0.08, loss:1.5, helpMul:1},
-    staff: {name:'사원 뽑기', rank:'사원', cost:200, odds:[0,0,40,35,20,5],     miss:0.04, loss:1, helpMul:1.5},
+    staff: {name:'사원 뽑기', rank:'사원', refs:10,  odds:[0,0,40,35,20,5],     miss:0.04, loss:1, helpMul:1.5}, // 미니게임 추천서로
   };
   const TEAM_MISTAKES=['서류를 잘못 보냄','엑셀 수식을 날림','거래처에 엉뚱한 메일 발송','회의 시간을 착각','복사기를 고장 냄','결재 서류를 분실','커피를 키보드에 쏟음','견적서 숫자를 틀림'];
   function teamUnlocked(){ return st.lv>=TEAM_REQ; }
@@ -1685,7 +1692,8 @@
   function memberHelp(m){ const P=TEAM_PULL[m.kind]; return TEAM_GRADE_HELP[m.grade]*P.helpMul*TEAM_TRAITS[m.trait].help*(1+0.25*(m.lv-1)); }
   function memberMiss(m){ const P=TEAM_PULL[m.kind]; return Math.max(0.005,P.miss*(1.2-0.15*m.grade)*TEAM_TRAITS[m.trait].miss*(1-0.12*(m.lv-1))); }
   function teamHelp(s){ return (s&&s.team||[]).reduce((a,m)=>a+memberHelp(m),0); }
-  function pullCost(kind){ return Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*TEAM_PULL[kind].cost); } // 지금 단계 업무 보상 N건치
+  function pullCost(kind){ return Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*TEAM_PULL[kind].cost); } // 인턴: 지금 단계 업무 보상 N건치
+  function canPull(kind){ const P=TEAM_PULL[kind]; return P.refs?(acc.refs||0)>=P.refs:st.gold>=pullCost(kind); }
   // 업무를 끝낼 때마다 팀원별로 실수 판정 — 실수하면 그 업무 보상의 몇 배를 까먹음(가진 실적까지만)
   function teamMistake(g){
     for(const m of st.team||[]){
@@ -1713,21 +1721,22 @@
           <small>${m.trait} · 도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></span>
         <button type="button" class="gm-team-out" onclick="gmTeamRelease(${i})">방출</button></div>`).join('');
     const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>뽑기로 팀원을 데려오세요</small></span></div>`).join('');
-    const pullBtn=k=>{ const P=TEAM_PULL[k], c=pullCost(k), ok=st.gold>=c&&!full;
-      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${MONEY}${fmt(c)}</small></button>`; };
-    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small></div>
+    const pullBtn=k=>{ const P=TEAM_PULL[k], ok=canPull(k)&&!full;
+      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${P.refs?`${ic('ticket.png')}추천서 ${P.refs}장`:MONEY+fmt(pullCost(k))}</small></button>`; };
+    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${acc.refs||0}</b>장</span></div>
       <div class="gm-team-list">${rows}${empty}</div>
       <div class="gm-team-pulls">${pullBtn('intern')}${pullBtn('staff')}</div>
-      <div class="gm-st-info" id="gmTeamMsg">${full?'자리가 꽉 찼습니다. 방출하면 새로 뽑을 수 있어요':'인턴은 싸지만 실수가 많고, 사원은 비싸지만 든든합니다'}</div>
+      <div class="gm-st-info" id="gmTeamMsg">${full?'자리가 꽉 찼습니다. 방출하면 새로 뽑을 수 있어요':'인턴은 실적으로, 사원은 미니게임에서 모은 추천서로 뽑습니다'}</div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
   }
   function rollGrade(odds){ let r=Math.random()*100; for(let g=1;g<odds.length;g++){ r-=odds[g]; if(r<0) return g; } return odds.length-1; }
   window.gmTeamPull=function(kind){
-    const P=TEAM_PULL[kind], c=pullCost(kind);
+    const P=TEAM_PULL[kind];
     st.team=st.team||[];
-    if(st.gold<c||st.team.length>=teamSlots()) return;
-    st.gold-=c; dirty=true; lastInput=Date.now();
+    if(!canPull(kind)||st.team.length>=teamSlots()) return;
+    if(P.refs) acc.refs-=P.refs; else st.gold-=pullCost(kind);
+    dirty=true; lastInput=Date.now();
     const id=Math.floor(Math.random()*TEAM_NAMES.length), grade=rollGrade(P.odds);
     const traits=Object.keys(TEAM_TRAITS), trait=traits[Math.floor(Math.random()*traits.length)];
     const dup=st.team.find(m=>m.id===id);
