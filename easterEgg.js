@@ -334,12 +334,12 @@
   function setHoursFree(v){ if(v!=null) hoursFree=!!v; }
   // 근무 외 시간은 '사고 이벤트'로 — 조출·야근·주말마다 그날 하나가 걸림(날짜로 정해서 모두 같음). 효과는 똑같이 50%
   const DEBUFFS=[
-    {id:'blackout', icon:'🔌', name:'정전',          desc:'비상 전원으로 근무 중',          scene:'dark'},
-    {id:'aircon',   icon:'🥵', name:'냉난방 고장',   desc:'덥고 추워서 일이 손에 안 잡힘',  scene:'hot'},
-    {id:'network',  icon:'📡', name:'인터넷 먹통',   desc:'메일·결재 시스템이 느려요',      scene:'net'},
-    {id:'elevator', icon:'🛗', name:'엘리베이터 점검', desc:'계단으로 올라와서 기진맥진',    scene:'tired'},
-    {id:'cleaning', icon:'🧹', name:'대청소',        desc:'청소기 소리에 집중이 안 돼요',   scene:'dust'},
-    {id:'security', icon:'🔒', name:'보안 통제',     desc:'출입 카드가 자꾸 막혀요',        scene:'dark'},
+    {id:'blackout', img:'ev-blackout', icon:'🔌', name:'정전',          desc:'비상 전원으로 근무 중',          scene:'dark'},
+    {id:'aircon', img:'ev-aircon',   icon:'🥵', name:'냉난방 고장',   desc:'덥고 추워서 일이 손에 안 잡힘',  scene:'hot'},
+    {id:'network', img:'ev-network',  icon:'📡', name:'인터넷 먹통',   desc:'메일·결재 시스템이 느려요',      scene:'net'},
+    {id:'elevator', img:'ev-elevator', icon:'🛗', name:'엘리베이터 점검', desc:'계단으로 올라와서 기진맥진',    scene:'tired'},
+    {id:'cleaning', img:'ev-cleaning', icon:'🧹', name:'대청소',        desc:'청소기 소리에 집중이 안 돼요',   scene:'dust'},
+    {id:'security', img:'ev-security', icon:'🔒', name:'보안 통제',     desc:'출입 카드가 자꾸 막혀요',        scene:'dark'},
   ];
   function offHours(){ if(hoursFree) return null; const k=kst();
     const period=(k.wd===0||k.wd===6)?'주말':k.h<HOURS_FROM?'조출':k.h>=HOURS_TO?'야근':null; if(!period) return null;
@@ -1006,7 +1006,7 @@
         el('gmEvLeft').textContent=`${Math.ceil(ev.left/60)}분`;
       } else if(offHours()){
         const oh=offHours(), id='off-'+oh.key; eb.classList.add('off');
-        if(eb.dataset.id!==id){ eb.innerHTML=`<span class="gm-ev-emo">${oh.icon}</span><span class="gm-ev-txt"><b>${oh.period} 사고: ${oh.name}!</b> · ${oh.desc} · 효율 50%</span><span class="gm-ev-left">평일 8시 복구</span>`; eb.dataset.id=id; }
+        if(eb.dataset.id!==id){ eb.innerHTML=`<img class="gm-ev-ic" src="${UI}${oh.img}.png" alt=""/><span class="gm-ev-txt"><b>${oh.period} 사고: ${oh.name}!</b> · ${oh.desc} · 효율 50%</span><span class="gm-ev-left">평일 8시 복구</span>`; eb.dataset.id=id; }
       } else {
         eb.classList.remove('off');
         const nx=nextEvent(), id='next'+(nx?nx.days+'-'+nx.h:'');
