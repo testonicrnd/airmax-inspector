@@ -97,7 +97,7 @@
   function menuIcon(n){ return `<img class="gm-menu-ic" src="${UI}menu-${n}.png" alt=""/>`; }
   // 제목·탭·버튼에 쓰는 작은 그림 아이콘 (이모지 대신)
   function ic(f){ return `<img class="gm-ic" src="${UI}${f}" alt=""/>`; }
-  const IC={block:'skill-block.png',battleship:'skill-battleship.png',onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
+  const IC={slot:'skill-slot.png',block:'skill-block.png',battleship:'skill-battleship.png',onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
   const artCache={};
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
@@ -2758,7 +2758,7 @@
     slot={bet:slot?slot.bet:0,spinning:false,last:null};
     const strip=()=>[slotPick(),slotPick(),slotPick()].map(s=>`<div class="sl-sym">${slotImg(s)}</div>`).join('');
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>🎰 슬롯머신</b><span>${MONEY} <b id="slGold">${fmt(st.gold)}</b></span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('slot')">✕ 나가기</button></div>
+      <div class="gm-st-head"><b>${ic(IC.slot)}슬롯머신</b><span>${MONEY} <b id="slGold">${fmt(st.gold)}</b></span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('slot')">✕ 나가기</button></div>
       <div class="sl-main">
         <div class="sl-machine" id="slMachine">
           <div class="sl-lights"></div>
@@ -2766,7 +2766,7 @@
           <div class="sl-result" id="slResult">판돈을 고르고 돌려 보세요</div>
         </div>
         <div class="sl-bets">${SLOT_BETS.map((n,i)=>`<button type="button" class="sl-bet${i===slot.bet?' on':''}" onclick="slotBet(${i})"><b>${fmt(slotBetAmt(i))}</b><small>업무 ${n}건치</small></button>`).join('')}</div>
-        <button type="button" class="sl-spin" id="slSpin" onclick="slotSpin()">🎰 돌리기</button>
+        <button type="button" class="sl-spin" id="slSpin" onclick="slotSpin()">${ic(IC.slot)}돌리기</button>
         <div class="sl-table">${SLOT_SYMS.slice().reverse().map(s=>`<span>${slotImg(s)}${slotImg(s)}${slotImg(s)}<b>×${s.x3}</b>${s.refs?`<em>+추천서 ${s.refs}</em>`:''}</span>`).join('')}<span class="sl-pair">같은 그림 2개 ×0.7~7</span></div>
       </div>
       <div class="gm-st-info" id="slInfo">${slotInfo()}</div>`;
@@ -2817,7 +2817,7 @@
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-141],img:'isle-tetris.png',ar:1.11},
     {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-90],img:'isle-battleship.png',ar:1.01,size:1.05},
     {id:'block', icon:'🧩',name:'블록 블라스트',req:BB_REQ,best:()=>(acc.bbBest||0).toLocaleString()+'점',go:()=>gmShowBlock(),orb:[1,64],img:'isle-block.png',ar:0.94,size:1.05},
-    {id:'slot',  icon:'🎰',name:'슬롯머신',  req:SLOT_REQ,  best:()=>`최고 ×${acc.slotBest||0}`,rec:true,go:()=>gmShowSlot(),orb:[1,116]},
+    {id:'slot',  icon:'🎰',name:'슬롯머신',  req:SLOT_REQ,  best:()=>`최고 ×${acc.slotBest||0}`,rec:true,go:()=>gmShowSlot(),orb:[1,116],img:'isle-slot.png',ar:1.0,size:1.05},
     {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,13],img:'isle-onecard.png',ar:1.09,size:1.15},
   ];
   const WORLD_ORBITS=[[0.34,0.25],[0.37,0.32]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
