@@ -1675,6 +1675,7 @@
   // 인턴 뽑기는 싸고 실수가 많음, 사원 뽑기는 비싸고 등급이 높음. 같은 팀원이 또 나오면 그 팀원 레벨업(최대 5).
   // 팀은 직원(캐릭터)마다 따로. 이미지가 오기 전까지는 색 원 + 이름
   const TEAM_REQ=35; // 과장
+  const STAFF_PULL_OPEN=false; // 사원 뽑기 — 팀원 이미지가 나오면 true로 (추천서는 지금도 미니게임에서 쌓임)
   const TEAM_NAMES=['간소영','긴성훈','박근찬','정생주','추지원','정택후','김남석','우인득'];
   const TEAM_FACES={}; // 이름 → 얼굴 이미지 경로 (받는 대로 추가)
   const TEAM_COLORS=['#f48fb1','#64b5f6','#81c784','#ffb74d','#ba68c8','#4db6ac','#e57373','#a1887f'];
@@ -1697,7 +1698,7 @@
   function memberMiss(m){ const P=TEAM_PULL[m.kind]; return Math.max(0.005,P.miss*(1.2-0.15*m.grade)*TEAM_TRAITS[m.trait].miss*(1-0.12*(m.lv-1))); }
   function teamHelp(s){ return (s&&s.team||[]).reduce((a,m)=>a+memberHelp(m),0); }
   function pullCost(kind){ return Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*TEAM_PULL[kind].cost); } // 인턴: 지금 단계 업무 보상 N건치
-  function canPull(kind){ const P=TEAM_PULL[kind]; return P.refs?(acc.refs||0)>=P.refs:st.gold>=pullCost(kind); }
+  function canPull(kind){ const P=TEAM_PULL[kind]; if(kind==='staff'&&!STAFF_PULL_OPEN) return false; return P.refs?(acc.refs||0)>=P.refs:st.gold>=pullCost(kind); }
   // 업무를 끝낼 때마다 팀원별로 실수 판정 — 실수하면 그 업무 보상의 몇 배를 까먹음(가진 실적까지만)
   function teamMistake(g){
     for(const m of st.team||[]){
@@ -1726,7 +1727,7 @@
         <button type="button" class="gm-team-out" onclick="gmTeamRelease(${i})">방출</button></div>`).join('');
     const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>뽑기로 팀원을 데려오세요</small></span></div>`).join('');
     const pullBtn=k=>{ const P=TEAM_PULL[k], ok=canPull(k)&&!full;
-      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${P.refs?`${ic('ticket.png')}추천서 ${P.refs}장`:MONEY+fmt(pullCost(k))}</small></button>`; };
+      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${k==='staff'&&!STAFF_PULL_OPEN?'준비 중 · 추천서를 모아 두세요':P.refs?`${ic('ticket.png')}추천서 ${P.refs}장`:MONEY+fmt(pullCost(k))}</small></button>`; };
     el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${acc.refs||0}</b>장</span></div>
       <div class="gm-team-list">${rows}${empty}</div>
       <div class="gm-team-pulls">${pullBtn('intern')}${pullBtn('staff')}</div>
