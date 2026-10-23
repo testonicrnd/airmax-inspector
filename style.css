@@ -2030,3 +2030,4 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-gacha-card.g4, .gm-gacha-card.g5 { border:none; padding:30px 22px 26px; min-height:300px; box-sizing:border-box; justify-content:center; }
 .gm-gacha-frame { position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); pointer-events:none; z-index:2; filter:drop-shadow(0 0 10px var(--gc)); }
 .gm-gacha-card.g4 .gm-gacha-tag, .gm-gacha-card.g5 .gm-gacha-tag { z-index:3; top:-8px; }
+.gm-stat-refs b { color:#e8732a; }

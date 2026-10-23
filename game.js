@@ -773,7 +773,7 @@
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
-      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
+      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span class="gm-stat-refs" title="추천서 (팀원 뽑기)">${ic('ticket.png')}<b id="gmRefs"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         <div class="gm-cheer" id="gmCheer" style="display:none"></div>
         ${bodyHtml(acc.ch)}
@@ -847,6 +847,7 @@
       `<span class="gm-exp-num">${st.lv>=BOSS_LV?'만렙':`${fmt(Math.floor(st.exp))} / ${fmt(need)} (${pct.toFixed(1)}%)`}</span>`;
     el('gmExpBar').style.width=(st.lv>=BOSS_LV?100:Math.min(100,st.exp/expNeed(st.lv)*100))+'%';
     el('gmGold').textContent=fmt(st.gold);
+    el('gmRefs').textContent=(acc.refs||0).toLocaleString();
     el('gmStage').textContent=`${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
     el('gmDps').textContent=`초당 ${fmt(autoDps(st))}`;
     // 선배 사장님의 격려가 걸려 있으면 남은 시간과 함께 보여줌
