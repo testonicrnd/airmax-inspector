@@ -2429,3 +2429,5 @@ button.bs-c { cursor:crosshair; font-family:inherit; }
 .gm-char-cheer.on { color:#ef6c00; } .gm-char-cheer.on b { color:#e65100; }
 .gm-char-row-text small.gm-char-cheer { white-space:normal; overflow:visible; text-overflow:clip; }
 .gm-char-row.locked .gm-char-cheer { opacity:0.9; }
+.gm-rank-week { margin:-4px 0 8px; padding:5px 9px; border-radius:9px; font-size:10.5px; color:var(--text2); background:rgba(255,179,0,0.12); word-break:keep-all; }
+.gm-rank-week b { color:#e65100; }

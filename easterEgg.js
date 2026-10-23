@@ -1244,7 +1244,7 @@
   };
   // 원카드 전적 — 12승 8패 · 60%
   function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
-  let rankScope='w', rankWeek='', rankLast=null; // 미니게임 판: 'w' 이번 주(기본) / 'all' 전체 기록
+  let rankScope='all', rankWeek='', rankLast=null; // 미니게임 판: 'all' 전체 기록(기본 — 이번 주가 기본이면 비어 보여 랭킹이 초기화된 줄 앎) / 'w' 이번 주
   window.gmRankScope=function(sc,b){ rankScope=sc; gmShowRanking(b); };
   async function gmShowRanking(board){
     board=['stairs','suika','tetris','block','onecard','battleship'].includes(board)?board:'promo';
@@ -1258,7 +1258,7 @@
     const mine=weekly&&!/^(onecard|battleship)$/.test(board)?`${((W&&W[board])||0).toLocaleString()}${board==='stairs'?'층':'점'} (이번 주)`:board==='block'?`${(acc.bbBest||0).toLocaleString()}점`:board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
     const title=board==='block'?'블록 블라스트 최고 점수':board==='onecard'?'원카드 전적 (같이 하기)':board==='battleship'?'해전 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
     const body=(j,stale)=>`<div class="gm-rank-title">${IC[board]?ic(IC[board]):'<span class="bs-ic">🧩</span>'}${title}${weekly?' · 이번 주':''} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
-      (j.top.length?'':`<div class="gm-intro">${weekly?'이번 주 기록이 아직 없어요. 첫 1위가 되어 보세요!':'아직 기록이 없습니다.'}</div>`)+
+      (j.top.length?'':`<div class="gm-intro">${weekly?'이번 주 기록이 아직 없어요 — 한 판만 해도 1위! 전체 기록은 위 [전체 기록]에서 볼 수 있어요':'아직 기록이 없습니다.'}</div>`)+
       j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
       (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${(board==='onecard'||board==='battleship')&&j.mine?ocRecord(j.mine.w,j.mine.g):mine}</span></div>`:'')+
       (board==='onecard'||board==='battleship'?`<div class="gm-st-info">같이 하기 전적만 서버가 직접 기록해서 순위에 들어가요${j.mine?` · 내 전적 ${ocRecord(j.mine.w,j.mine.g)}`:''}</div>`:'');
@@ -1266,9 +1266,11 @@
       b.innerHTML=tabs+scopeBar+html+lastLine()+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
     // 전에 본 적 있으면 그걸 먼저 보여주고 뒤에서 갱신 — 서버가 2초 넘게 걸려서 빈 화면을 오래 보던 문제
     const seen=rankCache[key];
-    const scopeBar=board==='promo'?'':`<div class="gm-rank-scope"><button type="button" class="${weekly?'on':''}" onclick="gmRankScope('w','${board}')">이번 주</button><button type="button" class="${weekly?'':'on'}" onclick="gmRankScope('all','${board}')">전체 기록</button></div>`;
+    const scopeBar=board==='promo'?'':`<div class="gm-rank-scope"><button type="button" class="${weekly?'':'on'}" onclick="gmRankScope('all','${board}')">전체 기록</button><button type="button" class="${weekly?'on':''}" onclick="gmRankScope('w','${board}')">이번 주 🏆</button></div>`
+      +(weekly?`<div class="gm-rank-week">🏆 매주 월요일 0시 마감 — 1·2·3위 추천서 <b>10·6·3장</b> · 이번 주 기록은 10/23 업데이트 이후 판부터</div>`:'');
     const lastLine=()=>{ const L=rankLast&&rankLast.winners&&rankLast.winners[board]; if(!weekly||!L||!L.length) return '';
       return `<div class="gm-rank-last">🏅 지난주 ${L.map((x,i)=>`${i+1}위 <b>${escHtml(x.nickname)}</b>`).join(' · ')} <small>(추천서 ${L.map(x=>x.prize).join('·')}장 지급)</small></div>`; };
+    // 첫 마감(10/26) 전에는 지난주 결과가 비어 있음 — 위 안내 줄로 충분
     if(seen&&Date.now()-rankAt<RANK_FRESH){ paint(body(seen,false)); return; } // 방금 받은 것 — 기다림 없이 바로
     paint(seen?body(seen,true):'<div class="gm-intro">랭킹 불러오는 중…</div>');
     let j=null, why='';
