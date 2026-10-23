@@ -68,7 +68,7 @@
   const BOSS_LV=RANKS[RANKS.length-1][0];
   // 그림 리소스(assets/game/ui) — 스킬·업무·아이템 아이콘, 월드 지도, 계단 배경·발판
   const UI='assets/game/ui/';
-  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',ocLv:'onecard',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay',
+  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',ocLv:'onecard',bsLv:'battleship',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay',
     bossLv:'boss',preLv:'pre',vetLv:'vet',critPowLv:'critpow',orgLv:'org',signLv:'sign'};
   const TASK_IMG={'메일 폭탄':'mail','엑셀 정리':'excel','주간 보고서':'report','고객 전화':'phone','서류 더미':'papers','첨부 누락':'clip',
     '프린터 고장':'printer','회의록':'notebook','시스템 오류':'laptop','점검표 취합':'clipboard',
@@ -97,7 +97,7 @@
   function menuIcon(n){ return `<img class="gm-menu-ic" src="${UI}menu-${n}.png" alt=""/>`; }
   // 제목·탭·버튼에 쓰는 작은 그림 아이콘 (이모지 대신)
   function ic(f){ return `<img class="gm-ic" src="${UI}${f}" alt=""/>`; }
-  const IC={onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
+  const IC={battleship:'skill-battleship.png',onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
   const artCache={};
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
@@ -1113,7 +1113,7 @@
   function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
   async function gmShowRanking(board){
     board=['stairs','suika','tetris','onecard','battleship'].includes(board)?board:'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button><button type="button" class="${board==='battleship'?'on':''}" onclick="gmShowRanking('battleship')"><span class="bs-ic">🚢</span>해전</button></div>`;
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button><button type="button" class="${board==='battleship'?'on':''}" onclick="gmShowRanking('battleship')">${ic(IC.battleship)}해전</button></div>`;
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
     const info=x=>board==='onecard'||board==='battleship'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
     const mine=board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
@@ -1360,14 +1360,14 @@
   // 쉰동준 둘이 합쳐지면 사라지며 보너스. 공이 위쪽 선을 넘은 채 잠시 머물면 끝 → 점수 × 지금 단계 × 0.05 경험치
   const SUIKA_REQ=22, SUIKA_BASE=500;
   const SK_NAMES=['육찬근','삼용훈','천병돌','하달순','쉰원옥','약옥녀','쉰원철','쉰동준'];
-  const SK_R=[0.042,0.056,0.072,0.09,0.11,0.135,0.164,0.198]; // 판 폭 대비 반지름
+  const SK_R=[0.046,0.062,0.079,0.099,0.121,0.149,0.18,0.218]; // 판 폭 대비 반지름(v2.49.1: 10% 키워 판이 빨리 참)
   const SK_COLORS=['#9ad1ff','#7fd99a','#ffd166','#ff9f6e','#f78fb3','#b392f0','#5ec2c2','#ff6b6b'];
   let suika=null;
   function suikaUnlocked(){ return acc.runs.some(r=>r&&r.lv>=SUIKA_REQ); }
   function skImgs(){
     return SK_NAMES.map(n=>{ const c=CHARS.find(x=>x.name===n); if(!c||!c.face) return null; const im=new Image(); im.src=c.face; return im; });
   }
-  function skNextTier(){ const r=Math.random(); return r<0.35?0:r<0.65?1:r<0.87?2:3; } // 떨어뜨리는 공은 작은 4종
+  function skNextTier(){ const r=Math.random(); return r<0.32?0:r<0.6?1:r<0.8?2:r<0.93?3:4; } // 떨어뜨리는 공은 작은 5종(5번째는 가끔)
   function gmShowSuika(){
     if(!suikaUnlocked()){ toast(`🔒 대리(Lv.${SUIKA_REQ})를 달성한 직원이 있으면 열립니다`,2500); return; }
     if(suika) cancelAnimationFrame(suika.raf);
@@ -1378,7 +1378,7 @@
       <div class="gm-st-info" id="gmSkInfo">${isTouchDevice()?'떨어뜨릴 곳을 탭하세요':'← → 로 옮기고 Space(또는 ↓)로 떨어뜨리기 · 마우스로도 가능'}</div>`;
     lockBodySize();
     const cv=el('gmSkCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
-    suika={W:cv.width,H:cv.height,L:Math.round(cv.width*0.075),R:Math.round(cv.width*0.925),F:Math.round(cv.height*0.93),T:Math.round(cv.height*0.17),balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
+    suika={W:cv.width,H:cv.height,L:Math.round(cv.width*0.075),R:Math.round(cv.width*0.925),F:Math.round(cv.height*0.93),T:Math.round(cv.height*0.21),balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
       imgs:skImgs(),keys:{},lastT:performance.now(),raf:0,id:0};
     cv.addEventListener('pointermove',e=>{ const r=cv.getBoundingClientRect(); suika&&(suika.dropX=(e.clientX-r.left)/r.width*suika.W); });
     cv.addEventListener('pointerdown',e=>{ e.preventDefault(); lastInput=Date.now(); if(!suika) return; if(suika.over){ gmShowSuika(); return; }
@@ -1387,17 +1387,20 @@
     el('gmWidget').focus();
   }
   function skR(t){ return SK_R[t]*suika.W; }
-  // 넘침 판정 — 선을 완전히 벗어나(공 아래쪽까지 선 위로 올라가) 멈춘 공이 있는지.
-  // 떨어지는 중이거나 튕기는 중인 공은 제외(새로 놓은 공은 항상 선 위에서 출발하므로).
-  function skOverflow(){
-    if(!suika) return false;
-    const line=suika.T, rest=suika.H*0.06;
-    return suika.balls.some(b=>b.age>0.8&&Math.abs(b.vy)<rest&&b.y+b.r<line);
+  // 넘침 판정(v2.49.1) — 내려앉은 공의 윗부분이 선을 넘은 채 SK_OVER초가 지나면 그 자리에서 끝.
+  // 떨어지는 중인 공·막 놓은 공은 제외. 예전엔 공 전체가 선 위에 있어야 했고 다음 공을 놓을 때만 끝나서 너무 후했음
+  const SK_OVER=1.5;
+  function skOverflowStep(dt){
+    const S=suika, line=S.T, slow=S.H*0.08; let worst=0;
+    for(const b of S.balls){
+      const over=b.age>1&&Math.hypot(b.vx,b.vy)<slow&&b.y-b.r<line;
+      b.ot=over?(b.ot||0)+dt:0; if(b.ot>worst) worst=b.ot;
+    }
+    S.danger=worst;
+    if(worst>=SK_OVER) skEnd('공이 선을 넘었습니다!');
   }
   function skDrop(){
     if(!suika||suika.over||suika.cool>0) return;
-    // 선을 완전히 넘은 공이 아직 남아 있으면 다음 공을 놓는 순간 끝 — 합쳐서 치울 시간을 한 번 더 준 셈
-    if(skOverflow()){ skEnd('공이 넘쳤습니다!'); return; }
     const r=skR(suika.cur), x=Math.min(suika.R-r,Math.max(suika.L+r,suika.dropX));
     suika.balls.push({id:++suika.id,x,y:r+6,vx:0,vy:0,r,t:suika.cur,age:0});
     suika.cur=suika.next; suika.next=skNextTier(); suika.cool=0.45;
@@ -1410,8 +1413,7 @@
       suika.cool=Math.max(0,suika.cool-dt);
       const mv=(suika.keys.L?-1:0)+(suika.keys.R?1:0); if(mv) suika.dropX=Math.min(suika.W,Math.max(0,suika.dropX+mv*suika.W*0.9*dt));
       for(let k=0;k<4;k++) skStep(dt/4);
-      // 선을 완전히 넘은 공이 있으면 경고만 — 실제로 끝나는 건 다음 공을 놓는 순간(skDrop)
-      suika.danger=skOverflow()?suika.danger+dt:0;
+      skOverflowStep(dt);
     }
     skDraw();
     suika.raf=requestAnimationFrame(skLoop);
@@ -1511,11 +1513,12 @@
       g.strokeText('다음',S.W-nr*2-22,nr+12); g.fillStyle='#fff'; g.fillText('다음',S.W-nr*2-22,nr+12); skBall(g,null,S.next,S.W-nr-10,nr+12,nr,0.9);
     }
     for(const b of S.balls) skBall(g,b,b.t,b.x,b.y,b.r,S.over?0.5:1);
-    // 넘친 상태 — 다음 공을 놓으면 끝난다는 걸 알려줌
+    // 선을 넘은 채 머물면 남은 시간 표시 — 0이 되면 끝
     if(!S.over&&S.danger>0){
+      const left=Math.max(0,SK_OVER-S.danger).toFixed(1);
       g.font='bold 26px sans-serif'; g.textAlign='center'; g.textBaseline='bottom'; g.lineWidth=6;
-      g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText('공을 놓으면 끝!',S.W/2,line-12);
-      g.fillStyle=warn?'#ff6b60':'#ffd166'; g.fillText('공을 놓으면 끝!',S.W/2,line-12);
+      g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText(`선 넘음! ${left}`,S.W/2,line-12);
+      g.fillStyle=warn?'#ff6b60':'#ffd166'; g.fillText(`선 넘음! ${left}`,S.W/2,line-12);
     }
     if(S.flash){ if(performance.now()>S.flash.until) S.flash=null;
       else { g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.55)'; g.strokeText(S.flash.text,S.W/2,line+14); g.fillStyle='#ffcf4a'; g.fillText(S.flash.text,S.W/2,line+14); } }
@@ -2241,7 +2244,7 @@
   let bs=null; // {mode:'lobby'|'solo'|'room'|'multi', s, view, room, key, seat, timer, polling, busy, sending, done, sig, place}
   function bsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=BS_REQ); }
   function bsStop(){ if(bs){ clearInterval(bs.timer); clearTimeout(bs.timer); bs.timer=0; bs.polling=false; } }
-  function bsIcon(){ return '<span class="bs-ic">🚢</span>'; }
+  function bsIcon(){ return ic(IC.battleship); }
   function bsHead(info){ return `<div class="gm-st-head"><b>${bsIcon()}해전</b><span>${info||''}</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('battleship')">✕ 나가기</button></div>`; }
   function bsSetBody(html){ const b=el('gmBody'); if(bs&&bs.bodyHtml===html&&b.dataset.bs==='1') return; b.innerHTML=html; b.dataset.bs='1'; b.dataset.oc=''; if(bs) bs.bodyHtml=html; lockBodySize(); }
   function bsRecordTxt(){ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return ocRecord(w,g); }
@@ -2449,7 +2452,7 @@
     {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[0,168],img:'isle-stairs.png',ar:1.42},
     {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[0,-22],img:'isle-suika.png',ar:1.07},
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
-    {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-52]},
+    {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-72],img:'isle-battleship.png',ar:1.01,size:1.05},
     {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
   ];
   const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
