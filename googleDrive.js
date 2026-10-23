@@ -2057,6 +2057,7 @@ function ocTake(s, pi, now) {
 // 원카드 외치기 — 본인이면 안전, 남이면 본인이 1장 먹음
 function ocCall(s, caller, now) {
     var o = s.one; if (!o || s.winner >= 0) return;
+    if (!s.players[caller] || s.players[caller].out) return; // 파산한 사람은 원카드·저격 불가
     if (caller === o.p) ocLog(s, '☝ ' + s.players[o.p].name + ' 원카드!');
     else { var p = s.players[o.p], c = ocDraw1(s); if (c) p.hand.push(c); ocLog(s, '🚨 ' + s.players[caller].name + ' 원카드 저격! ' + p.name + ' +1장'); }
     s.one = null; s.ver++;
@@ -2089,7 +2090,7 @@ function ocTick(s, now, timeoutMs) {
     if (s.winner >= 0) return;
     if (s.one) {
         var best = -1, bt = Infinity;
-        for (var k in s.one.ai) if (s.one.ai[k] <= now && s.one.ai[k] < bt) { bt = s.one.ai[k]; best = +k; }
+        for (var k in s.one.ai) if (!s.players[+k].out && s.one.ai[k] <= now && s.one.ai[k] < bt) { bt = s.one.ai[k]; best = +k; }
         if (best >= 0) ocCall(s, best, now);
         else if (now > s.one.until) { s.one = null; s.ver++; }
     }
