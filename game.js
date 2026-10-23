@@ -1792,8 +1792,9 @@
     const d=document.createElement('div'); d.className='gm-gacha';
     d.style.setProperty('--gc',GRADE_COL[fake?3:g]);
     d.innerHTML=`<div class="gm-gacha-rays"></div><div class="gm-gacha-flash"></div>
-      <div class="gm-gacha-env"><div class="gm-gacha-seal">${ic('ticket.png')}</div><div class="gm-gacha-hint">${TEAM_PULL[m.kind].name}</div></div>
+      <div class="gm-gacha-env"><img src="${UI}gacha-env.png" alt=""/><div class="gm-gacha-hint">${TEAM_PULL[m.kind].name}</div></div>
       <div class="gm-gacha-card g${g}">
+        ${g>=4?`<img class="gm-gacha-frame" src="${UI}gacha-frame.png" alt=""/>`:''}
         <div class="gm-gacha-tag">${GRADE_TAG[g]}</div>
         <div class="gm-gacha-body">${body?`<img src="${body}" alt=""/>`:teamFace(m.id,'gm-pull-img')}</div>
         <div class="gm-gacha-stars">${Array.from({length:5},(_,i)=>`<i class="${i<g?'on':''}" style="animation-delay:${1.55+i*0.14}s">★</i>`).join('')}</div>

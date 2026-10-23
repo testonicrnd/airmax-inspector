@@ -2022,3 +2022,11 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-adm-when label { display:flex; align-items:center; gap:4px; }
 .gm-adm-when input, .gm-adm-grant input { padding:5px 6px; border:1.5px solid var(--border); border-radius:7px; background:var(--input-bg); color:var(--text); font-family:inherit; font-size:12px; }
 .gm-adm-when input[type=number] { width:58px; }
+/* 뽑기 — 봉투 그림 · 에픽/레전드 금테 카드 */
+.gm-gacha-env { width:160px; height:auto; margin:-60px 0 0 -80px; background:none; border-radius:0; box-shadow:none; filter:drop-shadow(0 0 14px var(--gc)) drop-shadow(0 0 4px var(--gc)); }
+.gm-gacha-env img { width:160px; height:auto; display:block; }
+.gm-gacha-env .gm-gacha-hint { margin-top:4px; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,0.8); }
+.gm-gacha.upgrade .gm-gacha-env { box-shadow:none; filter:drop-shadow(0 0 26px var(--gc)) drop-shadow(0 0 60px #fff); }
+.gm-gacha-card.g4, .gm-gacha-card.g5 { border:none; padding:30px 22px 26px; min-height:300px; box-sizing:border-box; justify-content:center; }
+.gm-gacha-frame { position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); pointer-events:none; z-index:2; filter:drop-shadow(0 0 10px var(--gc)); }
+.gm-gacha-card.g4 .gm-gacha-tag, .gm-gacha-card.g5 .gm-gacha-tag { z-index:3; top:-8px; }
