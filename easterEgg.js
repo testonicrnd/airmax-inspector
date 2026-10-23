@@ -157,13 +157,16 @@
     }).catch(()=>{});
   }
   function usingWords(){ return !isTouchDevice(); }
+  // PC 타자와 휴대폰 탭의 균형(v2.54.0) — 휴대폰은 아무 데나 눌러도 정답이라 실수·콤보 끊김이 없어 예전엔 PC의 약 3배였음.
+  // 타자가 훨씬 어려운 만큼 PC가 확실히 더 벌게: 글자당 ×2.0, 탭은 ×0.4에 1초 7번까지만 인정(오토클릭·문지르기 방지)
+  const WORD_CHAR_MULT=2.0, TAP_MULT=0.4, TAP_MIN_GAP=140;
   // 휴대폰 탭용 키 — 방향키 + 알파벳
   const KEYS=[['ArrowUp','↑'],['ArrowDown','↓'],['ArrowLeft','←'],['ArrowRight','→'],
     ...'ASDFJKLEIRUWO'.split('').map(c=>['Key'+c,c])];
   // 강화 — 비용은 완만하게 오르고, 업무력은 25레벨마다 2배 보너스. 몰입은 97레벨에 크리티컬 100%.
   // req: 이 레벨(직급)이 되어야 열리는 스킬. 첫 레벨 비용은 해금 시점 분당 수입의 약 1~4분치(시뮬레이션 기준). 화면은 4칸 타일, 설명은 타일의 ?에 마우스를 올리면(휴대폰은 탭) 표시
   const UPGRADES=[
-    {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'키 1번에'} ${fmt(power({...st,atkLv:lv})*(usingWords()?1.3:1))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
+    {key:'atkLv',   icon:'⌨️', name:'업무력',      desc:lv=>`${usingWords()?'1글자에':'탭 1번에'} ${fmt(power({...st,atkLv:lv})*(usingWords()?WORD_CHAR_MULT:TAP_MULT))} 처리${lv%25===0?' (2배 보너스!)':''}`, base:10, grow:1.08, max:9999},
     {key:'autoLv',  icon:'☕', name:'커피 수혈',   desc:lv=>`가만히 있어도 초당 ${fmt(autoDps({...st,autoLv:lv}))} 처리`, base:30, grow:1.09, max:9999},
     {key:'critLv',  icon:'🔥', name:'몰입',        desc:lv=>lv?`${Math.round(critChance(lv)*100)}% 확률로 ${critMult().toFixed(1)}배 처리`:'아직 효과 없음 — 1레벨부터 1%씩', base:60, grow:1.11, max:100},
     {key:'bonusLv', icon:'💸', name:'성과금 수령', desc:lv=>`받는 실적 ×${goldMult(lv).toFixed(2)}`, base:150, grow:1.15, max:9999},
@@ -254,6 +257,7 @@
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
   // 새로 생긴 것 카드 — 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
   const PATCH_NOTES=[
+    {v:'2.54.0', items:['⌨️ <b>PC 타자 보상 상향</b> — 단어 글자당 처리량 ×1.3 → ×2.0','📱 휴대폰 탭은 ×0.4로 조정 (1초 7번까지) — 타자가 더 어려운 만큼 PC가 더 벌어요']},
     {v:'2.53.0', items:['🎰 <b>슬롯머신</b> — 이사부터, 실적을 걸고 한 판! 왕관 3개면 ×300 잭팟','🚢 해전 포격 효과가 두 번 터지던 문제 수정']},
     {v:'2.52.0', items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서 (위 숫자 줄의 📋)','🏆 <b>주간 랭킹</b> — 미니게임 순위가 매주 월요일 새로 시작, 지난주 1~3위 추천서 10·6·3장','⚡ <b>근무 외 시간 사고</b> — 평일 8~19시 밖·주말엔 정전·인터넷 먹통 같은 사고로 효율 50%']},
     {v:'2.50.0', items:['🧩 <b>블록 블라스트</b> — 과장부터, 미니게임 월드에서']},
@@ -617,7 +621,7 @@
       combo++; if(combo>st.bestCombo) st.bestCombo=combo;
       seqPos++;
       st.keys++;
-      strike(power(st)*want.length*1.3*comboMult());
+      strike(power(st)*want.length*WORD_CHAR_MULT*comboMult());
       afterWork();
       wordPop(want);
       if(mon&&seqPos>=seq.length){ if(seq.length>1) floatText('✔ 완료',false); newSeq(); } else renderKeys();
@@ -670,7 +674,7 @@
     if(code===want[0]){
       combo++; if(combo>st.bestCombo) st.bestCombo=combo;
       seqPos++;
-      work(comboMult());
+      work(comboMult()*TAP_MULT);
       if(mon&&seqPos>=seq.length){ floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
       if(!cheerHas('combo')) combo=0; // 천병돌 사장님의 격려 중에는 틀려도 콤보가 안 풀림
@@ -679,7 +683,7 @@
     }
     return true;
   }
-  let lastTickAt=0;
+  let lastTickAt=0, lastTapAt=0;
   let beanAt=0;
   function tick(){
     if(!mon) return;
@@ -3153,7 +3157,9 @@
   window.gmTouchTap=function(e){
     if(!(isTouchDevice()||e.pointerType==='touch'||e.pointerType==='pen')) return;
     e.preventDefault();
-    lastInput=Date.now();
+    const now=Date.now(); lastInput=now;
+    if(now-lastTapAt<TAP_MIN_GAP) return; // 너무 빠른 연타는 무시(1초 7번까지)
+    lastTapAt=now;
     if(seq[seqPos]) keyInput(seq[seqPos][0]);
   };
   window.gmBuy=buy;
