@@ -1294,15 +1294,16 @@ function handleGameAction(data) {
             var cached = null;
             try { cached = JSON.parse(rkCache.get(rkKey) || 'null'); } catch (e) { cached = null; }
             if (cached && cached.all) {
-                return buildJson({ success: true, players: cached.all.length, myRank: rankOfPid(cached.all, playerId),
+                return buildJson({ success: true, players: cached.all.length, myRank: rankOfPid(cached.all, playerId), mine: data.board === 'onecard' ? (ocLoadStats()[playerId] || { w: 0, g: 0 }) : undefined,
                     top: cached.all.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
             }
             // 승진 순위: 가장 늦게 입사한(어려운) 직원 → 그 직원의 단계 → 레벨 → 누적 실적
             // board='stairs': 무한의 계단 최고 층수 / 'suika': 수박 게임 / 'tetris': 테트리스 최고 점수 순위 (기록 있는 사람만)
             var board = ['stairs', 'suika', 'tetris', 'onecard'].indexOf(data.board) >= 0 ? data.board : 'promo';
+            var ocS = board === 'onecard' ? ocLoadStats() : {}; // 원카드는 서버가 기록한 같이 하기 전적만
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
                 var s = gameReadState(r) || {};
-                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: Number(s.ocWins) || 0, ocGames: Math.max(Number(s.ocGames) || 0, Number(s.ocWins) || 0) };
+                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: (ocS[String(r[0])] || {}).w || 0, ocGames: (ocS[String(r[0])] || {}).g || 0 };
             });
             if (board === 'onecard') { // 원카드: 한 판이라도 한 사람 — 승리 수 → 승률 → 판 수 적은 순
                 list = list.filter(function(x) { return x.ocGames > 0; });
@@ -1314,7 +1315,7 @@ function handleGameAction(data) {
                 list.sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
             }
             try { rkCache.put(rkKey, JSON.stringify({ all: list }), 45); } catch (e) { /* 캐시 실패는 무시 */ }
-            return buildJson({ success: true, players: list.length, myRank: rankOfPid(list, playerId),
+            return buildJson({ success: true, players: list.length, myRank: rankOfPid(list, playerId), mine: board === 'onecard' ? (ocS[playerId] || { w: 0, g: 0 }) : undefined,
                 top: list.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
         }
 
@@ -2129,6 +2130,27 @@ function ocNewKey() { return Utilities.getUuid().replace(/-/g, '').slice(0, 20);
 // 대기실 유령 정리 — 대기실 화면은 1.5초마다 ocState를 보내므로, 1분 넘게 소식 없는 자리는 창을 닫고 나간 것으로 봄
 var OC_SEAT_IDLE = 60000;
 function ocSeatAlive(room, x, now) { return now - (x.seen || room.at || 0) < OC_SEAT_IDLE; }
+var OC_SEEN_WRITE = 15000; // 대기실 '살아 있음' 기록은 15초에 한 번만(매번 쓰면 잠금을 잡아야 해서)
+function ocAliveCopy(room, si, now) { // 저장하지 않고 유령 자리만 뺀 사본 — 잠금 없는 확인 응답용
+    var c = JSON.parse(JSON.stringify(room));
+    c.seats = c.seats.filter(function(x, k) { return k === si || ocSeatAlive(room, x, now); });
+    return c;
+}
+// 같이 하기 전적 — 브라우저가 아니라 서버가 직접 기록(랭킹 조작 방지). { pid: {w: 승, g: 판} }
+function ocLoadStats() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('OC_STATS') || '{}'); } catch (e) { return {}; } }
+function ocRecord(rm) { // 끝난 판을 한 번만 기록. 잠금 안에서만 부름. 중간에 나간 사람은 패
+    if (!rm.state || rm.state.winner < 0 || rm.recorded) return false;
+    rm.recorded = true;
+    var stats = ocLoadStats();
+    rm.seats.forEach(function(x, k) {
+        if (!x.pid || x.counted) return; // 중간에 나간 사람은 나갈 때 이미 패로 기록함
+        var r = stats[x.pid] || { w: 0, g: 0 };
+        r.g++; if (k === rm.state.winner && !x.left) r.w++;
+        stats[x.pid] = r;
+    });
+    PropertiesService.getScriptProperties().setProperty('OC_STATS', JSON.stringify(stats));
+    return true;
+}
 function ocSeatIndex(room, key) { for (var i = 0; i < room.seats.length; i++) if (room.seats[i].key === key) return i; return -1; }
 // 게임 중 이모지 — 정해진 8개 중 번호만 받음(아무 글자나 못 보내게). 자리마다 1.2초에 한 번, 최근 8개만 6초 동안 보여 줌
 var OC_EMOTE_N = 8, OC_EMOTE_GAP = 1200, OC_EMOTE_SHOW = 6000;
@@ -2176,6 +2198,21 @@ function handleOneCard(data) {
             return buildJson({ success: true, room: ocRoomInfo(room), key: key, seat: room.seats.length - 1 });
         }
         // 아래는 방 안 요청 — 자리 키로 확인
+        if (act === 'ocState') { // 대부분의 확인 요청은 바꿀 게 없음 → 잠금 없이 읽기만(점검표 제출·저장과 같은 잠금을 덜 씀)
+            var fr = ocLoadRoom(String(data.room || ''));
+            if (!fr) return buildJson({ success: false, gone: true, error: '방이 없어졌습니다.' });
+            var fi = ocSeatIndex(fr, String(data.key || ''));
+            if (fi < 0) return buildJson({ success: false, gone: true, error: '이 방의 참가자가 아닙니다.' });
+            if (fr.state) {
+                var fv = fr.state.ver;
+                for (var ft = 0; ft < 4; ft++) ocTick(fr.state, now, OC_TURN_MS); // 시험 삼아 진행 — 바뀌면 버리고 아래 잠금 경로에서 다시
+                if (fr.state.ver === fv && !(fr.state.winner >= 0 && !fr.recorded))
+                    return buildJson({ success: true, room: ocRoomInfo(fr), view: ocView(fr.state, fi, now), emo: ocEmotes(fr, now) });
+            } else if (now - (fr.seats[fi].seen || 0) < OC_SEEN_WRITE) {
+                var fc = ocAliveCopy(fr, fi, now);
+                return buildJson({ success: true, room: ocRoomInfo(fc), seat: ocSeatIndex(fc, String(data.key || '')) });
+            }
+        }
         lock.waitLock(15000);
         var rm = ocLoadRoom(String(data.room || ''));
         if (!rm) return buildJson({ success: false, gone: true, error: '방이 없어졌습니다.' });
@@ -2188,7 +2225,11 @@ function handleOneCard(data) {
         }
         if (act === 'ocLeave') {
             if (!rm.state) { rm.seats.splice(si, 1); if (!rm.seats.length) { ocCache().remove('oc_r_' + rm.id); return buildJson({ success: true }); } }
-            else { rm.seats[si].left = true; var pl = rm.state.players[si]; if (pl && !pl.ai) { pl.ai = true; pl.name += '(컴퓨터)'; rm.state.aiAt = now; } } // 게임 중이면 컴퓨터가 이어받음
+            else { rm.seats[si].left = true;
+                if (rm.state.winner < 0 && !rm.seats[si].counted && rm.seats[si].pid) { // 끝나기 전에 나가면 바로 패 기록(남은 사람이 없어 판이 안 끝나도 빠지지 않게)
+                    var ocSt = ocLoadStats(), mr = ocSt[rm.seats[si].pid] || { w: 0, g: 0 }; mr.g++; ocSt[rm.seats[si].pid] = mr;
+                    PropertiesService.getScriptProperties().setProperty('OC_STATS', JSON.stringify(ocSt)); rm.seats[si].counted = true; }
+                var pl = rm.state.players[si]; if (pl && !pl.ai) { pl.ai = true; pl.name += '(컴퓨터)'; rm.state.aiAt = now; } } // 게임 중이면 컴퓨터가 이어받음
             ocSaveRoom(rm); return buildJson({ success: true });
         }
         if (act === 'ocStart') {
@@ -2223,7 +2264,7 @@ function handleOneCard(data) {
         if (rm.state) {
             var v0 = rm.state.ver;
             for (var t = 0; t < 4; t++) ocTick(rm.state, now, OC_TURN_MS);   // 밀린 컴퓨터 차례를 조금씩 진행
-            if (rm.state.ver !== v0) ocSaveRoom(rm);
+            if (ocRecord(rm) || rm.state.ver !== v0) ocSaveRoom(rm);
             return buildJson({ success: true, room: ocRoomInfo(rm), view: ocView(rm.state, si, now), emo: ocEmotes(rm, now) });
         }
         if (act === 'ocState') ocSaveRoom(rm); // 대기실에 있다는 표시

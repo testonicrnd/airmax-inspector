@@ -1112,11 +1112,12 @@
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
     const info=x=>board==='onecard'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
     const mine=board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
-    const title=board==='onecard'?'원카드 전적':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
+    const title=board==='onecard'?'원카드 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
     const body=(j,stale)=>`<div class="gm-rank-title">${ic(IC[board])}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
       (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
       j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
-      (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${mine}</span></div>`:'');
+      (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${board==='onecard'&&j.mine?ocRecord(j.mine.w,j.mine.g):mine}</span></div>`:'')+
+      (board==='onecard'?`<div class="gm-st-info">같이 하기 전적만 서버가 직접 기록해서 순위에 들어가요${j.mine?` · 내 전적 ${ocRecord(j.mine.w,j.mine.g)}`:''}</div>`:'');
     const paint=html=>{ const b=el('gmBody'); if(!b) return false;
       b.innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
     // 전에 본 적 있으면 그걸 먼저 보여주고 뒤에서 갱신 — 서버가 2초 넘게 걸려서 빈 화면을 오래 보던 문제
@@ -1808,7 +1809,7 @@
   const OC_REQ=50, OC_BASE=1000, OC_POLL=1500;
   let oc=null; // {mode:'solo'|'lobby'|'room'|'multi', s, view, room, key, seat, timer, done, pick}
   function ocUnlocked(){ return acc.runs.some(r=>r&&r.lv>=OC_REQ); }
-  function ocStop(){ if(oc){ clearInterval(oc.timer); oc.timer=0; } ocTitleAlert(false); }
+  function ocStop(){ if(oc){ clearInterval(oc.timer); clearTimeout(oc.timer); oc.timer=0; oc.polling=false; } ocTitleAlert(false); }
   let ocTitleT=0, ocTitle0='';
   function ocTitleAlert(on){
     if(!on){ if(ocTitleT){ clearInterval(ocTitleT); ocTitleT=0; document.title=ocTitle0; } return; }
@@ -1877,17 +1878,26 @@
   function ocEnterRoom(j){
     if(!j||!j.success){ if(j&&j.auth===false){ authLost(); return; } toast(`⚠ ${(j&&j.error)||'실패'}`,2500); return; }
     ocStop(); oc={mode:'room',room:j.room.id,key:j.key,seat:j.seat,info:j.room,timer:0,done:false,lastVer:-1,busy:false};
-    ocRoomRender(); oc.timer=setInterval(ocPoll,OC_POLL); ocPoll();
+    ocRoomRender(); oc.polling=true; ocPoll();
   }
   async function ocPoll(){
     if(!oc||(oc.mode!=='room'&&oc.mode!=='multi')||oc.busy) return;
-    oc.busy=true;
+    const me=oc; me.busy=true;
     try{
       const j=await gas({action:'ocState',room:oc.room,key:oc.key});
       if(!oc||(oc.mode!=='room'&&oc.mode!=='multi')) return;
       if(!j.success){ if(j.gone){ ocStop(); toast('방이 없어졌습니다',2500); gmShowOneCard(); } return; }
       ocApply(j);
-    }catch(e){}finally{ if(oc) oc.busy=false; }
+    }catch(e){}finally{ if(me) me.busy=false; if(oc===me&&me.polling){ clearTimeout(me.timer); me.timer=setTimeout(ocPoll,ocPollDelay()); } }
+  }
+  // 확인 주기 — 다음이 내 차례이거나 원카드 외침이 걸려 있으면 자주(0.9초), 평소 1.5초, 다른 창을 보고 있으면 2.5초.
+  // 서버는 바뀔 게 없는 확인은 잠금 없이 읽기만 해서 자주 물어도 점검표 제출에 영향이 없음
+  function ocPollDelay(){
+    const v=oc&&oc.view; if(!v||oc.mode!=='multi'||v.winner>=0) return OC_POLL;
+    if(document.hidden) return 2500;
+    if(v.one) return 900;
+    const n=v.players.length; let i=v.turn, k=0; do{ i=(i+v.dir+n)%n; }while(v.players[i].out&&++k<n);
+    return i===v.me&&v.turn!==v.me?900:OC_POLL;
   }
   function ocApply(j){
     lastInput=Date.now(); // 같이 하기 중 다른 사람 차례를 기다리는 동안 창이 흐려지거나 내려가지 않게
@@ -2175,7 +2185,7 @@
   const PULL_ODDS=[0,55,28,12.4,4,0.6], PULL_SAFE=[0,0,0,12.4,4,0.6]; // ★1~★5 확률(%) · 11회 보장 칸(★3 이상)
   const PULL_COST={1:1,11:10}, INV_MAX=100;
   const kindOf=g=>g>=3?'staff':'intern';
-  const REFUND=0.1; // 방출 1명당 추천서 0.1장
+  const REFUND=0.1; // 방출 환급 = 강화 재료 가치(등급·강화 경험치) × 0.1장 — ★1 0.1장 … ★5 1.6장, 강화한 만큼 더
   function addRefs(x){ acc.refs=Math.round(((acc.refs||0)+x)*10)/10; }
   function fmtRefs(x){ x=x||0; return Number.isInteger(x)?x.toLocaleString():x.toFixed(1); }
   function newUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -2213,16 +2223,23 @@
   function teamCards(){ st.team=st.team||[]; acc.inv=acc.inv||[]; [...st.team,...acc.inv].forEach(m=>{ if(!m.uid) m.uid=newUid(); }); }
   function findCard(uid){ let i=st.team.findIndex(m=>m.uid===uid); if(i>=0) return {m:st.team[i],i,where:'team'};
     i=acc.inv.findIndex(m=>m.uid===uid); return i>=0?{m:acc.inv[i],i,where:'inv'}:null; }
-  // 강화 재료 — 보관함에 있는 같은 사람 카드 중 가장 약한 것
-  function upMaterial(m){ return acc.inv.filter(x=>x.id===m.id&&x.uid!==m.uid).sort((a,b)=>a.grade-b.grade||a.lv-b.lv)[0]; }
-  function canUp(m){ const x=upMaterial(m); return !!x&&(m.lv<5||x.grade>m.grade); }
+  // 강화 — 같은 사람 카드를 재료로 경험치를 줌. 재료 등급이 높을수록 경험치가 많고(★1=1 … ★5=16, 재료에 쌓인 경험치도 그대로 넘어감),
+  // 높은 등급 팀원일수록 레벨업에 경험치가 더 필요(Lv.n→n+1 = n × 등급 배수). 최대 Lv.5
+  const UP_GIVE=[0,1,2,4,8,16], UP_NEED=[0,1,1.5,2,3,4], UP_MAX=5;
+  function upNeed(m){ return Math.ceil(UP_NEED[m.grade]*m.lv); }
+  function upInvested(m){ let t=m.xp||0; for(let l=1;l<m.lv;l++) t+=Math.ceil(UP_NEED[m.grade]*l); return t; }
+  function upGive(x){ return UP_GIVE[x.grade]+upInvested(x); }
+  function upMaterials(m){ return acc.inv.filter(x=>x.id===m.id&&x.uid!==m.uid).sort((a,b)=>upGive(a)-upGive(b)); }
+  function refundOf(list){ return Math.round(list.reduce((a,x)=>a+upGive(x),0)*REFUND*10)/10; }
+  function canUp(m){ return m.lv<UP_MAX&&upMaterials(m).length>0; }
+  function upAdd(m,xp){ m.xp=(m.xp||0)+xp; while(m.lv<UP_MAX&&m.xp>=upNeed(m)){ m.xp-=upNeed(m); m.lv++; } if(m.lv>=UP_MAX) m.xp=0; }
   function memberRow(m,where,slotFree){
     const btn=(cls,fn,txt)=>`<button type="button" class="gm-team-act ${cls}" onclick="${fn}('${m.uid}')">${txt}</button>`;
     return `<div class="gm-team-row g${m.grade}">
         <span class="gm-avatar">${teamFace(m.id)}</span>
-        <span class="gm-team-text"><b>${escHtml(TEAM_NAMES[m.id])} <small class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</small> <span class="gm-team-stars g${m.grade}">${stars(m.grade)}</span> <small>Lv.${m.lv}</small></b>
+        <span class="gm-team-text"><b>${escHtml(TEAM_NAMES[m.id])} <small class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</small> <span class="gm-team-stars g${m.grade}">${stars(m.grade)}</span> <small class="gm-team-lv">Lv.${m.lv}${m.lv<UP_MAX?` · ${m.xp||0}/${upNeed(m)}`:' MAX'}</small></b>
           <small>${m.trait} · 도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></span>
-        ${canUp(m)?btn('up','gmTeamUp','강화'):''}${where==='team'?btn('out','gmTeamUnassign','빼기'):(slotFree?btn('in','gmTeamAssign','배치'):'')+btn('out','gmTeamRelease','방출')}</div>`;
+        ${canUp(m)?btn('up','gmTeamUp','강화'):''}${where==='team'?btn('out','gmTeamUnassign','빼기'):(slotFree?btn('in','gmTeamAssign','배치'):'')+btn('out','gmTeamRelease',`방출 +${fmtRefs(refundOf([m]))}`)}</div>`;
   }
   function gmShowTeam(){
     if(!teamUnlocked()){ toast(`🔒 지금 키우는 직원이 과장(Lv.${TEAM_REQ}) 이상이면 팀원을 뽑을 수 있습니다`,2800); return; }
@@ -2238,8 +2255,8 @@
           <button type="button" class="gm-team-pull one" ${canPull(1)?'':'disabled'} onclick="gmTeamPull(1)"><b>1회 뽑기</b><small>${ic('ticket.png')}추천서 1장</small></button>
           <button type="button" class="gm-team-pull ten" ${canPull(11)?'':'disabled'} onclick="gmTeamPull(11)"><b>11회 뽑기</b><small>${ic('ticket.png')}추천서 10장 · ★3↑ 1명 보장</small></button>
         </div>
-        <div class="gm-team-odds">★1 ${PULL_ODDS[1]}% · ★2 ${PULL_ODDS[2]}% · ★3 ${PULL_ODDS[3]}% · ★4 ${PULL_ODDS[4]}% · ★5 ${PULL_ODDS[5]}% — ★1·2는 인턴, ★3 이상은 사원 · 방출하면 추천서 ${REFUND}장</div>
-        <div class="gm-adm-sec gm-inv-head">보관함 <small>${acc.inv.length}/${INV_MAX}명 · 같은 사람 카드로 강화</small>${low?`<button type="button" class="gm-team-act out" onclick="gmTeamReleaseLow()">★1·2 모두 방출 (${low})</button>`:''}</div>
+        <div class="gm-team-odds">★1 ${PULL_ODDS[1]}% · ★2 ${PULL_ODDS[2]}% · ★3 ${PULL_ODDS[3]}% · ★4 ${PULL_ODDS[4]}% · ★5 ${PULL_ODDS[5]}% — ★1·2는 인턴, ★3 이상은 사원 · 방출하면 등급·강화만큼 추천서 환급(★1 0.1장 ~ ★5 1.6장)</div>
+        <div class="gm-adm-sec gm-inv-head">보관함 <small>${acc.inv.length}/${INV_MAX}명 · 같은 사람 카드로 강화 (재료 ★1=1 ★2=2 ★3=4 ★4=8 ★5=16)</small>${low?`<button type="button" class="gm-team-act out" onclick="gmTeamReleaseLow()">★1·2 모두 방출 (${low})</button>`:''}</div>
         <div class="gm-team-list">${inv.length?inv.map(m=>memberRow(m,'inv',free)).join(''):'<div class="gm-st-info">보관함이 비어 있어요</div>'}</div>
       </div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
@@ -2266,17 +2283,23 @@
     acc.inv.splice(c.i,1); st.team.push(c.m); dirty=true; saveServer(true); gmShowTeam(); };
   window.gmTeamUnassign=function(uid){ teamCards(); const c=findCard(uid); if(!c||c.where!=='team') return;
     st.team.splice(c.i,1); acc.inv.push(c.m); dirty=true; saveServer(true); gmShowTeam(); };
-  window.gmTeamUp=function(uid){ teamCards(); const c=findCard(uid); if(!c) return; const m=c.m, x=upMaterial(m); if(!x||!canUp(m)) return;
-    const lv0=m.lv, g0=m.grade;
-    m.lv=Math.min(5,m.lv+x.lv); if(x.grade>m.grade){ m.grade=x.grade; if(m.kind!=='staff') m.kind=kindOf(m.grade); }
-    acc.inv.splice(acc.inv.indexOf(x),1); dirty=true; saveServer(true);
-    toast(`⬆ ${TEAM_NAMES[m.id]} 강화! Lv.${lv0}→${m.lv}${m.grade>g0?` · ★${g0}→★${m.grade}`:''}`,2000); gmShowTeam(); };
+  // [강화] — 같은 등급 이하 재료를 약한 것부터 최대 레벨까지만 씀(남는 재료는 그대로). 그런 재료가 없으면 더 높은 등급 한 장을 물어보고 씀
+  window.gmTeamUp=function(uid){ teamCards(); const c=findCard(uid); if(!c||!canUp(c.m)) return; const m=c.m;
+    let mats=upMaterials(m).filter(x=>x.grade<=m.grade);
+    if(!mats.length){ const x=upMaterials(m)[0];
+      if(!confirm(`같은 등급 이하 재료가 없어요. ${stars(x.grade)} ${TEAM_NAMES[x.id]} 카드를 재료로 쓸까요? (경험치 +${upGive(x)})`)) return; mats=[x]; }
+    const lv0=m.lv; let used=0, gained=0;
+    for(const x of mats){ if(m.lv>=UP_MAX) break; const g=upGive(x); upAdd(m,g); gained+=g; used++; acc.inv.splice(acc.inv.indexOf(x),1); }
+    dirty=true; saveServer(true);
+    toast(`⬆ ${TEAM_NAMES[m.id]} 강화! 재료 ${used}장 · 경험치 +${gained}${m.lv>lv0?` · Lv.${lv0}→${m.lv}`:''}`,2200); gmShowTeam(); };
   window.gmTeamRelease=function(uid){ teamCards(); const c=findCard(uid); if(!c||c.where!=='inv') return;
-    if(c.m.grade>=3&&!confirm(`${TEAM_NAMES[c.m.id]} ${stars(c.m.grade)}을(를) 방출할까요? (되돌릴 수 없음 · 추천서 ${REFUND}장 돌려받음)`)) return;
-    acc.inv.splice(c.i,1); addRefs(REFUND); dirty=true; saveServer(true); toast(`👋 방출 · 추천서 +${REFUND}장`,1400); gmShowTeam(); };
+    const back=refundOf([c.m]);
+    if((c.m.grade>=3||c.m.lv>1)&&!confirm(`${TEAM_NAMES[c.m.id]} ${stars(c.m.grade)} Lv.${c.m.lv}을(를) 방출할까요? (되돌릴 수 없음 · 추천서 ${fmtRefs(back)}장 돌려받음)`)) return;
+    acc.inv.splice(c.i,1); addRefs(back); dirty=true; saveServer(true); toast(`👋 방출 · 추천서 +${fmtRefs(back)}장`,1400); gmShowTeam(); };
   window.gmTeamReleaseLow=function(){ teamCards(); const n=acc.inv.filter(m=>m.grade<=2).length; if(!n) return;
-    if(!confirm(`보관함의 ★1·★2 팀원 ${n}명을 모두 방출할까요? 추천서 ${fmtRefs(Math.round(n*REFUND*10)/10)}장을 돌려받아요. (강화 재료로 쓸 수도 있어요)`)) return;
-    acc.inv=acc.inv.filter(m=>m.grade>2); addRefs(n*REFUND); dirty=true; saveServer(true); toast(`👋 ${n}명 방출 · 추천서 +${fmtRefs(Math.round(n*REFUND*10)/10)}장`,1600); gmShowTeam(); };
+    const back=refundOf(acc.inv.filter(m=>m.grade<=2));
+    if(!confirm(`보관함의 ★1·★2 팀원 ${n}명을 모두 방출할까요? 추천서 ${fmtRefs(back)}장을 돌려받아요. (강화 재료로 쓸 수도 있어요)`)) return;
+    acc.inv=acc.inv.filter(m=>m.grade>2); addRefs(back); dirty=true; saveServer(true); toast(`👋 ${n}명 방출 · 추천서 +${fmtRefs(back)}장`,1600); gmShowTeam(); };
   // 뽑기 연출 — ① 봉투가 떨어져 등급 색으로 흔들림(★5는 가끔 파랑으로 속였다가 금색으로 승급)
   // ② 빛기둥 회전 + 섬광 → ③ 카드가 뒤집히며 전신 등장, 별이 하나씩 박힘 → ④ ★4 이상 문구·색종이, ★5는 화면 흔들림·무지개
   const GRADE_COL=['','#9e9e9e','#66bb6a','#42a5f5','#ab47bc','#ffb300'];
