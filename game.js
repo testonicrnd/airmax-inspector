@@ -171,6 +171,7 @@
     {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
     {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
     {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
+    {key:'bsLv',    icon:'🚢', name:'해전 제독', desc:lv=>`해전 경험치 +${lv*20}%`, base:5000, grow:1.45, max:25, req:12},
     {key:'ocLv',    icon:'🃏', name:'원카드 타짜', desc:lv=>`원카드 경험치 +${lv*20}%`, base:2000000000, grow:1.45, max:25, req:50},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -188,7 +189,7 @@
     {key:'signLv',    icon:'👑', name:'전결권',    desc:lv=>`보스(결재) 중에는 콤보 한계 ×${(1+0.3*lv).toFixed(1)}`, base:400000000000, grow:1.4, max:15, req:130},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,ocLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0,team:[]});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,ocLv:0,bsLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0,team:[]});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,refs:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -809,6 +810,7 @@
       <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}<span class="gm-link-long">미니게임 </span>월드</button><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
+    if(!resumeHinted&&(roomSaved('oc')||roomSaved('bs'))){ resumeHinted=true; const g=roomSaved('oc')?'원카드':'해전'; setTimeout(()=>toast(`🔄 진행 중이던 ${g}가 있어요 — 미니게임 월드 › ${g}에서 이어서 하세요`,3500),600); }
     { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
       if(short>0){ b.style.minHeight=(b.offsetHeight+short)+'px'; b.classList.add('padded'); } }
     playH=el('gmBody').offsetHeight;
@@ -1110,17 +1112,17 @@
   // 원카드 전적 — 12승 8패 · 60%
   function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
   async function gmShowRanking(board){
-    board=['stairs','suika','tetris','onecard'].includes(board)?board:'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button></div>`;
+    board=['stairs','suika','tetris','onecard','battleship'].includes(board)?board:'promo';
+    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button><button type="button" class="${board==='battleship'?'on':''}" onclick="gmShowRanking('battleship')"><span class="bs-ic">🚢</span>해전</button></div>`;
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
-    const info=x=>board==='onecard'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-    const mine=board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
-    const title=board==='onecard'?'원카드 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
-    const body=(j,stale)=>`<div class="gm-rank-title">${ic(IC[board])}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
+    const info=x=>board==='onecard'||board==='battleship'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
+    const mine=board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
+    const title=board==='onecard'?'원카드 전적 (같이 하기)':board==='battleship'?'해전 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
+    const body=(j,stale)=>`<div class="gm-rank-title">${IC[board]?ic(IC[board]):'<span class="bs-ic">🚢</span>'}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
       (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
       j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
-      (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${board==='onecard'&&j.mine?ocRecord(j.mine.w,j.mine.g):mine}</span></div>`:'')+
-      (board==='onecard'?`<div class="gm-st-info">같이 하기 전적만 서버가 직접 기록해서 순위에 들어가요${j.mine?` · 내 전적 ${ocRecord(j.mine.w,j.mine.g)}`:''}</div>`:'');
+      (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${(board==='onecard'||board==='battleship')&&j.mine?ocRecord(j.mine.w,j.mine.g):mine}</span></div>`:'')+
+      (board==='onecard'||board==='battleship'?`<div class="gm-st-info">같이 하기 전적만 서버가 직접 기록해서 순위에 들어가요${j.mine?` · 내 전적 ${ocRecord(j.mine.w,j.mine.g)}`:''}</div>`:'');
     const paint=html=>{ const b=el('gmBody'); if(!b) return false;
       b.innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
     // 전에 본 적 있으면 그걸 먼저 보여주고 뒤에서 갱신 — 서버가 2초 넘게 걸려서 빈 화면을 오래 보던 문제
@@ -1811,6 +1813,11 @@
   // 보상: 순위·남은 카드로 점수 → 경험치·추천서(같이 하기 1.5배), 승리 수 랭킹
   const OC_REQ=50, OC_BASE=1000, OC_POLL=1500;
   let oc=null; // {mode:'solo'|'lobby'|'room'|'multi', s, view, room, key, seat, timer, done, pick}
+  // 같이 하기 재접속 — 들어간 방과 자리 키를 이 기기에 기억. 새로고침·창 닫기 뒤 다시 열면 그 자리로 돌아감(직접 나가거나 끝나면 지움)
+  const LS_ROOM='airmax_game_room'; let resumeHinted=false;
+  function roomSave(g,room,key){ lsSet(LS_ROOM,{g,room,key,pid,at:Date.now()}); }
+  function roomClear(g){ const r=lsGet(LS_ROOM,null); if(r&&(!g||r.g===g)){ try{ localStorage.removeItem(LS_ROOM); }catch(e){} } }
+  function roomSaved(g){ const r=lsGet(LS_ROOM,null); return r&&r.g===g&&r.pid===pid&&Date.now()-(r.at||0)<6*3600000?r:null; }
   function ocUnlocked(){ return acc.runs.some(r=>r&&r.lv>=OC_REQ); }
   function ocStop(){ if(oc){ clearInterval(oc.timer); clearTimeout(oc.timer); oc.timer=0; oc.polling=false; } ocTitleAlert(false); }
   let ocTitleT=0, ocTitle0='';
@@ -1835,8 +1842,19 @@
     if(!ocUnlocked()){ toast(`🔒 차장(Lv.${OC_REQ}) 이상 달성 시 자동으로 해금됩니다`,2500); return; }
     ocStop(); oc={mode:'lobby',timer:0};
     ocLobbyRender([]);
+    { const r=roomSaved('oc'); if(r) ocTryResume(r); }
     ocLobbyLoad();
     oc.timer=setInterval(ocLobbyLoad,4000);
+  }
+  async function ocTryResume(r){
+    try{
+      const j=await gas({action:'ocState',room:r.room,key:r.key});
+      if(!oc||oc.mode!=='lobby') return;
+      if(!j.success||(j.view&&j.view.winner>=0)){ roomClear('oc'); return; }
+      ocEnterRoom({success:true,room:j.room,key:r.key,seat:j.seat!=null?j.seat:(j.view?j.view.me:0)});
+      if(j.view) ocApply(j);
+      toast('🔄 진행 중이던 원카드 방으로 돌아왔어요',2200);
+    }catch(e){}
   }
   async function ocLobbyLoad(){
     try{ const j=await gas({action:'ocLobby'}); if(oc&&oc.mode==='lobby'&&j.success) ocLobbyRender(j.rooms||[]); }catch(e){}
@@ -1881,6 +1899,7 @@
   function ocEnterRoom(j){
     if(!j||!j.success){ if(j&&j.auth===false){ authLost(); return; } toast(`⚠ ${(j&&j.error)||'실패'}`,2500); return; }
     ocStop(); oc={mode:'room',room:j.room.id,key:j.key,seat:j.seat,info:j.room,timer:0,done:false,lastVer:-1,busy:false};
+    roomSave('oc',j.room.id,j.key);
     ocRoomRender(); oc.polling=true; ocPoll();
   }
   async function ocPoll(){
@@ -1889,7 +1908,7 @@
     try{
       const j=await gas({action:'ocState',room:oc.room,key:oc.key});
       if(!oc||(oc.mode!=='room'&&oc.mode!=='multi')) return;
-      if(!j.success){ if(j.gone){ ocStop(); toast('방이 없어졌습니다',2500); gmShowOneCard(); } return; }
+      if(!j.success){ if(j.gone){ ocStop(); roomClear('oc'); toast('방이 없어졌습니다',2500); gmShowOneCard(); } return; }
       ocApply(j);
     }catch(e){}finally{ if(me) me.busy=false; if(oc===me&&me.polling){ clearTimeout(me.timer); me.timer=setTimeout(ocPoll,ocPollDelay()); } }
   }
@@ -2051,7 +2070,7 @@
   window.ocUiCall=function(){ lastInput=Date.now(); if(oc.mode==='solo'){ ocCall(oc.s,oc.me,Date.now()); ocGameRender(true); } else ocSend('ocCall'); };
   // 끝 — 순위·남은 카드로 점수 → 경험치·추천서
   function ocFinish(v){
-    if(oc.done) return; oc.done=true; ocStop();
+    if(oc.done) return; oc.done=true; ocStop(); if(oc.mode==='multi') roomClear('oc');
     const me=v.me, players=v.players;
     const order=players.map((p,i)=>i).sort((a,b)=>(a===v.winner?-1:b===v.winner?1:0)||((players[a].out?99:players[a].n)-(players[b].out?99:players[b].n)));
     const rank=order.indexOf(me)+1, others=players.reduce((s,p,i)=>s+(i===me||p.out?0:p.n),0);
@@ -2075,18 +2094,363 @@
   window.gmOneCardExit=function(){
     if(oc&&(oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; saveServer(true); } // 하다가 나가면 패(승률 지키려고 나가는 것 방지)
     if(oc&&(oc.mode==='room'||oc.mode==='multi')&&!oc.done) gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{});
-    ocStop(); oc=null; gmShowWorld();
+    roomClear('oc'); ocStop(); oc=null; gmShowWorld();
   };
 
   /* ---------- 미니게임 월드 ---------- */
   // 구름 섬 지도. 열린 섬은 둥실둥실 + 최고 기록, 잠긴 섬은 안개 + 🔒(누르면 해금 직급 안내). 준비 중 섬으로 다음 게임 예고
+  // ===== 해전(배틀쉽) 엔진 — game.js(혼자 하기)와 googleDrive.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
+  // 8×8 바다에 배 4척(4·3·3·2칸). 서로 번갈아 한 칸씩 쏘고, 맞히면 한 번 더. 상대 배를 모두 가라앉히면 승리
+  // 칸 번호 = 행*8 + 열. 내가 쏜 기록(shots): 64글자 — '.' 안 쏨, 'o' 빗나감, 'x' 맞음, '#' 가라앉은 배
+  var BS_N = 8, BS_SHIPS = [4, 3, 3, 2], BS_AI_MS = 900, BS_PLACE_MS = 90000;
+  function bsEmpty() { var t = ''; for (var i = 0; i < BS_N * BS_N; i++) t += '.'; return t; }
+  function bsSet(str, i, ch) { return str.substr(0, i) + ch + str.substr(i + 1); }
+  // 배 = 칸 번호 목록. 가로/세로 일직선, 서로 겹치거나 붙지 않게(대각선 포함)
+  function bsShipCells(r, c, len, vert) { var a = []; for (var k = 0; k < len; k++) a.push((r + (vert ? k : 0)) * BS_N + c + (vert ? 0 : k)); return a; }
+  function bsFits(taken, cells, r, c, len, vert) {
+      if (vert ? r + len > BS_N : c + len > BS_N) return false;
+      for (var k = 0; k < cells.length; k++) if (taken[cells[k]]) return false;
+      return true;
+  }
+  function bsMark(taken, cells) { // 배 칸과 그 둘레 한 칸을 막음
+      cells.forEach(function(i) { var r = Math.floor(i / BS_N), c = i % BS_N;
+          for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) { var rr = r + dr, cc = c + dc; if (rr >= 0 && rr < BS_N && cc >= 0 && cc < BS_N) taken[rr * BS_N + cc] = 1; } });
+  }
+  function bsRandomShips() {
+      for (var tries = 0; tries < 200; tries++) {
+          var taken = {}, ships = [], ok = true;
+          for (var s = 0; s < BS_SHIPS.length && ok; s++) {
+              var len = BS_SHIPS[s], placed = false;
+              for (var t = 0; t < 100 && !placed; t++) {
+                  var vert = Math.random() < 0.5, r = Math.floor(Math.random() * BS_N), c = Math.floor(Math.random() * BS_N);
+                  var cells = bsShipCells(r, c, len, vert);
+                  if (bsFits(taken, cells, r, c, len, vert)) { bsMark(taken, cells); ships.push(cells); placed = true; }
+              }
+              if (!placed) ok = false;
+          }
+          if (ok) return ships;
+      }
+      return null;
+  }
+  // 받은 배치가 규칙에 맞는지(서버에서 꼭 확인)
+  function bsValidShips(ships) {
+      if (!Array.isArray(ships) || ships.length !== BS_SHIPS.length) return false;
+      var lens = ships.map(function(x) { return Array.isArray(x) ? x.length : 0; }).sort(function(a, b) { return b - a; });
+      for (var i = 0; i < BS_SHIPS.length; i++) if (lens[i] !== BS_SHIPS[i]) return false;
+      var taken = {};
+      for (var s = 0; s < ships.length; s++) {
+          var cells = ships[s].map(Number).slice().sort(function(a, b) { return a - b; });
+          for (var k = 0; k < cells.length; k++) if (!(cells[k] >= 0 && cells[k] < BS_N * BS_N) || cells[k] !== Math.floor(cells[k])) return false;
+          var r0 = Math.floor(cells[0] / BS_N), c0 = cells[0] % BS_N, vert = cells.length > 1 && cells[1] - cells[0] === BS_N;
+          var want = bsShipCells(r0, c0, cells.length, vert);
+          if (!bsFits(taken, want, r0, c0, cells.length, vert)) return false;
+          for (k = 0; k < cells.length; k++) if (cells[k] !== want[k]) return false;
+          bsMark(taken, want);
+      }
+      return true;
+  }
+  function bsLog(s, t) { s.log.push(t); if (s.log.length > 20) s.log.shift(); }
+  function bsNew(players, now) {
+      var s = { phase: 'place', turn: 0, winner: -1, ver: 1, turnAt: now, aiAt: now + BS_AI_MS, last: null, log: [],
+          players: players.map(function(p) { return { name: p.name, face: p.face, ai: !!p.ai, key: p.key || '', ships: null, ready: false, shots: bsEmpty(), hits: 0 }; }) };
+      s.players.forEach(function(p) { if (p.ai) { p.ships = bsRandomShips(); p.ready = true; } });
+      bsLog(s, '⚓ 배를 배치하세요');
+      return s;
+  }
+  function bsPlace(s, pi, ships, now) {
+      if (s.phase !== 'place') return '이미 시작했습니다.';
+      var p = s.players[pi]; if (!p) return '자리가 없습니다.';
+      if (!bsValidShips(ships)) return '배치가 올바르지 않습니다.';
+      p.ships = ships.map(function(x) { return x.map(Number).sort(function(a, b) { return a - b; }); }); p.ready = true;
+      s.ver++;
+      if (s.players.every(function(q) { return q.ready; })) {
+          s.phase = 'play'; s.turn = Math.floor(Math.random() * s.players.length); s.turnAt = now; s.aiAt = now + BS_AI_MS;
+          bsLog(s, '🚩 ' + s.players[s.turn].name + ' 먼저 쏩니다');
+      }
+      return '';
+  }
+  function bsShipAt(p, cell) { for (var i = 0; i < p.ships.length; i++) if (p.ships[i].indexOf(cell) >= 0) return i; return -1; }
+  function bsSunk(shooter, ship) { for (var k = 0; k < ship.length; k++) if (shooter.shots.charAt(ship[k]) === '.' || shooter.shots.charAt(ship[k]) === 'o') return false; return true; }
+  function bsShoot(s, pi, cell, now) {
+      if (s.phase !== 'play' || s.winner >= 0) return '지금은 쏠 수 없습니다.';
+      if (s.turn !== pi) return '내 차례가 아닙니다.';
+      cell = Math.floor(Number(cell));
+      if (!(cell >= 0 && cell < BS_N * BS_N)) return '잘못된 칸입니다.';
+      var me = s.players[pi], opp = s.players[1 - pi];
+      if (me.shots.charAt(cell) !== '.') return '이미 쏜 칸입니다.';
+      var si = bsShipAt(opp, cell), res = 'miss';
+      if (si >= 0) {
+          me.shots = bsSet(me.shots, cell, 'x'); me.hits++; res = 'hit';
+          if (bsSunk(me, opp.ships[si])) { opp.ships[si].forEach(function(c) { me.shots = bsSet(me.shots, c, '#'); }); res = 'sunk';
+              bsLog(s, '💥 ' + me.name + ' — ' + opp.ships[si].length + '칸 배 격침!'); }
+          else bsLog(s, '🔥 ' + me.name + ' 명중! 한 번 더');
+          if (me.hits >= BS_SHIPS.reduce(function(a, b) { return a + b; }, 0)) { s.winner = pi; s.phase = 'end'; bsLog(s, '🏆 ' + me.name + ' 승리!'); }
+      } else { me.shots = bsSet(me.shots, cell, 'o'); s.turn = 1 - pi; bsLog(s, '💧 ' + me.name + ' 빗나감'); }
+      s.last = { p: pi, cell: cell, res: res }; s.ver++; s.turnAt = now; s.aiAt = now + BS_AI_MS;
+      return '';
+  }
+  // 컴퓨터 — 맞힌 자리 주변부터(두 칸 이상 맞으면 그 줄 방향), 없으면 체스판 무늬로 듬성듬성
+  function bsAiCell(shots) {
+      var hits = [], i;
+      for (i = 0; i < shots.length; i++) if (shots.charAt(i) === 'x') hits.push(i);
+      var cand = [];
+      function free(r, c) { return r >= 0 && r < BS_N && c >= 0 && c < BS_N && shots.charAt(r * BS_N + c) === '.'; }
+      if (hits.length) {
+          hits.forEach(function(h) { var r = Math.floor(h / BS_N), c = h % BS_N;
+              var lineH = (c > 0 && shots.charAt(h - 1) === 'x') || (c < BS_N - 1 && shots.charAt(h + 1) === 'x');
+              var lineV = (r > 0 && shots.charAt(h - BS_N) === 'x') || (r < BS_N - 1 && shots.charAt(h + BS_N) === 'x');
+              var dirs = lineH ? [[0, -1], [0, 1]] : lineV ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1], [-1, 0], [1, 0]];
+              dirs.forEach(function(d) { if (free(r + d[0], c + d[1])) cand.push((r + d[0]) * BS_N + c + d[1]); }); });
+          if (cand.length) return cand[Math.floor(Math.random() * cand.length)];
+      }
+      for (i = 0; i < shots.length; i++) { var rr = Math.floor(i / BS_N), cc = i % BS_N;
+          if (shots.charAt(i) === '.' && (rr + cc) % 2 === 0 && bsNearSunkOk(shots, rr, cc)) cand.push(i); }
+      if (!cand.length) for (i = 0; i < shots.length; i++) if (shots.charAt(i) === '.') cand.push(i);
+      return cand[Math.floor(Math.random() * cand.length)];
+  }
+  function bsNearSunkOk(shots, r, c) { // 가라앉은 배 바로 옆은 배가 붙을 수 없으니 건너뜀
+      for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) { var rr = r + dr, cc = c + dc;
+          if (rr >= 0 && rr < BS_N && cc >= 0 && cc < BS_N && shots.charAt(rr * BS_N + cc) === '#') return false; }
+      return true;
+  }
+  // 시간 흐름 — 컴퓨터 차례 진행, 사람이 너무 오래 안 두면 대신(배치는 무작위, 쏘기는 컴퓨터처럼)
+  function bsTick(s, now, timeoutMs) {
+      if (s.winner >= 0) return;
+      if (s.phase === 'place') {
+          if (timeoutMs && now - s.turnAt > BS_PLACE_MS) s.players.forEach(function(p, i) { if (!p.ready) bsPlace(s, i, bsRandomShips(), now); });
+          return;
+      }
+      var cur = s.players[s.turn];
+      if (cur.ai) { if (now >= s.aiAt) bsShoot(s, s.turn, bsAiCell(cur.shots), now); }
+      else if (timeoutMs && now - s.turnAt > timeoutMs) { bsLog(s, '⏰ ' + cur.name + ' 시간 초과'); bsShoot(s, s.turn, bsAiCell(cur.shots), now); }
+  }
+  // 내 화면 — 상대 배 위치는 가라앉은 것만(끝나면 전부 공개)
+  function bsView(s, pi, now) {
+      var me = s.players[pi], opp = s.players[1 - pi];
+      var oppLeft = opp.ships ? opp.ships.map(function(sh) { return { n: sh.length, sunk: bsSunk(me, sh) }; }) : BS_SHIPS.map(function(n) { return { n: n, sunk: false }; });
+      var myLeft = me.ships ? me.ships.map(function(sh) { return { n: sh.length, sunk: bsSunk(opp, sh) }; }) : [];
+      return { me: pi, phase: s.phase, turn: s.turn, winner: s.winner, ver: s.ver, last: s.last, log: s.log.slice(-3),
+          turnLeft: Math.max(0, 30000 - (now - s.turnAt)), placeLeft: Math.max(0, BS_PLACE_MS - (now - s.turnAt)),
+          players: s.players.map(function(p) { return { name: p.name, face: p.face, ai: p.ai, ready: p.ready }; }),
+          myShips: me.ships, ready: me.ready, myShots: me.shots, oppShots: opp.shots, oppLeft: oppLeft, myLeft: myLeft,
+          oppShips: s.winner >= 0 ? opp.ships : null };
+  }
+  // ===== 해전 엔진 끝 =====
+  // ===== 해전(배틀쉽) — 주임부터. 혼자 하기(컴퓨터) / 같이 하기(1:1, 서버 방). 규칙 엔진은 위(googleDrive.js와 같은 코드) =====
+  const BS_REQ=12, BS_BASE=1000, BS_POLL=1500;
+  let bs=null; // {mode:'lobby'|'solo'|'room'|'multi', s, view, room, key, seat, timer, polling, busy, sending, done, sig, place}
+  function bsUnlocked(){ return acc.runs.some(r=>r&&r.lv>=BS_REQ); }
+  function bsStop(){ if(bs){ clearInterval(bs.timer); clearTimeout(bs.timer); bs.timer=0; bs.polling=false; } }
+  function bsIcon(){ return '<span class="bs-ic">🚢</span>'; }
+  function bsHead(info){ return `<div class="gm-st-head"><b>${bsIcon()}해전</b><span>${info||''}</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('battleship')">✕ 나가기</button></div>`; }
+  function bsSetBody(html){ const b=el('gmBody'); if(bs&&bs.bodyHtml===html&&b.dataset.bs==='1') return; b.innerHTML=html; b.dataset.bs='1'; b.dataset.oc=''; if(bs) bs.bodyHtml=html; lockBodySize(); }
+  function bsRecordTxt(){ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return ocRecord(w,g); }
+  // ---- 로비
+  function gmShowBattleship(){
+    if(!bsUnlocked()){ toast(`🔒 주임(Lv.${BS_REQ}) 이상 달성 시 자동으로 해금됩니다`,2500); return; }
+    bsStop(); bs={mode:'lobby',timer:0};
+    bsLobbyRender([]); bsLobbyLoad(); bs.timer=setInterval(bsLobbyLoad,4000);
+    { const r=roomSaved('bs'); if(r) bsTryResume(r); }
+  }
+  async function bsLobbyLoad(){ try{ const j=await gas({action:'bsLobby'}); if(bs&&bs.mode==='lobby'&&j.success) bsLobbyRender(j.rooms||[]); }catch(e){} }
+  function bsLobbyRender(rooms){
+    if(!bs||bs.mode!=='lobby') return;
+    bsSetBody(bsHead(bsRecordTxt())+`
+      <div class="oc-lobby">
+        <div class="oc-modes">
+          <button type="button" class="oc-mode solo" onclick="bsStartSolo()"><b>🤖 혼자 하기</b><small>컴퓨터 함대와 바로 시작</small></button>
+          <button type="button" class="oc-mode multi" onclick="bsCreateRoom()"><b>⚔️ 방 만들기</b><small>동료와 1:1 해전</small></button>
+        </div>
+        <div class="gm-adm-sec">상대를 기다리는 방 <small>${rooms.length?rooms.length+'개':'없음'} · 같이 하기는 1~2초 정도 늦게 반영돼요</small></div>
+        <div class="oc-rooms">${rooms.length?rooms.map(r=>`<div class="oc-room"><span class="oc-room-faces">${r.seats.map(x=>ocFaceImg(x.face,'oc-mini')).join('')}</span>
+          <span class="oc-room-t"><b>${escHtml(r.title)}</b><small>방장 ${escHtml(r.host)} · 1/2명</small></span>
+          <button type="button" class="gm-btn primary" onclick="bsJoinRoom('${r.id}')">도전</button></div>`).join(''):'<div class="gm-st-info">기다리는 방이 없어요. 방을 만들어 동료에게 도전해 보세요!</div>'}</div>
+        <div class="oc-rules"><b>규칙</b> 8×8 바다에 배 4척(4·3·3·2칸) · 배끼리 붙지 않게 배치 · 번갈아 한 칸씩 포격, <b>명중하면 한 번 더</b> · 상대 함대를 먼저 모두 격침하면 승리 · 30초 안에 안 쏘면 자동 포격</div>
+      </div>`);
+  }
+  async function bsTryResume(r){
+    try{
+      const j=await gas({action:'bsState',room:r.room,key:r.key});
+      if(!bs||bs.mode!=='lobby') return;
+      if(!j.success||(j.view&&j.view.winner>=0)){ roomClear('bs'); return; }
+      bsEnterRoom({success:true,room:j.room,key:r.key,seat:j.seat!=null?j.seat:(j.view?j.view.me:0)});
+      if(j.view) bsApply(j);
+      toast('🔄 진행 중이던 해전으로 돌아왔어요',2200);
+    }catch(e){}
+  }
+  // ---- 혼자 하기
+  window.bsStartSolo=function(){
+    bsStop();
+    const pool=[0,1,2,3,4,5,6,7].filter(f=>f!==acc.ch), f=pool[Math.floor(Math.random()*pool.length)];
+    const s=bsNew([{name:nick||'나',face:acc.ch,ai:false},{name:charName(f),face:f,ai:true}],Date.now());
+    bs={mode:'solo',s,timer:0,done:false,sig:'',place:{ships:bsRandomShips()}};
+    bsRender(true);
+    bs.timer=setInterval(()=>{ if(!bs||bs.mode!=='solo') return; bsTick(bs.s,Date.now(),0); bsRender(); },250);
+  };
+  // ---- 같이 하기
+  window.bsCreateRoom=async function(){ try{ bsEnterRoom(await gas({action:'bsCreate',playerId:pid,token,face:acc.ch})); }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',2500); } };
+  window.bsJoinRoom=async function(id){ try{ bsEnterRoom(await gas({action:'bsJoin',playerId:pid,token,room:id,face:acc.ch})); }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',2500); } };
+  function bsEnterRoom(j){
+    if(!j||!j.success){ if(j&&j.auth===false){ authLost(); return; } toast(`⚠ ${(j&&j.error)||'실패'}`,2500); return; }
+    bsStop(); bs={mode:'room',room:j.room.id,key:j.key,seat:j.seat,info:j.room,timer:0,done:false,sig:'',busy:false,place:{ships:bsRandomShips()}};
+    roomSave('bs',j.room.id,j.key);
+    bsWaitRender(); bs.polling=true; bsPoll();
+  }
+  function bsWaitRender(){
+    const r=bs.info||{seats:[]};
+    bsSetBody(bsHead('대기실')+`<div class="oc-lobby"><div class="gm-adm-sec">${escHtml(r.title||'방')} <small>${r.seats.length}/2명</small></div>
+      <div class="bs-wait">${ocFaceImg(acc.ch,'oc-face')}<b>VS</b><span class="gm-face-ph oc-face">?</span></div>
+      <div class="gm-st-info">상대를 기다리는 중… 다른 사람의 해전 로비에 이 방이 보여요.<br>들어오면 바로 배치가 시작돼요.</div></div>`);
+  }
+  async function bsPoll(){
+    if(!bs||(bs.mode!=='room'&&bs.mode!=='multi')||bs.busy) return;
+    const me=bs; me.busy=true;
+    try{
+      const j=await gas({action:'bsState',room:me.room,key:me.key});
+      if(bs!==me) return;
+      if(!j.success){ if(j.gone){ bsStop(); roomClear('bs'); toast('방이 없어졌습니다',2500); gmShowBattleship(); } return; }
+      bsApply(j);
+    }catch(e){}finally{ me.busy=false; if(bs===me&&me.polling){ clearTimeout(me.timer); me.timer=setTimeout(bsPoll,bsPollDelay()); } }
+  }
+  function bsPollDelay(){ const v=bs&&bs.view; if(!v||bs.mode!=='multi'||v.winner>=0) return BS_POLL; if(document.hidden) return 2500;
+    return v.phase==='play'&&v.turn!==v.me?900:BS_POLL; } // 상대가 쏘는 중이면(다음이 내 차례) 자주
+  function bsApply(j){
+    lastInput=Date.now();
+    if(j.room) bs.info=j.room;
+    if(j.view){ if(bs.view&&j.view.ver<bs.view.ver) return; bs.view=j.view; bs.mode='multi'; bsRender(); }
+    else bsWaitRender();
+  }
+  async function bsSend(action,extra){
+    const me=bs; if(me.sending) return;
+    me.sending={action,cell:extra&&extra.cell!=null?extra.cell:null}; bsRender(true);
+    const guard=setTimeout(()=>{ if(me.sending){ me.sending=null; if(bs===me) bsRender(true); } },10000);
+    try{ const j=await gas(Object.assign({action,room:me.room,key:me.key},extra||{})); if(bs!==me) return;
+      if(!j.success&&j.error) toast(`⚠ ${j.error}`,1800);
+      if(j.view&&!(me.view&&j.view.ver<me.view.ver)) me.view=j.view; }
+    catch(e){ if(bs===me) toast('⚠ 서버에 연결하지 못했습니다',2000); }
+    finally{ clearTimeout(guard); me.sending=null; if(bs===me&&!me.done) bsRender(true); }
+  }
+  function bsCurView(){ if(!bs) return null; return bs.mode==='solo'?bsView(bs.s,0,Date.now()):bs.view; }
+  // ---- 배치: 다시 섞기 / 배를 눌러 돌리기 / 준비 완료
+  window.bsUiShuffle=function(){ lastInput=Date.now(); if(!bs||!bs.place) return; bs.place.ships=bsRandomShips(); bsRender(true); };
+  window.bsUiRotate=function(cell){
+    lastInput=Date.now(); const P=bs&&bs.place; if(!P) return;
+    const k=P.ships.findIndex(sh=>sh.indexOf(cell)>=0); if(k<0) return;
+    const sh=P.ships[k], vert=sh.length>1&&sh[1]-sh[0]===BS_N, r0=Math.floor(sh[0]/BS_N), c0=sh[0]%BS_N;
+    // 첫 칸을 축으로 돌려 보고, 안 되면 조금씩 밀어 봄
+    for(const [dr,dc] of [[0,0],[0,-1],[-1,0],[0,-2],[-2,0],[0,-3],[-3,0]]){
+      const r=r0+dr, c=c0+dc; if(r<0||c<0) continue;
+      const cells=bsShipCells(r,c,sh.length,!vert), next=P.ships.slice(); next[k]=cells;
+      if(bsValidShips(next)){ P.ships=next; bsRender(true); return; }
+    }
+    toast('그 자리에선 돌릴 수 없어요 — 다시 섞어 보세요',1400);
+  };
+  window.bsUiReady=function(){
+    lastInput=Date.now(); if(!bs||!bs.place) return;
+    if(bs.mode==='solo'){ bsPlace(bs.s,0,bs.place.ships,Date.now()); bsRender(true); }
+    else bsSend('bsPlace',{ships:JSON.stringify(bs.place.ships)});
+  };
+  // ---- 포격
+  window.bsUiShoot=function(cell){
+    lastInput=Date.now(); const v=bsCurView(); if(!v||v.phase!=='play'||v.turn!==v.me||v.winner>=0||bs.sending) return;
+    if(v.myShots.charAt(cell)!=='.') return;
+    if(bs.mode==='solo'){ const err=bsShoot(bs.s,0,cell,Date.now()); if(err) toast(`⚠ ${err}`,1400); bsRender(true); }
+    else bsSend('bsShoot',{cell});
+  };
+  // ---- 그리기
+  function bsBoard(kind,v){
+    const cells=[];
+    const sending=bs.sending&&bs.sending.cell;
+    for(let i=0;i<BS_N*BS_N;i++){
+      if(kind==='enemy'){
+        const ch=v.myShots.charAt(i), last=v.last&&v.last.p===v.me&&v.last.cell===i, reveal=v.oppShips&&ch==='.'&&v.oppShips.some(sh=>sh.indexOf(i)>=0);
+        const can=ch==='.'&&v.phase==='play'&&v.turn===v.me&&v.winner<0&&!bs.sending;
+        const cls=ch==='o'?'miss':ch==='x'?'hit':ch==='#'?'sunk':reveal?'reveal':'fog';
+        cells.push(can?`<button type="button" class="bs-c fog${sending===i?' aim':''}" onclick="bsUiShoot(${i})"></button>`
+                      :`<span class="bs-c ${cls}${last?' last':''}${sending===i?' aim':''}"></span>`);
+      } else {
+        const ships=kind==='place'?bs.place.ships:(v.myShips||[]), ship=ships.some(sh=>sh.indexOf(i)>=0);
+        const ch=kind==='place'?'.':v.oppShots.charAt(i), last=kind!=='place'&&v.last&&v.last.p!==v.me&&v.last.cell===i;
+        const cls=(ship?'ship':'sea')+(ch==='o'?' miss':ch==='x'||ch==='#'?' hit':'');
+        cells.push(kind==='place'&&ship?`<button type="button" class="bs-c ${cls}" onclick="bsUiRotate(${i})"></button>`:`<span class="bs-c ${cls}${last?' last':''}"></span>`);
+      }
+    }
+    return `<div class="bs-board ${kind}">${cells.join('')}</div>`;
+  }
+  function bsFleet(list,label){ return `<div class="bs-fleet"><small>${label}</small>${(list||[]).map(x=>`<span class="bs-ship${x.sunk?' sunk':''}">${'■'.repeat(x.n)}</span>`).join('')}</div>`; }
+  function bsRender(force){
+    if(!bs) return; const v=bsCurView(); if(!v) return;
+    const placeSig=bs.place?JSON.stringify(bs.place.ships):'';
+    const sig=v.ver+'|'+v.phase+'|'+v.ready+'|'+(bs.sending?bs.sending.action+bs.sending.cell:'')+'|'+placeSig;
+    if(!force&&sig===bs.sig){ bsLive(v); return; } bs.sig=sig;
+    const me=v.me, opp=v.players[1-me], myTurn=v.phase==='play'&&v.turn===me&&v.winner<0;
+    let main='';
+    if(v.phase==='place'&&!v.ready){
+      main=`<div class="bs-title">⚓ 내 함대 배치 <small>배를 누르면 방향이 바뀌어요</small></div>${bsBoard('place',v)}
+        <div class="oc-btns"><button type="button" class="gm-btn" onclick="bsUiShuffle()" ${bs.sending?'disabled':''}>🔀 다시 섞기</button><button type="button" class="gm-btn primary bs-ready" onclick="bsUiReady()" ${bs.sending?'disabled':''}>${bs.sending?'보내는 중…':'✅ 준비 완료'}</button></div>`;
+    } else if(v.phase==='place'){
+      main=`<div class="bs-title">⏳ ${escHtml(opp.name)} 님이 배치하는 중…</div>${bsBoard('mine',v)}`;
+    } else {
+      main=`<div class="bs-vs"><span class="bs-p${v.turn===me&&v.winner<0?' turn':''}">${ocFaceImg(v.players[me].face,'oc-face')}<b>나</b></span>
+          <span class="bs-turn${myTurn?' mine':''}">${v.winner>=0?(v.winner===me?'🏆 승리!':'💀 패배'):myTurn?'🎯 내 차례 — 쏠 칸을 고르세요':`⏳ ${escHtml(opp.name)} 포격 중`}</span>
+          <span class="bs-p${v.turn!==me&&v.winner<0?' turn':''}">${ocFaceImg(opp.face,'oc-face')}<b>${escHtml(opp.name)}</b></span></div>
+        <div class="bs-enemy-wrap${myTurn?' myturn':''}">${bsBoard('enemy',v)}</div>
+        ${bsFleet(v.oppLeft,'적 함대')}
+        <div class="bs-bottom">${bsBoard('mine',v)}<div class="bs-side">${bsFleet(v.myLeft,'내 함대')}<div class="oc-log bs-log" id="bsLog">${escHtml(v.log[v.log.length-1]||'')}</div>
+          ${bs.mode==='multi'?'<div class="oc-timer bs-timer"><i id="bsTimer"></i></div>':''}</div></div>`;
+    }
+    const body=el('gmBody');
+    if(body.dataset.bs!=='g'||!el('bsMain')){ // 제목 줄(나가기)은 한 번만 — 다시 그리면 누르는 사이 클릭이 씹힘
+      body.innerHTML=bsHead(bs.mode==='solo'?'혼자 하기':'같이 하기')+`<div class="bs-main" id="bsMain"></div><div class="oc-fx" id="bsFx"></div>`;
+      body.dataset.bs='g'; body.dataset.oc=''; bs.bodyHtml=null; lockBodySize();
+    }
+    el('bsMain').innerHTML=main;
+    if(myTurn&&!bs.wasMyTurn){ const fx=el('bsFx'), d=document.createElement('div'); d.className='oc-turn-banner'; d.textContent='내 차례!'; fx.appendChild(d); setTimeout(()=>d.remove(),1400);
+      if(bs.mode==='multi'&&(document.hidden||!document.hasFocus())) ocTitleAlert(true); }
+    if(!myTurn) ocTitleAlert(false);
+    bs.wasMyTurn=myTurn;
+    if(v.last&&v.last.cell!==bs.lastFx&&v.phase!=='place'){ bs.lastFx=v.last.cell; if(v.last.res==='sunk') fxPop('fx-combo',{ms:900,x:50}); }
+    bsLive(v);
+    if(v.winner>=0) bsFinish(v);
+  }
+  function bsLive(v){ const tm=el('bsTimer'); if(tm&&v.turnLeft!=null){ const f=Math.max(0,Math.min(1,v.turnLeft/30000)); tm.style.width=(f*100)+'%'; tm.classList.toggle('low',v.turnLeft<8000); tm.classList.toggle('mine',v.turn===v.me); } }
+  // ---- 끝 — 점수 → 경험치·추천서
+  function bsFinish(v){
+    if(bs.done) return; bs.done=true; bsStop(); if(bs.mode==='multi') roomClear('bs');
+    const win=v.winner===v.me, myHits=(v.myShots.match(/[x#]/g)||[]).length, alive=(v.myShips||[]).reduce((a,sh)=>a+sh.filter(c=>!/[x#]/.test(v.oppShots.charAt(c))).length,0);
+    let score=win?1000+40*alive:120+25*myHits;
+    if(bs.mode==='multi') score=Math.round(score*1.5);
+    const exp=miniExp(score,BS_BASE,st.bsLv,win?3:1.2), refs=earnRefs(score,BS_BASE);
+    if(win) acc.bsWins=(acc.bsWins||0)+1; acc.bsGames=(acc.bsGames||0)+1;
+    if(exp>0) gainExp(exp);
+    dirty=true; saveServer(true);
+    const d=document.createElement('div'); d.className='oc-result'+(win?' win':'');
+    d.innerHTML=`<div class="oc-result-card"><div class="oc-result-rank">${win?'🏆 승리!':'💀 패배'}</div>
+      <small>명중 ${myHits}발 · 남은 내 배 ${alive}칸</small>
+      <div>점수 <b>${score.toLocaleString()}</b> · 경험치 +${fmt(exp)}${refs?` · ${ic('ticket.png')}추천서 +${refs}`:''}</div>
+      <div class="oc-result-btns"><button type="button" class="gm-btn primary" onclick="${bs.mode==='solo'?'bsStartSolo()':'gmShowBattleship()'}">${bs.mode==='solo'?'한 판 더':'로비로'}</button><button type="button" class="gm-btn" onclick="gmShowWorld()">월드로</button></div></div>`;
+    el('gmBody').appendChild(d);
+    if(win) fxPop('fx-confetti',{cls:'big',ms:1500,x:50});
+  }
+  window.gmShowBattleship=gmShowBattleship;
+  if(window.__GM_TEST){ window.__bs=()=>bs; }
+  // 나가기 — 하다가 나가면 패(같이 하기는 컴퓨터가 이어받음)
+  function bsLeave(){
+    if(!bs) return;
+    if((bs.mode==='solo'||bs.mode==='multi')&&!bs.done){ acc.bsGames=(acc.bsGames||0)+1; dirty=true; }
+    if((bs.mode==='room'||bs.mode==='multi')&&!bs.done){ gas({action:'bsLeave',room:bs.room,key:bs.key}).catch(()=>{}); roomClear('bs'); }
+    bsStop(); bs=null;
+  }
+  window.gmBattleshipExit=function(){ bsLeave(); saveServer(true); gmShowWorld(); };
+
   // 태양계처럼 본사 섬을 가운데 두고 미니게임 섬들이 궤도 위에 떠 있음. orb: [몇 번째 궤도, 각도(0=오른쪽, -90=위)]
   // 새 미니게임은 바깥 궤도 빈 자리에 각도만 정해서 추가하면 됨. 궤도가 꽉 차면 WORLD_ORBITS에 한 줄 더
   const WORLD=[
     {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[0,168],img:'isle-stairs.png',ar:1.42},
     {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[0,-22],img:'isle-suika.png',ar:1.07},
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
+    {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-52]},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
   ];
   const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
   function placeIsles(){
@@ -2098,7 +2462,7 @@
       b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*(w.ar||1)*0.5)+'px'; });
   }
   function gmShowWorld(){
-    ocStop(); oc=null;
+    ocStop(); oc=null; if(bs) bsLeave();
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
     const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
     el('gmBody').innerHTML=`
@@ -2109,7 +2473,7 @@
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
             ${w.img?`<img class="gm-isle-art" src="${UI}${w.img}" alt=""/>`:`<span class="gm-isle-icon">${w.icon}</span>`}
-            <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o?(w.rec?'':'최고 ')+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
+            <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o&&w.resume&&w.resume()?'🔄 진행 중 — 눌러서 이어 하기':o?(w.rec?'':'최고 ')+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
             ${o||soon?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
       </div>
       <div class="gm-st-info" id="gmWorldMsg">섬을 눌러 미니게임에 들어가세요</div>
@@ -2134,6 +2498,9 @@
   window.gmStep=gmStep;
   // 미니게임 나가기 — 제목 줄의 작은 버튼. 진행 중이면 한 번 더 확인(조작하다 잘못 눌러 꺼지는 것 방지)
   window.gmExitAsk=function(kind){
+    if(kind==='battleship'){ const playing=bs&&(bs.mode==='solo'||bs.mode==='multi')&&!bs.done;
+      if(playing&&!confirm(bs.mode==='multi'?'해전에서 나갈까요? (패로 기록되고 내 함대는 컴퓨터가 이어받습니다)':'진행 중인 해전을 그만할까요? (패로 기록, 보상 없음)')) return;
+      gmBattleshipExit(); return; }
     if(kind==='onecard'){ const playing=oc&&(oc.mode==='solo'||oc.mode==='multi')&&!oc.done;
       if(playing&&!confirm(oc.mode==='multi'?'게임에서 나갈까요? (내 자리는 컴퓨터가 이어받고 보상은 없습니다)':'진행 중인 게임을 그만할까요? (보상 없음)')) return;
       gmOneCardExit(); return; }
@@ -2429,7 +2796,7 @@
   window.gmShowRanking=gmShowRanking;
   window.gmShowChars=gmShowChars;
   window.gmSwitchChar=switchChar;
-  window.gmBack=function(){ if(oc){ if((oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; } if((oc.mode==='room'||oc.mode==='multi')&&!oc.done) gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{}); ocStop(); oc=null; } if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
+  window.gmBack=function(){ if(bs) bsLeave(); if(oc){ if((oc.mode==='solo'||oc.mode==='multi')&&!oc.done){ acc.ocGames=(acc.ocGames||0)+1; dirty=true; } if((oc.mode==='room'||oc.mode==='multi')&&!oc.done){ gas({action:'ocLeave',room:oc.room,key:oc.key}).catch(()=>{}); roomClear('oc'); } ocStop(); oc=null; } if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; } renderPlay(); focusPlay(); };
   window.gmShow=function(){
     el('gmWidget').style.display=''; el('gmChip').style.display='none'; lastInput=Date.now();
     // 숨겨져 있던 동안의 커피 수혈(10%)을 반영하고 다시 진행

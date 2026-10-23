@@ -84,6 +84,7 @@ try {
     if (action === 'gameLogin' || action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
     if (GAME_ADMIN_ACTIONS[action]) return handleGameAdmin(data);
     if (/^oc(Lobby|Create|Join|Leave|Start|State|Play|Take|Call|Emote)$/.test(action)) return handleOneCard(data);
+    if (/^bs(Lobby|Create|Join|Leave|State|Place|Shoot)$/.test(action)) return handleBattleship(data);
     if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
@@ -1290,22 +1291,22 @@ function handleGameAction(data) {
             // 랭킹은 모두가 같은 결과를 보므로 잠깐 캐시 — 시트를 매번 훑지 않아 눈에 띄게 빨라진다.
             // 내 순위는 사람마다 다르므로 캐시에는 목록만 담고 순위는 아래에서 다시 계산한다.
             var rkCache = CacheService.getScriptCache();
-            var rkKey = 'gmrank_' + (['stairs','suika','tetris','onecard'].indexOf(data.board) >= 0 ? data.board : 'promo'); // onecard가 빠져 있어 승진 랭킹 캐시와 섞이던 문제 수정
+            var rkKey = 'gmrank_' + (['stairs','suika','tetris','onecard','battleship'].indexOf(data.board) >= 0 ? data.board : 'promo'); // onecard가 빠져 있어 승진 랭킹 캐시와 섞이던 문제 수정
             var cached = null;
             try { cached = JSON.parse(rkCache.get(rkKey) || 'null'); } catch (e) { cached = null; }
             if (cached && cached.all) {
-                return buildJson({ success: true, players: cached.all.length, myRank: rankOfPid(cached.all, playerId), mine: data.board === 'onecard' ? (ocLoadStats()[playerId] || { w: 0, g: 0 }) : undefined,
+                return buildJson({ success: true, players: cached.all.length, myRank: rankOfPid(cached.all, playerId), mine: data.board === 'onecard' ? (ocLoadStats()[playerId] || { w: 0, g: 0 }) : data.board === 'battleship' ? (bsLoadStats()[playerId] || { w: 0, g: 0 }) : undefined,
                     top: cached.all.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
             }
             // 승진 순위: 가장 늦게 입사한(어려운) 직원 → 그 직원의 단계 → 레벨 → 누적 실적
             // board='stairs': 무한의 계단 최고 층수 / 'suika': 수박 게임 / 'tetris': 테트리스 최고 점수 순위 (기록 있는 사람만)
-            var board = ['stairs', 'suika', 'tetris', 'onecard'].indexOf(data.board) >= 0 ? data.board : 'promo';
-            var ocS = board === 'onecard' ? ocLoadStats() : {}; // 원카드는 서버가 기록한 같이 하기 전적만
+            var board = ['stairs', 'suika', 'tetris', 'onecard', 'battleship'].indexOf(data.board) >= 0 ? data.board : 'promo';
+            var ocS = board === 'onecard' ? ocLoadStats() : board === 'battleship' ? bsLoadStats() : {}; // 원카드·해전은 서버가 기록한 같이 하기 전적만
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
                 var s = gameReadState(r) || {};
-                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: (ocS[String(r[0])] || {}).w || 0, ocGames: (ocS[String(r[0])] || {}).g || 0 };
+                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: (ocS[String(r[0])] || {}).w || 0, ocGames: (ocS[String(r[0])] || {}).g || 0, battleship: (ocS[String(r[0])] || {}).w || 0 };
             });
-            if (board === 'onecard') { // 원카드: 한 판이라도 한 사람 — 승리 수 → 승률 → 판 수 적은 순
+            if (board === 'onecard' || board === 'battleship') { // 원카드·해전: 한 판이라도 한 사람 — 승리 수 → 승률 → 판 수 적은 순
                 list = list.filter(function(x) { return x.ocGames > 0; });
                 list.sort(function(a, b) { return (b.onecard - a.onecard) || (b.onecard / b.ocGames - a.onecard / a.ocGames) || (a.ocGames - b.ocGames); });
             } else if (board !== 'promo') {
@@ -1315,7 +1316,7 @@ function handleGameAction(data) {
                 list.sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
             }
             try { rkCache.put(rkKey, JSON.stringify({ all: list }), 45); } catch (e) { /* 캐시 실패는 무시 */ }
-            return buildJson({ success: true, players: list.length, myRank: rankOfPid(list, playerId), mine: board === 'onecard' ? (ocS[playerId] || { w: 0, g: 0 }) : undefined,
+            return buildJson({ success: true, players: list.length, myRank: rankOfPid(list, playerId), mine: (board === 'onecard' || board === 'battleship') ? (ocS[playerId] || { w: 0, g: 0 }) : undefined,
                 top: list.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
         }
 
@@ -2276,3 +2277,247 @@ function handleOneCard(data) {
     }
 }
 var OC_AI_NAMES = ['쉰동준', '쉰원철', '약옥녀', '삼용훈', '하달순', '쉰원옥', '천병돌', '육찬근'];
+
+// ===== 해전(배틀쉽) 엔진 — 브라우저(game.js)와 GAS(googleDrive.js)에 똑같이 들어감. ES5만 사용 =====
+// 8×8 바다에 배 4척(4·3·3·2칸). 서로 번갈아 한 칸씩 쏘고, 맞히면 한 번 더. 상대 배를 모두 가라앉히면 승리
+// 칸 번호 = 행*8 + 열. 내가 쏜 기록(shots): 64글자 — '.' 안 쏨, 'o' 빗나감, 'x' 맞음, '#' 가라앉은 배
+var BS_N = 8, BS_SHIPS = [4, 3, 3, 2], BS_AI_MS = 900, BS_PLACE_MS = 90000;
+function bsEmpty() { var t = ''; for (var i = 0; i < BS_N * BS_N; i++) t += '.'; return t; }
+function bsSet(str, i, ch) { return str.substr(0, i) + ch + str.substr(i + 1); }
+// 배 = 칸 번호 목록. 가로/세로 일직선, 서로 겹치거나 붙지 않게(대각선 포함)
+function bsShipCells(r, c, len, vert) { var a = []; for (var k = 0; k < len; k++) a.push((r + (vert ? k : 0)) * BS_N + c + (vert ? 0 : k)); return a; }
+function bsFits(taken, cells, r, c, len, vert) {
+    if (vert ? r + len > BS_N : c + len > BS_N) return false;
+    for (var k = 0; k < cells.length; k++) if (taken[cells[k]]) return false;
+    return true;
+}
+function bsMark(taken, cells) { // 배 칸과 그 둘레 한 칸을 막음
+    cells.forEach(function(i) { var r = Math.floor(i / BS_N), c = i % BS_N;
+        for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) { var rr = r + dr, cc = c + dc; if (rr >= 0 && rr < BS_N && cc >= 0 && cc < BS_N) taken[rr * BS_N + cc] = 1; } });
+}
+function bsRandomShips() {
+    for (var tries = 0; tries < 200; tries++) {
+        var taken = {}, ships = [], ok = true;
+        for (var s = 0; s < BS_SHIPS.length && ok; s++) {
+            var len = BS_SHIPS[s], placed = false;
+            for (var t = 0; t < 100 && !placed; t++) {
+                var vert = Math.random() < 0.5, r = Math.floor(Math.random() * BS_N), c = Math.floor(Math.random() * BS_N);
+                var cells = bsShipCells(r, c, len, vert);
+                if (bsFits(taken, cells, r, c, len, vert)) { bsMark(taken, cells); ships.push(cells); placed = true; }
+            }
+            if (!placed) ok = false;
+        }
+        if (ok) return ships;
+    }
+    return null;
+}
+// 받은 배치가 규칙에 맞는지(서버에서 꼭 확인)
+function bsValidShips(ships) {
+    if (!Array.isArray(ships) || ships.length !== BS_SHIPS.length) return false;
+    var lens = ships.map(function(x) { return Array.isArray(x) ? x.length : 0; }).sort(function(a, b) { return b - a; });
+    for (var i = 0; i < BS_SHIPS.length; i++) if (lens[i] !== BS_SHIPS[i]) return false;
+    var taken = {};
+    for (var s = 0; s < ships.length; s++) {
+        var cells = ships[s].map(Number).slice().sort(function(a, b) { return a - b; });
+        for (var k = 0; k < cells.length; k++) if (!(cells[k] >= 0 && cells[k] < BS_N * BS_N) || cells[k] !== Math.floor(cells[k])) return false;
+        var r0 = Math.floor(cells[0] / BS_N), c0 = cells[0] % BS_N, vert = cells.length > 1 && cells[1] - cells[0] === BS_N;
+        var want = bsShipCells(r0, c0, cells.length, vert);
+        if (!bsFits(taken, want, r0, c0, cells.length, vert)) return false;
+        for (k = 0; k < cells.length; k++) if (cells[k] !== want[k]) return false;
+        bsMark(taken, want);
+    }
+    return true;
+}
+function bsLog(s, t) { s.log.push(t); if (s.log.length > 20) s.log.shift(); }
+function bsNew(players, now) {
+    var s = { phase: 'place', turn: 0, winner: -1, ver: 1, turnAt: now, aiAt: now + BS_AI_MS, last: null, log: [],
+        players: players.map(function(p) { return { name: p.name, face: p.face, ai: !!p.ai, key: p.key || '', ships: null, ready: false, shots: bsEmpty(), hits: 0 }; }) };
+    s.players.forEach(function(p) { if (p.ai) { p.ships = bsRandomShips(); p.ready = true; } });
+    bsLog(s, '⚓ 배를 배치하세요');
+    return s;
+}
+function bsPlace(s, pi, ships, now) {
+    if (s.phase !== 'place') return '이미 시작했습니다.';
+    var p = s.players[pi]; if (!p) return '자리가 없습니다.';
+    if (!bsValidShips(ships)) return '배치가 올바르지 않습니다.';
+    p.ships = ships.map(function(x) { return x.map(Number).sort(function(a, b) { return a - b; }); }); p.ready = true;
+    s.ver++;
+    if (s.players.every(function(q) { return q.ready; })) {
+        s.phase = 'play'; s.turn = Math.floor(Math.random() * s.players.length); s.turnAt = now; s.aiAt = now + BS_AI_MS;
+        bsLog(s, '🚩 ' + s.players[s.turn].name + ' 먼저 쏩니다');
+    }
+    return '';
+}
+function bsShipAt(p, cell) { for (var i = 0; i < p.ships.length; i++) if (p.ships[i].indexOf(cell) >= 0) return i; return -1; }
+function bsSunk(shooter, ship) { for (var k = 0; k < ship.length; k++) if (shooter.shots.charAt(ship[k]) === '.' || shooter.shots.charAt(ship[k]) === 'o') return false; return true; }
+function bsShoot(s, pi, cell, now) {
+    if (s.phase !== 'play' || s.winner >= 0) return '지금은 쏠 수 없습니다.';
+    if (s.turn !== pi) return '내 차례가 아닙니다.';
+    cell = Math.floor(Number(cell));
+    if (!(cell >= 0 && cell < BS_N * BS_N)) return '잘못된 칸입니다.';
+    var me = s.players[pi], opp = s.players[1 - pi];
+    if (me.shots.charAt(cell) !== '.') return '이미 쏜 칸입니다.';
+    var si = bsShipAt(opp, cell), res = 'miss';
+    if (si >= 0) {
+        me.shots = bsSet(me.shots, cell, 'x'); me.hits++; res = 'hit';
+        if (bsSunk(me, opp.ships[si])) { opp.ships[si].forEach(function(c) { me.shots = bsSet(me.shots, c, '#'); }); res = 'sunk';
+            bsLog(s, '💥 ' + me.name + ' — ' + opp.ships[si].length + '칸 배 격침!'); }
+        else bsLog(s, '🔥 ' + me.name + ' 명중! 한 번 더');
+        if (me.hits >= BS_SHIPS.reduce(function(a, b) { return a + b; }, 0)) { s.winner = pi; s.phase = 'end'; bsLog(s, '🏆 ' + me.name + ' 승리!'); }
+    } else { me.shots = bsSet(me.shots, cell, 'o'); s.turn = 1 - pi; bsLog(s, '💧 ' + me.name + ' 빗나감'); }
+    s.last = { p: pi, cell: cell, res: res }; s.ver++; s.turnAt = now; s.aiAt = now + BS_AI_MS;
+    return '';
+}
+// 컴퓨터 — 맞힌 자리 주변부터(두 칸 이상 맞으면 그 줄 방향), 없으면 체스판 무늬로 듬성듬성
+function bsAiCell(shots) {
+    var hits = [], i;
+    for (i = 0; i < shots.length; i++) if (shots.charAt(i) === 'x') hits.push(i);
+    var cand = [];
+    function free(r, c) { return r >= 0 && r < BS_N && c >= 0 && c < BS_N && shots.charAt(r * BS_N + c) === '.'; }
+    if (hits.length) {
+        hits.forEach(function(h) { var r = Math.floor(h / BS_N), c = h % BS_N;
+            var lineH = (c > 0 && shots.charAt(h - 1) === 'x') || (c < BS_N - 1 && shots.charAt(h + 1) === 'x');
+            var lineV = (r > 0 && shots.charAt(h - BS_N) === 'x') || (r < BS_N - 1 && shots.charAt(h + BS_N) === 'x');
+            var dirs = lineH ? [[0, -1], [0, 1]] : lineV ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1], [-1, 0], [1, 0]];
+            dirs.forEach(function(d) { if (free(r + d[0], c + d[1])) cand.push((r + d[0]) * BS_N + c + d[1]); }); });
+        if (cand.length) return cand[Math.floor(Math.random() * cand.length)];
+    }
+    for (i = 0; i < shots.length; i++) { var rr = Math.floor(i / BS_N), cc = i % BS_N;
+        if (shots.charAt(i) === '.' && (rr + cc) % 2 === 0 && bsNearSunkOk(shots, rr, cc)) cand.push(i); }
+    if (!cand.length) for (i = 0; i < shots.length; i++) if (shots.charAt(i) === '.') cand.push(i);
+    return cand[Math.floor(Math.random() * cand.length)];
+}
+function bsNearSunkOk(shots, r, c) { // 가라앉은 배 바로 옆은 배가 붙을 수 없으니 건너뜀
+    for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) { var rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < BS_N && cc >= 0 && cc < BS_N && shots.charAt(rr * BS_N + cc) === '#') return false; }
+    return true;
+}
+// 시간 흐름 — 컴퓨터 차례 진행, 사람이 너무 오래 안 두면 대신(배치는 무작위, 쏘기는 컴퓨터처럼)
+function bsTick(s, now, timeoutMs) {
+    if (s.winner >= 0) return;
+    if (s.phase === 'place') {
+        if (timeoutMs && now - s.turnAt > BS_PLACE_MS) s.players.forEach(function(p, i) { if (!p.ready) bsPlace(s, i, bsRandomShips(), now); });
+        return;
+    }
+    var cur = s.players[s.turn];
+    if (cur.ai) { if (now >= s.aiAt) bsShoot(s, s.turn, bsAiCell(cur.shots), now); }
+    else if (timeoutMs && now - s.turnAt > timeoutMs) { bsLog(s, '⏰ ' + cur.name + ' 시간 초과'); bsShoot(s, s.turn, bsAiCell(cur.shots), now); }
+}
+// 내 화면 — 상대 배 위치는 가라앉은 것만(끝나면 전부 공개)
+function bsView(s, pi, now) {
+    var me = s.players[pi], opp = s.players[1 - pi];
+    var oppLeft = opp.ships ? opp.ships.map(function(sh) { return { n: sh.length, sunk: bsSunk(me, sh) }; }) : BS_SHIPS.map(function(n) { return { n: n, sunk: false }; });
+    var myLeft = me.ships ? me.ships.map(function(sh) { return { n: sh.length, sunk: bsSunk(opp, sh) }; }) : [];
+    return { me: pi, phase: s.phase, turn: s.turn, winner: s.winner, ver: s.ver, last: s.last, log: s.log.slice(-3),
+        turnLeft: Math.max(0, 30000 - (now - s.turnAt)), placeLeft: Math.max(0, BS_PLACE_MS - (now - s.turnAt)),
+        players: s.players.map(function(p) { return { name: p.name, face: p.face, ai: p.ai, ready: p.ready }; }),
+        myShips: me.ships, ready: me.ready, myShots: me.shots, oppShots: opp.shots, oppLeft: oppLeft, myLeft: myLeft,
+        oppShips: s.winner >= 0 ? opp.ships : null };
+}
+
+// ===== 해전 — 같이 하기 방(1:1). 원카드 방과 같은 방식: 캐시에 방, 자리 키로 확인, 바뀔 게 없는 확인은 잠금 없이 =====
+// 두 번째 사람이 들어오면 바로 배치 단계로 시작. 게임 중 나가면 컴퓨터가 이어받고 그 사람은 패로 기록
+var BS_LOBBY_KEY = 'bs_lobby', BS_TURN_MS = 30000;
+function bsLoadRoom(id) { try { var raw = ocCache().get('bs_r_' + id); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+function bsSaveRoom(room) { room.at = Date.now(); ocCache().put('bs_r_' + room.id, JSON.stringify(room), OC_ROOM_TTL); }
+function bsLobbyIds() { try { return JSON.parse(ocCache().get(BS_LOBBY_KEY) || '[]'); } catch (e) { return []; } }
+function bsSetLobby(ids) { ocCache().put(BS_LOBBY_KEY, JSON.stringify(ids.slice(-30)), OC_ROOM_TTL); }
+function bsRoomInfo(room) {
+    return { id: room.id, title: room.title, host: room.seats.length ? room.seats[0].nick : '', started: !!room.state,
+        seats: room.seats.map(function(x) { return { nick: x.nick, face: x.face, left: !!x.left }; }) };
+}
+function bsLoadStats() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('BS_STATS') || '{}'); } catch (e) { return {}; } }
+function bsAddStat(pid, win) {
+    var st = bsLoadStats(), r = st[pid] || { w: 0, g: 0 }; r.g++; if (win) r.w++; st[pid] = r;
+    PropertiesService.getScriptProperties().setProperty('BS_STATS', JSON.stringify(st));
+}
+function bsRecord(rm) { // 끝난 판을 한 번만 기록(잠금 안에서). 중간에 나간 사람은 나갈 때 이미 패로 기록
+    if (!rm.state || rm.state.winner < 0 || rm.recorded) return false;
+    rm.recorded = true;
+    rm.seats.forEach(function(x, k) { if (x.pid && !x.counted) bsAddStat(x.pid, k === rm.state.winner && !x.left); });
+    return true;
+}
+function bsStart(rm, now) {
+    rm.state = bsNew(rm.seats.map(function(x) { return { name: x.nick, face: x.face, ai: false, key: x.key }; }), now);
+    var ids = bsLobbyIds().filter(function(id) { return id !== rm.id; }); bsSetLobby(ids);
+}
+function handleBattleship(data) {
+    var act = data.action, now = Date.now();
+    var lock = LockService.getScriptLock();
+    try {
+        if (act === 'bsLobby') {
+            var list = [];
+            bsLobbyIds().forEach(function(id) { var r = bsLoadRoom(id);
+                if (r && !r.state && r.seats.length === 1 && now - r.at < OC_ROOM_IDLE && ocSeatAlive(r, r.seats[0], now)) list.push(bsRoomInfo(r)); });
+            return buildJson({ success: true, rooms: list });
+        }
+        if (act === 'bsCreate' || act === 'bsJoin') {
+            var who = ocCheckPlayer(data);
+            if (!who) return buildJson({ success: false, auth: false, error: '다시 로그인해주세요.' });
+            lock.waitLock(15000);
+            var room, key = ocNewKey(), face = Math.max(0, Math.min(7, Number(data.face) || 0));
+            if (act === 'bsCreate') {
+                room = { id: ocNewKey().slice(0, 8), title: String(data.title || who.nick + '의 함대').slice(0, 20), seats: [], state: null, at: now };
+                var ids = bsLobbyIds(); ids.push(room.id); bsSetLobby(ids);
+            } else {
+                room = bsLoadRoom(String(data.room || ''));
+                if (!room) return buildJson({ success: false, error: '방이 없어졌습니다.' });
+                var mine = room.seats.filter(function(x) { return x.pid === who.pid; })[0];
+                if (mine) { bsSaveRoom(room); return buildJson({ success: true, room: bsRoomInfo(room), key: mine.key, seat: ocSeatIndex(room, mine.key) }); }
+                if (room.state || room.seats.length >= 2) return buildJson({ success: false, error: '이미 시작했거나 꽉 찬 방입니다.' });
+            }
+            room.seats.push({ key: key, pid: who.pid, nick: who.nick, face: face, seen: now });
+            if (room.seats.length === 2) bsStart(room, now);
+            bsSaveRoom(room);
+            return buildJson({ success: true, room: bsRoomInfo(room), key: key, seat: room.seats.length - 1 });
+        }
+        // 방 안 요청 — 자리 키로 확인. 바뀔 게 없는 확인은 잠금 없이 읽기만
+        if (act === 'bsState') {
+            var fr = bsLoadRoom(String(data.room || ''));
+            if (!fr) return buildJson({ success: false, gone: true, error: '방이 없어졌습니다.' });
+            var fi = ocSeatIndex(fr, String(data.key || ''));
+            if (fi < 0) return buildJson({ success: false, gone: true, error: '이 방의 참가자가 아닙니다.' });
+            if (fr.state) {
+                var fv = fr.state.ver;
+                bsTick(fr.state, now, BS_TURN_MS);
+                if (fr.state.ver === fv && !(fr.state.winner >= 0 && !fr.recorded))
+                    return buildJson({ success: true, room: bsRoomInfo(fr), view: bsView(fr.state, fi, now) });
+            } else if (now - (fr.seats[fi].seen || 0) < OC_SEEN_WRITE) {
+                return buildJson({ success: true, room: bsRoomInfo(fr), seat: fi });
+            }
+        }
+        lock.waitLock(15000);
+        var rm = bsLoadRoom(String(data.room || ''));
+        if (!rm) return buildJson({ success: false, gone: true, error: '방이 없어졌습니다.' });
+        var si = ocSeatIndex(rm, String(data.key || ''));
+        if (si < 0) return buildJson({ success: false, gone: true, error: '이 방의 참가자가 아닙니다.' });
+        if (!rm.state) rm.seats[si].seen = now;
+        if (act === 'bsLeave') {
+            if (!rm.state) { ocCache().remove('bs_r_' + rm.id); bsSetLobby(bsLobbyIds().filter(function(id) { return id !== rm.id; })); return buildJson({ success: true }); }
+            var me = rm.seats[si]; me.left = true;
+            if (rm.state.winner < 0 && !me.counted && me.pid) { bsAddStat(me.pid, false); me.counted = true; }
+            var pl = rm.state.players[si]; if (pl && !pl.ai) { pl.ai = true; pl.name += '(컴퓨터)'; rm.state.aiAt = now; if (!pl.ready) bsPlace(rm.state, si, bsRandomShips(), now); }
+            bsSaveRoom(rm); return buildJson({ success: true });
+        }
+        if (act === 'bsPlace' || act === 'bsShoot') {
+            if (!rm.state) return buildJson({ success: false, error: '상대를 기다리는 중입니다.' });
+            var err;
+            if (act === 'bsPlace') { var ships; try { ships = JSON.parse(String(data.ships || '[]')); } catch (e) { ships = null; } err = bsPlace(rm.state, si, ships, now); }
+            else err = bsShoot(rm.state, si, data.cell, now);
+            if (err) return buildJson({ success: false, error: err, view: bsView(rm.state, si, now) });
+            bsSaveRoom(rm);
+        }
+        if (rm.state) {
+            var v0 = rm.state.ver;
+            for (var t = 0; t < 3; t++) bsTick(rm.state, now, BS_TURN_MS);
+            if (bsRecord(rm) || rm.state.ver !== v0) bsSaveRoom(rm);
+            return buildJson({ success: true, room: bsRoomInfo(rm), view: bsView(rm.state, si, now) });
+        }
+        bsSaveRoom(rm); // 대기실 '살아 있음'
+        return buildJson({ success: true, room: bsRoomInfo(rm), seat: si });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    } finally {
+        try { lock.releaseLock(); } catch (e) {}
+    }
+}
