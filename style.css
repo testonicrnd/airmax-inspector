@@ -2417,3 +2417,7 @@ button.bs-c { cursor:crosshair; font-family:inherit; }
 .sl-table .sl-pair { grid-column:1/-1; color:var(--text3); }
 .sl-spin small { font-size:11px; font-weight:700; opacity:0.75; margin-left:4px; }
 .sl-bet b { font-size:14px; }
+/* 미션 — 아래 메뉴 맨 앞(받을 보상이 있으면 빨간 점) */
+.gm-link-mis { position:relative; }
+.gm-link-mis small { font-size:10px; color:var(--text3); }
+.gm-link-mis.ready::after { content:''; position:absolute; top:-2px; right:-5px; width:7px; height:7px; border-radius:50%; background:#e53935; box-shadow:0 0 0 2px var(--surface); animation:ocAtk 0.7s ease-in-out infinite alternate; }

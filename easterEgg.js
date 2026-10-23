@@ -311,9 +311,9 @@
     misChip();
   }
   function misChip(){ const c=el('gmMis'); if(!c) return; const M=misToday();
-    if(!M){ c.innerHTML='📋<b>주말</b>'; c.classList.remove('ready'); return; }
+    if(!M){ c.innerHTML='📋미션'; c.classList.remove('ready'); return; }
     const done=M.list.filter(m=>m.p>=m.goal).length, ready=M.list.some(m=>m.p>=m.goal&&!m.c)||(M.list.every(m=>m.c)&&!M.bonus);
-    c.innerHTML=`📋<b>${done}/3</b>`; c.classList.toggle('ready',ready); }
+    c.innerHTML=`📋미션 <small>${done}/3</small>`; c.classList.toggle('ready',ready); }
   window.gmShowMissions=function(){
     const M=misToday();
     const rows=M?M.list.map((m,i)=>{ const d=misDef(m), done=m.p>=m.goal;
@@ -896,7 +896,7 @@
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
-      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span class="gm-stat-refs" title="추천서 (팀원 뽑기)">${ic('ticket.png')}<b id="gmRefs"></b></span><span class="gm-stat-mis" id="gmMis" title="오늘의 미션" onclick="gmShowMissions()"></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
+      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span class="gm-stat-refs" title="추천서 (팀원 뽑기)">${ic('ticket.png')}<b id="gmRefs"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         <div class="gm-cheer" id="gmCheer" style="display:none"></div>
         ${bodyHtml(acc.ch)}
@@ -915,7 +915,7 @@
         :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}<span class="gm-link-long">미니게임 </span>월드</button><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link gm-link-mis" id="gmMis" title="오늘의 미션" onclick="gmShowMissions()"></button><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}월드</button><button type="button" class="gm-link" onclick="gmLogout()" title="로그아웃">${menuIcon('logout')}<span class="gm-link-long">로그아웃</span></button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus(); misChip(); setTimeout(showPatchNotes,700);
     if(!resumeHinted&&(roomSaved('oc')||roomSaved('bs'))){ resumeHinted=true; const g=roomSaved('oc')?'원카드':'해전'; setTimeout(()=>toast(`🔄 진행 중이던 ${g}가 있어요 — 미니게임 월드 › ${g}에서 이어서 하세요`,3500),600); }
     { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
@@ -2787,7 +2787,7 @@
     if(!slot||slot.spinning) return;
     if(!slotLeft()){ toast('🎰 오늘 30번을 다 돌렸어요 — 내일 다시!',2200); return; }
     const bet=slotBetAmt(slot.bet);
-    if(bet<Math.ceil(rewardOf(st.stage,false)*10)){ toast('💸 걸 실적이 너무 적어요 — 업무를 조금 더 하고 오세요',2200); return; }
+    if(bet<1){ toast('💸 걸 돈이 없어요 — 업무로 실적을 조금 모아 오세요',2200); return; } // 가진 돈의 비율만 봄(예전엔 업무 보상 10건치보다 적으면 막아서 고단계에서 엉뚱하게 막혔음)
     lastInput=Date.now(); slot.spinning=true; st.gold-=bet; acc.slotDay.n++; dirty=true;
     el('slGold').textContent=fmt(st.gold); el('slSpin').disabled=true; el('slResult').textContent='돌아가는 중…'; el('slMachine').classList.remove('win','jackpot');
     const res=[slotPick(),slotPick(),slotPick()], H=el('slStrip0').querySelector('.sl-sym').offsetHeight||60;
