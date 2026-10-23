@@ -382,7 +382,7 @@
     nick=keepNick;
     if(el('gmBody')){ if(!isVisible()) gmShow(); renderNick(); setLoginMsg(msg||'다른 기기에서 로그인되어 로그아웃되었습니다. 다시 로그인하면 최신 진행을 불러옵니다.',true); }
   }
-  // 게임 전용 서버(googleDriveGame.js) 주소 — 비어 있으면 예전처럼 점검표 서버(GAS_URL)를 같이 씀.
+  // 게임 전용 서버(googleDriveEasterEgg.js) 주소 — 비어 있으면 예전처럼 점검표 서버(GAS_URL)를 같이 씀.
   // 게임 요청이 점검표 제출과 같은 잠금·실행 한도를 나눠 쓰지 않게 따로 둠(2026-10-23)
   const GAME_GAS_URL='https://script.google.com/macros/s/AKfycbzp7IN3xJJlGS26ZHJCvOgMHGB9f7ybdSWxmKaDMkwS4v-j3YJygFFC-Es0LPq8fMVX3Q/exec';
   function gameUrl(){ return GAME_GAS_URL||(typeof GAS_URL!=='undefined'?GAS_URL:''); }
@@ -1025,7 +1025,17 @@
   }
   /* ---------- 관리 (슈퍼 관리자 전용) ---------- */
   // 제목을 누르면 열림. 일반 관리자·미인증에게는 아무 일도 일어나지 않음.
-  let adminList=null, rankCache={}; // rankCache: 판별로 마지막 성공 결과(창을 다시 열 때 바로 보여줌)
+  let adminList=null, rankCache={}, rankAt=0; // rankCache: 판별로 마지막 성공 결과(창을 다시 열 때 바로 보여줌), rankAt: 받은 시각
+  const RANK_FRESH=60000; // 1분 안에 받은 랭킹이면 탭을 바꿔도 서버에 다시 안 물음(서버 캐시도 1분)
+  // 7개 판을 한 번에 받음(게임 서버 v2.51.1~). 예전 서버면 boards가 없어서 판 하나씩 받던 방식으로
+  let rankAllOk=true; // 서버가 board:'all'을 모르면(예전 서버) 다음부턴 묻지 않음
+  async function rankFetchAll(){
+    if(!rankAllOk) return false;
+    const r=await gas({action:'gameRanking',playerId:pid,board:'all'});
+    if(!r||!r.success) throw new Error((r&&r.error)||'실패');
+    if(!r.boards){ rankAllOk=false; return false; }
+    Object.assign(rankCache,r.boards); rankAt=Date.now(); return true;
+  }
   const NL2=String.fromCharCode(10,10);
   window.gmTitleClick=function(){ if(gameSuper()) gmShowAdmin(); };
   async function gas2(action,extra){ return gas(Object.assign({action,adminToken:gameAdminToken()},extra||{})); }
@@ -1133,13 +1143,13 @@
       b.innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
     // 전에 본 적 있으면 그걸 먼저 보여주고 뒤에서 갱신 — 서버가 2초 넘게 걸려서 빈 화면을 오래 보던 문제
     const seen=rankCache[board];
+    if(seen&&Date.now()-rankAt<RANK_FRESH){ paint(body(seen,false)); return; } // 방금 받은 것 — 기다림 없이 바로
     paint(seen?body(seen,true):'<div class="gm-intro">랭킹 불러오는 중…</div>');
     let j=null, why='';
     for(let attempt=0;attempt<2&&!j;attempt++){   // 한 번 실패하면 조용히 한 번 더 — 가끔 응답이 비던 문제
       try{
-        const r=await gas({action:'gameRanking',playerId:pid,board});
-        if(!r.success) throw new Error(r.error||'실패');
-        j=r;
+        if(await rankFetchAll()) j=rankCache[board];
+        else { const r=await gas({action:'gameRanking',playerId:pid,board}); if(!r.success) throw new Error(r.error||'실패'); j=r; }
       }catch(e){
         why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
         if(attempt===0) await new Promise(r=>setTimeout(r,600));
@@ -1655,7 +1665,7 @@
   window.ttDrop=()=>{ lastInput=Date.now(); if(tetris&&tetris.over) gmShowTetris(); else ttHard(); };
   window.gmTetrisExit=function(){ if(tetris){ cancelAnimationFrame(tetris.raf); if(!tetris.over&&tetris.score>0) ttEnd('그만함'); } tetris=null; gmShowWorld(); };
 
-// ===== 원카드 규칙 엔진 — game.js(혼자 하기)와 googleDrive.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
+// ===== 원카드 규칙 엔진 — easterEgg.js(혼자 하기)와 googleDriveEasterEgg.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
   // 카드: 'S10','HA','DK'… (S♠ H♥ D♦ C♣), 조커 'BJ'(흑백) 'CJ'(컬러)
   // 공격: 2 +2 · A +3 · 흑백조커 +5 · 컬러조커 +7 — 같거나 센 공격 카드(같은 무늬·숫자, 조커는 아무 때나)로 막아 넘기거나 쌓인 만큼 먹음
   // J 다음 사람 건너뛰기 · Q 방향 바꾸기 · K 한 번 더 · 7 무늬 바꾸기 · 조커 다음은 아무 카드나
@@ -2108,7 +2118,7 @@
 
   /* ---------- 미니게임 월드 ---------- */
   // 구름 섬 지도. 열린 섬은 둥실둥실 + 최고 기록, 잠긴 섬은 안개 + 🔒(누르면 해금 직급 안내). 준비 중 섬으로 다음 게임 예고
-  // ===== 해전(배틀쉽) 엔진 — game.js(혼자 하기)와 googleDrive.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
+  // ===== 해전(배틀쉽) 엔진 — easterEgg.js(혼자 하기)와 googleDriveEasterEgg.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
   // 8×8 바다에 배 4척(4·3·3·2칸). 서로 번갈아 한 칸씩 쏘고, 맞히면 한 번 더. 상대 배를 모두 가라앉히면 승리
   // 칸 번호 = 행*8 + 열. 내가 쏜 기록(shots): 64글자 — '.' 안 쏨, 'o' 빗나감, 'x' 맞음, '#' 가라앉은 배
   var BS_N = 8, BS_SHIPS = [4, 3, 3, 2], BS_AI_MS = 900, BS_PLACE_MS = 90000;
@@ -2894,8 +2904,7 @@
   // 서버가 2초쯤 걸리므로, 게임을 켠 직후 조용히 한 번 받아 둔다. 눌렀을 때 바로 뜬다.
   function prefetchRank(){
     if(!pid||rankCache.promo) return;
-    gas({action:'gameRanking',playerId:pid,board:'promo'})
-      .then(j=>{ if(j&&j.success) rankCache.promo=j; })
+    rankFetchAll().then(ok=>ok||gas({action:'gameRanking',playerId:pid,board:'promo'}).then(j=>{ if(j&&j.success) rankCache.promo=j; }))
       .catch(()=>{});
   }
   function startPlay(){

@@ -975,7 +975,7 @@ function authorizeDrive() {
 }
 
 // ===== 게임 서버는 분리됨 =====
-// 숨은 미니게임의 저장·랭킹·관리·원카드·해전은 별도 GAS 프로젝트(googleDriveGame.js)로 옮김(2026-10-23).
+// 숨은 미니게임의 저장·랭킹·관리·원카드·해전은 별도 GAS 프로젝트(googleDriveEasterEgg.js)로 옮김(2026-10-23).
 // 점검표 제출과 같은 잠금·실행 한도를 나눠 쓰지 않게 하려고. 이 프로젝트에는 게임 코드가 없음.
 // 예전에 이 프로젝트에 깔아 둔 게임 백업 트리거는 removeGameBackupTrigger()를 한 번 실행해 지울 것.
 function removeGameBackupTrigger() {

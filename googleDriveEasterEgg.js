@@ -13,11 +13,11 @@ Air Max — 게임 전용 Google Apps Script (점검표 서버와 분리, 2026-1
        OC_STATS, BS_STATS — 점검표 프로젝트에 있으면 값을 그대로 복사(원카드·해전 같이 하기 전적)
   3. 편집기에서 gameDbInfo 실행 → 권한 허용, 게임 DB가 맞게 열리는지 확인
   4. setupGameBackupTrigger 실행(매일 새벽 백업)
-  5. 배포 → 새 배포 → 웹앱, 실행: 나, 액세스: 모든 사용자 → 나온 URL을 game.js의 GAME_GAS_URL에
+  5. 배포 → 새 배포 → 웹앱, 실행: 나, 액세스: 모든 사용자 → 나온 URL을 easterEgg.js의 GAME_GAS_URL에
 
 관리자 확인: 게임 관리 화면은 점검표 앱의 관리자 로그인 토큰을 그대로 씀. 이 서버는 비밀번호를 갖지 않고,
 점검표 서버에 adminCheck로 물어서 'super'인지 확인(5분 캐시).
-이 파일은 googleDrive.js의 게임 부분에서 만들어짐 — 게임 서버 코드를 고칠 땐 이 파일을 고치면 됨.
+이 파일은 googleDrive.js의 게임 부분에서 옮겨 왔음 — 게임 서버 코드는 이제 이 파일만 고치면 됨.
 ================================================================================
 */
 function doGet(e) { return buildJson({ success: true, service: 'airmax-game' }); }
@@ -41,23 +41,36 @@ var GAME_ADMIN_ACTIONS = {
     gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
     gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true, gameAdminGrant: true
 };
-// 관리자 토큰 확인 — 점검표 서버에 물어봄(토큰·비밀번호는 점검표 서버에만 있음). 결과는 5분 캐시
+// 관리자 토큰 확인 — 점검표 서버에 adminCheck로 물어봄(토큰·비밀번호는 점검표 서버에만 있음). 성공만 5분 캐시.
+// GAS 웹앱은 POST에 302로 답하고 결과는 그 주소를 GET해야 받음 → 직접 두 단계로(자동 따라가기는 POST를 다시 보내 실패할 수 있음)
+var ADMIN_CHECK_WHY = '';
 function getAdminLevel(token) {
-    token = String(token || '');
-    if (!token) return null;
+    token = String(token || ''); ADMIN_CHECK_WHY = '';
+    if (!token) { ADMIN_CHECK_WHY = '관리자 로그인 토큰 없음'; return null; }
     var cache = CacheService.getScriptCache(), ck = 'adm_' + Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token)).slice(0, 40);
     var hit = cache.get(ck);
-    if (hit) return hit === '-' ? null : hit;
+    if (hit) return hit;
     var url = PropertiesService.getScriptProperties().getProperty('CHECKLIST_GAS_URL');
-    if (!url) return null;
-    var level = null;
+    if (!url) { ADMIN_CHECK_WHY = '스크립트 속성 CHECKLIST_GAS_URL 없음'; return null; }
     try {
-        var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ action: 'adminCheck', adminToken: token }), muteHttpExceptions: true, followRedirects: true });
-        var j = JSON.parse(res.getContentText());
-        if (j && j.success && (j.level === 'super' || j.level === 'admin')) level = j.level;
-    } catch (e) { level = null; }
-    cache.put(ck, level || '-', 300);
-    return level;
+        var res = UrlFetchApp.fetch(url.trim(), { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ action: 'adminCheck', adminToken: token }), muteHttpExceptions: true, followRedirects: false });
+        var code = res.getResponseCode();
+        if (code === 301 || code === 302 || code === 303 || code === 307) {
+            var h = res.getHeaders(), loc = h.Location || h.location;
+            res = UrlFetchApp.fetch(loc, { method: 'get', muteHttpExceptions: true, followRedirects: true });
+            code = res.getResponseCode();
+        }
+        var text = res.getContentText(), j = null;
+        try { j = JSON.parse(text); } catch (e) { ADMIN_CHECK_WHY = '점검표 서버 응답 ' + code + ': ' + text.slice(0, 60); return null; }
+        if (j && j.success && (j.level === 'super' || j.level === 'admin')) { cache.put(ck, j.level, 300); return j.level; }
+        ADMIN_CHECK_WHY = '점검표 서버가 토큰을 거절(' + ((j && (j.code || j.error)) || '?') + ') — 점검 앱에서 관리자 로그인을 다시 해 보세요';
+    } catch (e) { ADMIN_CHECK_WHY = '점검표 서버 호출 실패: ' + e.message; }
+    return null;
+}
+// 편집기에서 실행해 보는 용 — 점검표 서버와 연결이 되는지(토큰 없이 물어서 ADMIN_REQUIRED가 오면 연결 정상)
+function testChecklistLink() {
+    getAdminLevel('연결-확인용-가짜-토큰');
+    Logger.log(ADMIN_CHECK_WHY);
 }
 // 랭킹 닉네임 정리(점검표 서버의 같은 이름 함수와 같은 규칙)
 function normalizeChecklistLocation(loc) {
@@ -281,7 +294,7 @@ function readRefGrants() {
 function handleGameAdmin(data) {
     try {
         if (getAdminLevel(data.adminToken) !== 'super') {
-            return buildJson({ success: false, code: 'SUPER_REQUIRED', error: '슈퍼 관리자만 사용할 수 있습니다.' });
+            return buildJson({ success: false, code: 'SUPER_REQUIRED', error: '슈퍼 관리자만 사용할 수 있습니다.' + (ADMIN_CHECK_WHY ? ' [' + ADMIN_CHECK_WHY + ']' : '') });
         }
         var sheet = getGameSheet();
         var last = sheet.getLastRow();
@@ -368,8 +381,64 @@ function handleGameAdmin(data) {
         return buildJson({ success: false, error: err.message });
     }
 }
+// ===== 랭킹 (v2.51.1 빠르게) =====
+// 한 번 시트를 읽을 때 7개 판을 모두 만들어 캐시에 같이 넣음 → 다른 탭도 시트를 다시 안 읽음.
+// 캐시를 시트보다 먼저 봄(예전엔 시트를 다 읽은 뒤에 캐시를 봐서 캐시가 있어도 0.6초쯤 더 걸렸음).
+// board='all'이면 7개 판을 한 번에 돌려줌 → 앱은 탭을 눌러도 기다리지 않음
+var RANK_BOARDS = ['promo', 'stairs', 'suika', 'tetris', 'block', 'onecard', 'battleship'];
+var RANK_TTL = 60;
+function rankBuildAll(values) {
+    var oc = ocLoadStats(), bs = bsLoadStats(), out = {};
+    var base = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
+        var s = gameReadState(r) || {}, id = String(r[0]);
+        return { pid: id, nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0,
+            stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, block: Number(s.bbBest) || 0,
+            ocW: (oc[id] || {}).w || 0, ocG: (oc[id] || {}).g || 0, bsW: (bs[id] || {}).w || 0, bsG: (bs[id] || {}).g || 0 };
+    });
+    var pick = function(x, keys) { var o = { pid: x.pid, nickname: x.nickname, ch: x.ch, tier: x.tier }; keys.forEach(function(k) { o[k] = x[k]; }); return o; };
+    out.promo = base.slice().sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); })
+        .map(function(x) { return pick(x, ['stage', 'level']); });
+    ['stairs', 'suika', 'tetris', 'block'].forEach(function(k) {
+        out[k] = base.filter(function(x) { return x[k] > 0; }).sort(function(a, b) { return b[k] - a[k]; }).map(function(x) { return pick(x, [k]); });
+    });
+    // 원카드·해전: 같이 하기 전적(서버 기록) — 승리 수 → 승률 → 판 수 적은 순. 화면은 onecard(승)·ocGames(판) 이름을 씀
+    [['onecard', 'ocW', 'ocG'], ['battleship', 'bsW', 'bsG']].forEach(function(d) {
+        out[d[0]] = base.filter(function(x) { return x[d[2]] > 0; })
+            .sort(function(a, b) { return (b[d[1]] - a[d[1]]) || (b[d[1]] / b[d[2]] - a[d[1]] / a[d[2]]) || (a[d[2]] - b[d[2]]); })
+            .map(function(x) { var o = pick(x, []); o.onecard = x[d[1]]; o.ocGames = x[d[2]]; o[d[0]] = x[d[1]]; return o; });
+    });
+    return out;
+}
+function rankLoadAll() { // 캐시 → 없으면 시트 한 번 읽어 7개 다 만들고 캐시
+    var cache = CacheService.getScriptCache(), keys = RANK_BOARDS.map(function(b) { return 'gmrank_' + b; });
+    var got = cache.getAll(keys), all = {}, miss = false;
+    RANK_BOARDS.forEach(function(b) { try { all[b] = JSON.parse(got['gmrank_' + b] || 'null'); } catch (e) { all[b] = null; } if (!all[b]) miss = true; });
+    if (!miss) return all;
+    var sheet = getGameSheet(), last = sheet.getLastRow();
+    all = rankBuildAll(last >= 2 ? sheet.getRange(2, 1, last - 1, GAME_HEADERS.length).getValues() : []);
+    var put = {}; RANK_BOARDS.forEach(function(b) { put['gmrank_' + b] = JSON.stringify(all[b]); });
+    try { cache.putAll(put, RANK_TTL); } catch (e) { /* 너무 크면 캐시 없이 */ }
+    return all;
+}
+function rankView(list, board, playerId) {
+    var meIdx = rankOfPid(list, playerId), me = meIdx ? list[meIdx - 1] : null;
+    var v = { players: list.length, myRank: meIdx, top: list.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) };
+    if (board === 'onecard' || board === 'battleship') v.mine = me ? { w: me.onecard, g: me.ocGames } : { w: 0, g: 0 };
+    return v;
+}
+function handleGameRanking(data) {
+    var playerId = String(data.playerId || ''), all = rankLoadAll();
+    if (data.board === 'all') {
+        var boards = {}; RANK_BOARDS.forEach(function(b) { boards[b] = rankView(all[b], b, playerId); });
+        return buildJson({ success: true, boards: boards });
+    }
+    var board = RANK_BOARDS.indexOf(data.board) >= 0 ? data.board : 'promo';
+    var v = rankView(all[board], board, playerId); v.success = true;
+    return buildJson(v);
+}
 function handleGameAction(data) {
     try {
+        if (data.action === 'gameRanking') return handleGameRanking(data); // 시트를 열기 전에 — 캐시가 있으면 시트를 안 읽음
         var sheet = getGameSheet();
         var readValues = function() {
             var last = sheet.getLastRow();
@@ -378,39 +447,6 @@ function handleGameAction(data) {
         var values = readValues();
         var playerId = String(data.playerId || '');
         var token = String(data.token || '');
-
-        if (data.action === 'gameRanking') {
-            // 랭킹은 모두가 같은 결과를 보므로 잠깐 캐시 — 시트를 매번 훑지 않아 눈에 띄게 빨라진다.
-            // 내 순위는 사람마다 다르므로 캐시에는 목록만 담고 순위는 아래에서 다시 계산한다.
-            var rkCache = CacheService.getScriptCache();
-            var rkKey = 'gmrank_' + (['stairs','suika','tetris','block','onecard','battleship'].indexOf(data.board) >= 0 ? data.board : 'promo'); // onecard가 빠져 있어 승진 랭킹 캐시와 섞이던 문제 수정
-            var cached = null;
-            try { cached = JSON.parse(rkCache.get(rkKey) || 'null'); } catch (e) { cached = null; }
-            if (cached && cached.all) {
-                return buildJson({ success: true, players: cached.all.length, myRank: rankOfPid(cached.all, playerId), mine: data.board === 'onecard' ? (ocLoadStats()[playerId] || { w: 0, g: 0 }) : data.board === 'battleship' ? (bsLoadStats()[playerId] || { w: 0, g: 0 }) : undefined,
-                    top: cached.all.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
-            }
-            // 승진 순위: 가장 늦게 입사한(어려운) 직원 → 그 직원의 단계 → 레벨 → 누적 실적
-            // board='stairs': 무한의 계단 최고 층수 / 'suika': 수박 게임 / 'tetris': 테트리스 최고 점수 순위 (기록 있는 사람만)
-            var board = ['stairs', 'suika', 'tetris', 'block', 'onecard', 'battleship'].indexOf(data.board) >= 0 ? data.board : 'promo';
-            var ocS = board === 'onecard' ? ocLoadStats() : board === 'battleship' ? bsLoadStats() : {}; // 원카드·해전은 서버가 기록한 같이 하기 전적만
-            var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
-                var s = gameReadState(r) || {};
-                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, block: Number(s.bbBest) || 0, onecard: (ocS[String(r[0])] || {}).w || 0, ocGames: (ocS[String(r[0])] || {}).g || 0, battleship: (ocS[String(r[0])] || {}).w || 0 };
-            });
-            if (board === 'onecard' || board === 'battleship') { // 원카드·해전: 한 판이라도 한 사람 — 승리 수 → 승률 → 판 수 적은 순
-                list = list.filter(function(x) { return x.ocGames > 0; });
-                list.sort(function(a, b) { return (b.onecard - a.onecard) || (b.onecard / b.ocGames - a.onecard / a.ocGames) || (a.ocGames - b.ocGames); });
-            } else if (board !== 'promo') {
-                list = list.filter(function(x) { return x[board] > 0; });
-                list.sort(function(a, b) { return b[board] - a[board]; });
-            } else {
-                list.sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); });
-            }
-            try { rkCache.put(rkKey, JSON.stringify({ all: list }), 45); } catch (e) { /* 캐시 실패는 무시 */ }
-            return buildJson({ success: true, players: list.length, myRank: rankOfPid(list, playerId), mine: (board === 'onecard' || board === 'battleship') ? (ocS[playerId] || { w: 0, g: 0 }) : undefined,
-                top: list.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) });
-        }
 
         // 닉네임 + PIN — 없는 닉네임이면 새로 가입, 있으면 PIN 확인 후 이어하기
         if (data.action === 'gameLogin') {
@@ -484,7 +520,7 @@ function handleGameAction(data) {
     }
 }
 
-// ===== 원카드 규칙 엔진 — game.js(혼자 하기)와 googleDrive.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
+// ===== 원카드 규칙 엔진 — easterEgg.js(혼자 하기)와 googleDriveEasterEgg.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
 // 카드: 'S10','HA','DK'… (S♠ H♥ D♦ C♣), 조커 'BJ'(흑백) 'CJ'(컬러)
 // 공격: 2 +2 · A +3 · 흑백조커 +5 · 컬러조커 +7 — 같거나 센 공격 카드(같은 무늬·숫자, 조커는 아무 때나)로 막아 넘기거나 쌓인 만큼 먹음
 // J 다음 사람 건너뛰기 · Q 방향 바꾸기 · K 한 번 더 · 7 무늬 바꾸기 · 조커 다음은 아무 카드나
@@ -807,7 +843,7 @@ function handleOneCard(data) {
 }
 var OC_AI_NAMES = ['쉰동준', '쉰원철', '약옥녀', '삼용훈', '하달순', '쉰원옥', '천병돌', '육찬근'];
 
-// ===== 해전(배틀쉽) 엔진 — 브라우저(game.js)와 GAS(googleDrive.js)에 똑같이 들어감. ES5만 사용 =====
+// ===== 해전(배틀쉽) 엔진 — 브라우저(easterEgg.js)와 GAS(googleDriveEasterEgg.js)에 똑같이 들어감. ES5만 사용 =====
 // 8×8 바다에 배 4척(4·3·3·2칸). 서로 번갈아 한 칸씩 쏘고, 맞히면 한 번 더. 상대 배를 모두 가라앉히면 승리
 // 칸 번호 = 행*8 + 열. 내가 쏜 기록(shots): 64글자 — '.' 안 쏨, 'o' 빗나감, 'x' 맞음, '#' 가라앉은 배
 var BS_N = 8, BS_SHIPS = [4, 3, 3, 2], BS_AI_MS = 900, BS_PLACE_MS = 90000;
