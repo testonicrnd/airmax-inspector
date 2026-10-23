@@ -2361,21 +2361,39 @@
     else bsSend('bsShoot',{cell});
   };
   // ---- 그리기
+  // 배 조각 그림 — 칸 번호 → {p:'tail'|'body'|'head', v:세로}. 왼쪽(위)이 배꼬리(깃발), 오른쪽(아래)이 뱃머리
+  function bsPieces(ships){ const m={};
+    (ships||[]).forEach(sh=>{ const c=sh.slice().sort((x,y)=>x-y), vert=c.length>1&&c[1]-c[0]===BS_N;
+      c.forEach((cell,k)=>{ m[cell]={p:k===0?'tail':k===c.length-1?'head':'body',v:vert}; }); });
+    return m; }
+  // 가라앉은 적 배 — '#' 칸 덩어리(배끼리 안 붙으므로 덩어리 하나가 배 한 척)
+  function bsSunkShips(shots){ const seen={}, out=[];
+    for(let i=0;i<shots.length;i++){ if(shots.charAt(i)!=='#'||seen[i]) continue;
+      const g=[], st=[i]; seen[i]=1;
+      while(st.length){ const c=st.pop(); g.push(c); const r=Math.floor(c/BS_N), k=c%BS_N;
+        [[r-1,k],[r+1,k],[r,k-1],[r,k+1]].forEach(([rr,kk])=>{ const n=rr*BS_N+kk; if(rr>=0&&rr<BS_N&&kk>=0&&kk<BS_N&&!seen[n]&&shots.charAt(n)==='#'){ seen[n]=1; st.push(n); } }); }
+      out.push(g); }
+    return out; }
   function bsBoard(kind,v){
     const cells=[];
     const sending=bs.sending&&bs.sending.cell;
-    for(let i=0;i<BS_N*BS_N;i++){
-      if(kind==='enemy'){
-        const ch=v.myShots.charAt(i), last=v.last&&v.last.p===v.me&&v.last.cell===i, reveal=v.oppShips&&ch==='.'&&v.oppShips.some(sh=>sh.indexOf(i)>=0);
+    const pc=(m,i)=>m[i]?` ship p-${m[i].p}${m[i].v?' v':''}`:'';
+    const pop=(on,res)=>on?`<i class="bs-pop ${res==='miss'?'miss':'hit'}"></i>`:'';
+    if(kind==='enemy'){
+      const sunk=bsPieces(bsSunkShips(v.myShots)), rev=bsPieces(v.oppShips);
+      for(let i=0;i<BS_N*BS_N;i++){
+        const ch=v.myShots.charAt(i), last=v.last&&v.last.p===v.me&&v.last.cell===i;
         const can=ch==='.'&&v.phase==='play'&&v.turn===v.me&&v.winner<0&&!bs.sending;
-        const cls=ch==='o'?'miss':ch==='x'?'hit':ch==='#'?'sunk':reveal?'reveal':'fog';
+        const cls=ch==='o'?'miss':ch==='x'?'hit':ch==='#'?'sunk'+pc(sunk,i):rev[i]?'reveal'+pc(rev,i):'fog';
         cells.push(can?`<button type="button" class="bs-c fog${sending===i?' aim':''}" onclick="bsUiShoot(${i})"></button>`
-                      :`<span class="bs-c ${cls}${last?' last':''}${sending===i?' aim':''}"></span>`);
-      } else {
-        const ships=kind==='place'?bs.place.ships:(v.myShips||[]), ship=ships.some(sh=>sh.indexOf(i)>=0);
+                      :`<span class="bs-c ${cls}${last?' last':''}${sending===i?' aim':''}">${pop(last,v.last&&v.last.res)}</span>`);
+      }
+    } else {
+      const m=bsPieces(kind==='place'?bs.place.ships:v.myShips);
+      for(let i=0;i<BS_N*BS_N;i++){
         const ch=kind==='place'?'.':v.oppShots.charAt(i), last=kind!=='place'&&v.last&&v.last.p!==v.me&&v.last.cell===i;
-        const cls=(ship?'ship':'sea')+(ch==='o'?' miss':ch==='x'||ch==='#'?' hit':'');
-        cells.push(kind==='place'&&ship?`<button type="button" class="bs-c ${cls}" onclick="bsUiRotate(${i})"></button>`:`<span class="bs-c ${cls}${last?' last':''}"></span>`);
+        const cls='sea'+pc(m,i)+(ch==='o'?' miss':ch==='x'||ch==='#'?' hit':'');
+        cells.push(kind==='place'&&m[i]?`<button type="button" class="bs-c ${cls}" onclick="bsUiRotate(${i})"></button>`:`<span class="bs-c ${cls}${last?' last':''}">${pop(last,v.last&&v.last.res)}</span>`);
       }
     }
     return `<div class="bs-board ${kind}">${cells.join('')}</div>`;
@@ -2436,7 +2454,7 @@
     if(win) fxPop('fx-confetti',{cls:'big',ms:1500,x:50});
   }
   window.gmShowBattleship=gmShowBattleship;
-  if(window.__GM_TEST){ window.__bs=()=>bs; }
+  if(window.__GM_TEST){ window.__bs=()=>bs; window.__bsRender=bsRender; } // 자동 테스트에서만
   // 나가기 — 하다가 나가면 패(같이 하기는 컴퓨터가 이어받음)
   function bsLeave(){
     if(!bs) return;
