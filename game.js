@@ -1688,8 +1688,8 @@
     '무난':{help:1,   miss:1,   desc:'평범'},
   };
   const TEAM_PULL={
-    intern:{name:'인턴 뽑기', rank:'인턴', cost:40,  odds:[0,50,30,15,4.5,0.5], miss:0.08, loss:1.5, helpMul:1},
-    staff: {name:'사원 뽑기', rank:'사원', refs:10,  odds:[0,0,40,35,20,5],     miss:0.04, loss:1, helpMul:1.5}, // 미니게임 추천서로
+    intern:{name:'인턴 뽑기', rank:'인턴', refs:4,   odds:[0,50,30,15,4.5,0.5], miss:0.08, loss:1.5, helpMul:1},
+    staff: {name:'사원 뽑기', rank:'사원', refs:10,  odds:[0,0,40,35,20,5],     miss:0.04, loss:1, helpMul:1.5}, // 둘 다 미니게임 추천서로 — 등급 확률만 다름
   };
   const TEAM_MISTAKES=['서류를 잘못 보냄','엑셀 수식을 날림','거래처에 엉뚱한 메일 발송','회의 시간을 착각','복사기를 고장 냄','결재 서류를 분실','커피를 키보드에 쏟음','견적서 숫자를 틀림'];
   function teamUnlocked(){ return st.lv>=TEAM_REQ; }
@@ -1697,8 +1697,7 @@
   function memberHelp(m){ const P=TEAM_PULL[m.kind]; return TEAM_GRADE_HELP[m.grade]*P.helpMul*TEAM_TRAITS[m.trait].help*(1+0.25*(m.lv-1)); }
   function memberMiss(m){ const P=TEAM_PULL[m.kind]; return Math.max(0.005,P.miss*(1.2-0.15*m.grade)*TEAM_TRAITS[m.trait].miss*(1-0.12*(m.lv-1))); }
   function teamHelp(s){ return (s&&s.team||[]).reduce((a,m)=>a+memberHelp(m),0); }
-  function pullCost(kind){ return Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*TEAM_PULL[kind].cost); } // 인턴: 지금 단계 업무 보상 N건치
-  function canPull(kind){ const P=TEAM_PULL[kind]; if(!PULL_OPEN) return false; return P.refs?(acc.refs||0)>=P.refs:st.gold>=pullCost(kind); }
+  function canPull(kind){ return PULL_OPEN&&(acc.refs||0)>=TEAM_PULL[kind].refs; }
   // 업무를 끝낼 때마다 팀원별로 실수 판정 — 실수하면 그 업무 보상의 몇 배를 까먹음(가진 실적까지만)
   function teamMistake(g){
     for(const m of st.team||[]){
@@ -1727,11 +1726,11 @@
         <button type="button" class="gm-team-out" onclick="gmTeamRelease(${i})">방출</button></div>`).join('');
     const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>뽑기로 팀원을 데려오세요</small></span></div>`).join('');
     const pullBtn=k=>{ const P=TEAM_PULL[k], ok=canPull(k)&&!full;
-      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${!PULL_OPEN?(k==='staff'?'준비 중 · 추천서를 모아 두세요':'준비 중'):P.refs?`${ic('ticket.png')}추천서 ${P.refs}장`:MONEY+fmt(pullCost(k))}</small></button>`; };
+      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${ic('ticket.png')}추천서 ${P.refs}장${PULL_OPEN?'':' · 준비 중'}</small></button>`; };
     el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${acc.refs||0}</b>장</span></div>
       <div class="gm-team-list">${rows}${empty}</div>
       <div class="gm-team-pulls">${pullBtn('intern')}${pullBtn('staff')}</div>
-      <div class="gm-st-info" id="gmTeamMsg">${!PULL_OPEN?'팀원 뽑기는 곧 열립니다. 사원 뽑기용 추천서는 미니게임에서 미리 모아 두세요':full?'자리가 꽉 찼습니다. 방출하면 새로 뽑을 수 있어요':'인턴은 실적으로, 사원은 미니게임에서 모은 추천서로 뽑습니다'}</div>
+      <div class="gm-st-info" id="gmTeamMsg">${!PULL_OPEN?'팀원 뽑기는 곧 열립니다. 추천서는 미니게임에서 미리 모아 두세요':full?'자리가 꽉 찼습니다. 방출하면 새로 뽑을 수 있어요':'인턴은 싸지만 실수가 많고, 사원은 비싸지만 든든합니다'}</div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
   }
@@ -1740,7 +1739,7 @@
     const P=TEAM_PULL[kind];
     st.team=st.team||[];
     if(!canPull(kind)||st.team.length>=teamSlots()) return;
-    if(P.refs) acc.refs-=P.refs; else st.gold-=pullCost(kind);
+    acc.refs-=P.refs;
     dirty=true; lastInput=Date.now();
     const id=Math.floor(Math.random()*TEAM_NAMES.length), grade=rollGrade(P.odds);
     const traits=Object.keys(TEAM_TRAITS), trait=traits[Math.floor(Math.random()*traits.length)];
