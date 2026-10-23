@@ -2741,16 +2741,16 @@
   window.gmBlockExit=function(){ if(bb&&!bb.over&&bb.score>0) bbEnd(); bbCleanup(); bb=null; gmShowWorld(); };
 
   // ===== 슬롯머신 — 이사부터. 실적을 걸고 돌리는 회사 카지노(실적 소모처). 기대값 약 0.96이라 오래 하면 조금씩 잃음 =====
-  // 배당: 같은 그림 3개 = 큰 배당, 2개 = 작은 배당(본전 아래인 것도 있음). 추천서 3개면 추천서 +3 덤
+  // 배당: 같은 그림 3개 = 큰 배당, 2개 = 작은 배당(본전 아래인 것도 있음). 클로버 3개면 추천서 +3 덤, 왕관 3개 = 잭팟
   const SLOT_REQ=95, SLOT_BETS=[10,50,200]; // 판돈 = 지금 단계 업무 보상 × 건수
   const SLOT_SYMS=[
-    {k:'coffee', img:'task-coffee2', w:7,   x3:5,   x2:0.7},
-    {k:'clip',   img:'task-clip',    w:6,   x3:8,   x2:0.9},
-    {k:'report', img:'task-report',  w:5,   x3:12,  x2:1.4},
-    {k:'money',  img:'skill-bonus',  w:3,   x3:30,  x2:2.2},
-    {k:'medal',  img:'medal-1',      w:2,   x3:80,  x2:3.5},
-    {k:'ticket', img:'ticket',       w:1.5, x3:10,  x2:1, refs:3},
-    {k:'crown',  img:'rank-11',      w:1.3, x3:300, x2:7},
+    {k:'cherry', img:'sl-cherry',   w:7,   x3:5,   x2:0.7},
+    {k:'lemon',  img:'sl-lemon',    w:6,   x3:8,   x2:0.9},
+    {k:'bell',   img:'sl-bell',     w:5,   x3:12,  x2:1.4},
+    {k:'bar',    img:'sl-bar',      w:3,   x3:30,  x2:2.2},
+    {k:'seven',  img:'sl-seven',    w:2,   x3:80,  x2:3.5},
+    {k:'clover', img:'sl-clover',   w:1.5, x3:10,  x2:1, refs:3},
+    {k:'crown',  img:'sl-crown',    w:1.3, x3:300, x2:7},
   ];
   let slot=null; // {bet:0|1|2, spinning, last}
   function slotUnlocked(){ return acc.runs.some(r=>r&&r.lv>=SLOT_REQ); }
