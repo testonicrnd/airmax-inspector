@@ -255,22 +255,43 @@
     return slot?{...slot.ev,left:(59-k.m)*60+(60-k.s)}:null;
   }
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
-  // 새로 생긴 것 카드 — 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
+  // ===== 게임 버전 — 점검 앱 버전(APP_VERSION)과 따로 관리(2026-10-23~). 게임만 고치면 이것만 올림 =====
+  // 1.x = '테스토닉 키우기' 시절(10/21~22, 앱 v2.18~2.43), 2.x = '좆좋소 키우기' 이후(앱 v2.44~). 게임을 고칠 때마다 소수점 뒤를 +1
+  // index.html의 easterEgg.js?v= 값과 같게 맞출 것(새 게임 버전 안내가 이 값을 비교함)
+  const GAME_VERSION='2.12', GAME_DATE='2026.10.23';
+  let gameNewShown=false;
+  async function checkGameVersion(){
+    if(gameNewShown||!el('gmWidget')) return;
+    try{
+      const res=await fetch(`index.html?cb=${Date.now()}`,{cache:'no-store'}); if(!res.ok) return;
+      const m=(await res.text()).match(/easterEgg\.js\?v=([0-9.]+)/); if(!m||m[1]===GAME_VERSION) return;
+      gameNewShown=true;
+      const w=el('gmWidget'), d=document.createElement('div'); d.className='gm-newver';
+      d.innerHTML=`🎮 게임 업데이트 <b>v${escHtml(m[1])}</b> <button type="button">새로고침</button><i title="닫기">✕</i>`;
+      d.querySelector('button').onclick=()=>{ saveServer(true); const u=new URL(location.href); u.searchParams.set('_v',Date.now()); setTimeout(()=>location.replace(u.toString()),300); };
+      d.querySelector('i').onclick=()=>d.remove();
+      w.appendChild(d);
+    }catch(e){}
+  }
+  setInterval(checkGameVersion,1800000);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkGameVersion(); });
+  // 새로 생긴 것 카드 — 게임 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
   const PATCH_NOTES=[
-    {v:'2.55.2', items:['🚀 직원 화면에서 <b>사장 달성 시 받는 격려(버프)</b>를 미리 볼 수 있어요','📋 미션은 아래 메뉴 맨 앞으로 옮겼어요']},
-    {v:'2.55.0', items:['🎰 <b>슬롯머신이 돈 버는 곳으로</b> — 가진 실적의 10·30·50%를 걸고 평균 1.5배! 하루 30번 (10%는 안정, 50%는 한방)']},
-    {v:'2.54.0', items:['⌨️ <b>PC 타자 보상 상향</b> — 단어 글자당 처리량 ×1.3 → ×2.0','📱 휴대폰 탭은 ×0.4로 조정 (1초 7번까지) — 타자가 더 어려운 만큼 PC가 더 벌어요']},
-    {v:'2.53.0', items:['🎰 <b>슬롯머신</b> — 이사부터, 실적을 걸고 한 판! 왕관 3개면 ×300 잭팟','🚢 해전 포격 효과가 두 번 터지던 문제 수정']},
-    {v:'2.52.0', items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서 (위 숫자 줄의 📋)','🏆 <b>주간 랭킹</b> — 미니게임 순위가 매주 월요일 새로 시작, 지난주 1~3위 추천서 10·6·3장','⚡ <b>근무 외 시간 사고</b> — 평일 8~19시 밖·주말엔 정전·인터넷 먹통 같은 사고로 효율 50%']},
-    {v:'2.50.0', items:['🧩 <b>블록 블라스트</b> — 과장부터, 미니게임 월드에서']},
-    {v:'2.49.0', items:['🚢 <b>해전</b> — 주임부터, 컴퓨터 또는 동료와 1:1','🔄 같이 하기 중 새로고침해도 로비를 열면 이어서']},
+    {v:'2.12', items:['🏷️ 게임 버전을 점검 앱과 따로 매겨요 — 지금 <b>v2.12</b> (게임 제목 옆)','🎮 게임만 업데이트돼도 게임 안에서 새로고침 안내가 떠요']},
+    {v:'2.11', items:['🎰 <b>슬롯머신이 돈 버는 곳으로</b> — 가진 실적의 10·30·50%를 걸고 평균 1.5배! 하루 30번','🚀 직원 화면에서 <b>사장 달성 시 받는 격려(버프)</b> 미리 보기','📋 미션은 아래 메뉴 맨 앞으로','🔍 스킬 설명에 지금 레벨 / 최대 레벨']},
+    {v:'2.10', items:['⌨️ <b>PC 타자 보상 상향</b> — 단어 글자당 처리량 ×1.3 → ×2.0','📱 휴대폰 탭은 ×0.4로 조정 (1초 7번까지) — 타자가 더 어려운 만큼 PC가 더 벌어요']},
+    {v:'2.9',  items:['🎰 <b>슬롯머신</b> — 이사부터, 미니게임 월드에서','🚢 해전 포격 효과가 두 번 터지던 문제 수정']},
+    {v:'2.8',  items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서','🏆 <b>주간 랭킹</b> — 매주 월요일 마감, 1~3위 추천서 10·6·3장','⚡ <b>근무 외 시간 사고</b> — 평일 8~19시 밖·주말엔 정전 같은 사고로 효율 50%']},
+    {v:'2.6',  items:['🧩 <b>블록 블라스트</b> — 과장부터, 미니게임 월드에서']},
+    {v:'2.5',  items:['🚢 <b>해전</b> — 주임부터, 컴퓨터 또는 동료와 1:1','🔄 같이 하기 중 새로고침해도 로비를 열면 이어서']},
   ];
   function showPatchNotes(){
-    const ver=(typeof APP_VERSION!=='undefined'?APP_VERSION:'').replace(/^v/,''); if(!ver||!pid) return;
+    const ver=GAME_VERSION; if(!pid) return;
+    if(!acc.gNotes&&acc.notesSeen) acc.gNotes='2.11'; // 예전(앱 버전으로 기억하던) 계정은 2.11까지 본 것으로
     const cmp=(a,b)=>{ const x=a.split('.').map(Number), y=b.split('.').map(Number); for(let i=0;i<3;i++){ if((x[i]||0)!==(y[i]||0)) return (x[i]||0)-(y[i]||0); } return 0; };
-    const seen=acc.notesSeen||'';
+    const seen=acc.gNotes||'';
     const list=PATCH_NOTES.filter(n=>cmp(n.v,ver)<=0&&(!seen||cmp(n.v,seen)>0)).slice(0,3);
-    acc.notesSeen=ver; dirty=true;
+    acc.gNotes=ver; dirty=true;
     if(!seen||!list.length) return; // 처음 하는 사람에겐 안 띄움
     const w=el('gmWidget'); if(!w) return; w.querySelector('.gm-notes')?.remove();
     const d=document.createElement('div'); d.className='gm-notes';
@@ -802,7 +823,7 @@
     w.id='gmWidget'; w.className='gm-widget'; w.tabIndex=0;
     w.innerHTML=`
       <div class="gm-head">
-        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>좆좋소 키우기</span><span class="gm-save" id="gmSave"></span>
+        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>좆좋소 키우기<small class="gm-ver" title="게임 버전 · ${GAME_DATE}">v${GAME_VERSION}</small></span><span class="gm-save" id="gmSave"></span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
           <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
@@ -917,7 +938,7 @@
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link gm-link-mis" id="gmMis" title="오늘의 미션" onclick="gmShowMissions()"></button><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}월드</button><button type="button" class="gm-link" onclick="gmLogout()" title="로그아웃">${menuIcon('logout')}<span class="gm-link-long">로그아웃</span></button></div>`;
-    render(); renderMonster(); renderKeys(); renderFocus(); misChip(); setTimeout(showPatchNotes,700);
+    render(); renderMonster(); renderKeys(); renderFocus(); misChip(); setTimeout(showPatchNotes,700); setTimeout(checkGameVersion,3000);
     if(!resumeHinted&&(roomSaved('oc')||roomSaved('bs'))){ resumeHinted=true; const g=roomSaved('oc')?'원카드':'해전'; setTimeout(()=>toast(`🔄 진행 중이던 ${g}가 있어요 — 미니게임 월드 › ${g}에서 이어서 하세요`,3500),600); }
     { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
       if(short>0){ b.style.minHeight=(b.offsetHeight+short)+'px'; b.classList.add('padded'); } }
