@@ -2234,3 +2234,14 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-gm-stars { font-size:9px; letter-spacing:-1px; color:#ffd54f; line-height:1.1; }
 .gm-gm-card b { font-size:10.5px; white-space:nowrap; }
 .gm-gm-new { position:absolute; top:-6px; right:-4px; font-style:normal; font-size:8.5px; font-weight:900; color:#fff; background:#e53935; padding:1px 4px; border-radius:6px; }
+/* 저장 상태 — 제목 옆 */
+.gm-save { flex:0 1 auto; min-width:0; margin:0 auto 0 6px; font-size:10px; font-weight:600; color:var(--text4); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; }
+.gm-save.off { color:#e57373; }
+/* 아래 메뉴줄 — 휴대폰에서도 한 줄 */
+.gm-foot { flex-wrap:nowrap; }
+.gm-link { white-space:nowrap; }
+@media (max-width:440px) {
+  .gm-foot { gap:2px; }
+  .gm-link { font-size:11px; }
+  .gm-link-long { display:none; }
+}

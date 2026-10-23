@@ -693,7 +693,7 @@
     w.id='gmWidget'; w.className='gm-widget'; w.tabIndex=0;
     w.innerHTML=`
       <div class="gm-head">
-        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>좆좋소 키우기</span>
+        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>좆좋소 키우기</span><span class="gm-save" id="gmSave"></span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
           <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
@@ -807,7 +807,7 @@
         :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}미니게임 월드</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}<span class="gm-link-long">미니게임 </span>월드</button><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
     { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
       if(short>0){ b.style.minHeight=(b.offsetHeight+short)+'px'; b.classList.add('padded'); } }
@@ -965,7 +965,10 @@
   window.gmTipHide=function(){ if(tipSticky) return; tipIdx=-1; renderTip(); };
   function renderSaveState(){
     const s=el('gmSave'); if(!s) return;
-    s.textContent=serverOk===false?'기기에만 저장 중':(serverOk?'자동 저장됨':'');
+    // 제목 옆 작은 표시(아래 메뉴줄에 두면 휴대폰에서 줄이 넘어감)
+    s.textContent=serverOk===false?'⚠ 기기에만 저장':(serverOk?'☁ 저장됨':'');
+    s.title=serverOk===false?'서버에 연결하지 못해 이 기기에만 저장하고 있어요':(serverOk?'서버에 자동 저장됐어요':'');
+    s.classList.toggle('off',serverOk===false);
   }
   // 효과 그림 — 업무 칸 위에 잠깐 튀어나왔다 사라짐(자주 터지는 효과는 간격 제한)
   const fxLast={};
