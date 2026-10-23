@@ -1163,14 +1163,26 @@ function gameReadState(row) {
 // 목록 조회 / 한 사람 진행 초기화 / 삭제 / PIN 잠금 해제 / 지금 백업 / 전체 랭킹 초기화
 // 돌발 이벤트 — 슈퍼 관리자가 켜면 모두에게 같은 이벤트가 걸린다. 스크립트 속성에 {ev, until}로 보관.
 var GAME_EVENT_PROP = 'GAME_FORCED_EVENT';
+// {ev, from, until} — from(시작 시각)이 미래면 예약 상태. 앱이 from~until 사이에만 적용
 function readForcedEvent() {
     try {
         var raw = PropertiesService.getScriptProperties().getProperty(GAME_EVENT_PROP);
         if (!raw) return null;
         var o = JSON.parse(raw);
         if (!o || !o.ev || !o.until || Date.now() > o.until) return null;
+        if (!o.from) o.from = o.until - 30 * 60000;
         return o;
     } catch (e) { return null; }
+}
+// 추천서 지급 — 슈퍼 관리자가 장수를 정해 전원에게 1번씩. [{id, count, at}] 최근 7일분만 유지, 앱이 받은 id를 기억해서 중복 지급 안 함
+var GAME_GRANT_PROP = 'GAME_REF_GRANTS';
+var GAME_GRANT_DAYS = 7;
+function readRefGrants() {
+    try {
+        var list = JSON.parse(PropertiesService.getScriptProperties().getProperty(GAME_GRANT_PROP) || '[]');
+        var cut = Date.now() - GAME_GRANT_DAYS * 86400000;
+        return list.filter(function(g) { return g && g.at > cut; });
+    } catch (e) { return []; }
 }
 function handleGameAdmin(data) {
     try {
@@ -1185,10 +1197,24 @@ function handleGameAdmin(data) {
         if (act === 'gameAdminEvent') {
             var props = PropertiesService.getScriptProperties();
             if (!data.ev) { props.deleteProperty(GAME_EVENT_PROP); return buildJson({ success: true, message: '돌발 이벤트를 껐습니다.' }); }
-            var mins = Math.min(Math.max(Number(data.minutes) || 30, 1), 240);
-            var rec = { ev: String(data.ev), until: Date.now() + mins * 60000 };
+            var mins = Math.min(Math.max(Number(data.minutes) || 30, 1), 24 * 60);
+            var from = Number(data.from) || Date.now();
+            if (from < Date.now() - 60000) from = Date.now();                       // 과거 시각이면 지금부터
+            if (from > Date.now() + 14 * 86400000) return buildJson({ success: false, error: '시작 시각은 2주 안으로 정해주세요.' });
+            var rec = { ev: String(data.ev), from: from, until: from + mins * 60000 };
             props.setProperty(GAME_EVENT_PROP, JSON.stringify(rec));
-            return buildJson({ success: true, message: '돌발 이벤트를 ' + mins + '분 동안 켰습니다.', forcedEvent: rec });
+            var when = Utilities.formatDate(new Date(from), 'Asia/Seoul', 'M/d HH:mm');
+            return buildJson({ success: true, message: (from > Date.now() + 60000 ? when + '부터 ' : '지금부터 ') + mins + '분 동안 돌발 이벤트를 겁니다.', forcedEvent: rec });
+        }
+        if (act === 'gameAdminGrant') {
+            var cnt = Math.floor(Number(data.count) || 0);
+            if (cnt < 1 || cnt > 500) return buildJson({ success: false, error: '지급 장수는 1~500장으로 정해주세요.' });
+            var gp = PropertiesService.getScriptProperties();
+            var list = readRefGrants();
+            var g = { id: Utilities.getUuid().slice(0, 8), count: cnt, at: Date.now(), msg: String(data.msg || '').slice(0, 40) };
+            list.push(g);
+            gp.setProperty(GAME_GRANT_PROP, JSON.stringify(list.slice(-20)));
+            return buildJson({ success: true, message: '전원에게 추천서 ' + cnt + '장을 지급했습니다. (접속할 때 받음, ' + GAME_GRANT_DAYS + '일 동안 유효)', refGrants: list });
         }
         if (act === 'gameAdminBackup') return buildJson({ success: true, message: backupGameRanking() });
 
@@ -1212,7 +1238,7 @@ function handleGameAdmin(data) {
                 };
             });
             list.sort(function(a, b) { return (b.done - a.done) || (b.level - a.level) || (b.stage - a.stage); });
-            return buildJson({ success: true, players: list, forcedEvent: readForcedEvent() });
+            return buildJson({ success: true, players: list, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
         }
 
         // 아래는 특정 플레이어 대상 — 행이 밀렸을 수 있으므로 playerId로 다시 찾는다
@@ -1309,7 +1335,7 @@ function handleGameAction(data) {
                     var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
                     sheet.getRange(sheet.getLastRow() + 1, 1, 1, GAME_HEADERS.length)
                         .setValues([[id, nickname, 1, 1, 0, '', now, now, gameHash(id + ':' + pin), tok]]);
-                    return buildJson({ success: true, created: true, playerId: id, token: tok, nickname: nickname, state: null });
+                    return buildJson({ success: true, created: true, playerId: id, token: tok, nickname: nickname, state: null, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
                 }
                 var row = values[at], rowId = String(row[0]);
                 if (!row[8]) return buildJson({ success: false, error: '이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해주세요.' });
@@ -1321,7 +1347,7 @@ function handleGameAction(data) {
                 // 로그인할 때마다 새 토큰 — 예전 기기의 토큰은 무효가 되어 그 기기는 더 이상 저장할 수 없음(동시 접속 덮어쓰기·백섭 방지)
                 var t = gameNewId();
                 sheet.getRange(at + 2, 10).setValue(t);
-                return buildJson({ success: true, created: false, playerId: rowId, token: t, nickname: String(row[1]), state: gameReadState(row) });
+                return buildJson({ success: true, created: false, playerId: rowId, token: t, nickname: String(row[1]), state: gameReadState(row), forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
             } finally {
                 lock.releaseLock();
             }
@@ -1335,9 +1361,9 @@ function handleGameAction(data) {
         if (idx < 0 && token) return buildJson({ success: false, auth: false, error: '계정을 찾을 수 없습니다. 다시 로그인해주세요.' });
 
         if (data.action === 'gameLoad') {
-            if (idx < 0) return buildJson({ success: true, found: false, forcedEvent: readForcedEvent() });
+            if (idx < 0) return buildJson({ success: true, found: false, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
             var saved = gameReadState(values[idx]);
-            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved, forcedEvent: readForcedEvent() });
+            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
         }
 
         // gameSave — 새 행은 로그인(gameLogin)으로만 만들어짐. 닉네임은 가입할 때 정한 것을 유지
@@ -1354,7 +1380,7 @@ function handleGameAction(data) {
         } finally {
             saveLock.releaseLock();
         }
-        return buildJson({ success: true, savedAt: saveNow, forcedEvent: readForcedEvent() });
+        return buildJson({ success: true, savedAt: saveNow, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
     } catch (err) {
         return buildJson({ success: false, error: err.message });
     }
@@ -1473,12 +1499,12 @@ var ADMIN_ONLY_ACTIONS = {
     saveResults: true, getMonthGrid: true, getWeeklyReportDraft: true, saveWeeklyReport: true,
     getInspectors: true, addInspector: true, removeInspector: true,
     gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
-    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true, gameAdminGrant: true
 };
 // 아래 관리 기능은 슈퍼 관리자만 — 남의 기록을 지우는 일이라 일반 관리자에게는 열지 않음
 var GAME_ADMIN_ACTIONS = {
     gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
-    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true, gameAdminGrant: true
 };
 var ADMIN_TOKENS_PROP = 'ADMIN_TOKENS';
 var ADMIN_TOKEN_LIMIT = 50;          // 저장해 둘 최대 토큰 수 (넘으면 오래된 것부터 정리)

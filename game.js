@@ -217,9 +217,19 @@
   // 돌발 이벤트 — 슈퍼 관리자가 켜면 서버가 저장하고, 로그인·불러오기·저장 응답으로 모두에게 전달된다
   let forcedEv=null;
   function setForced(f){ forcedEv=(f&&f.ev&&f.until&&Date.now()<f.until)?f:null; }
+  // 추천서 지급 — 서버가 준 지급 목록 중 이 계정이 아직 안 받은 것만 더함(받은 id 기억)
+  function applyGrants(list){
+    if(!Array.isArray(list)||!pid) return;
+    acc.grantsGot=acc.grantsGot||[];
+    let got=0;
+    list.forEach(g=>{ if(g&&g.id&&!acc.grantsGot.includes(g.id)){ acc.grantsGot.push(g.id); acc.refs=(acc.refs||0)+(g.count|0); got+=g.count|0; } });
+    if(acc.grantsGot.length>40) acc.grantsGot=acc.grantsGot.slice(-40);
+    if(got>0){ dirty=true; saveLocal(); setTimeout(()=>{ if(el('gmWidget')) gmScene('scene-hire.jpg',`<b>📜 추천서 ${got}장 지급!</b><br>팀원 화면에서 인턴·사원 뽑기에 쓸 수 있어요.`); },400); }
+  }
   function forcedEvent(){
     if(!forcedEv) return null;
     if(Date.now()>=forcedEv.until){ forcedEv=null; return null; }
+    if(forcedEv.from&&Date.now()<forcedEv.from) return null; // 예약 — 아직 시작 전
     const e=EVENTS.find(x=>x.id===forcedEv.ev);
     return e?{...e,left:Math.ceil((forcedEv.until-Date.now())/1000),forced:true}:null;
   }
@@ -386,7 +396,7 @@
     try{
       const j=await gas({action:'gameSave',playerId:pid,token,state:JSON.stringify(acc)});
       if(j.auth===false){ authLost(); return; }
-      setForced(j.forcedEvent);
+      setForced(j.forcedEvent); applyGrants(j.refGrants);
       serverOk=!!j.success;
     }catch(e){ serverOk=false; }
     renderSaveState();
@@ -400,7 +410,8 @@
       serverOk=true;
       setForced(j.forcedEvent);
       // 서버 쪽이 더 최근에 저장됐으면(다른 기기에서 플레이) 서버 진행을 사용
-      if(j.found&&j.state&&(j.state.lastSave||0)>(acc.lastSave||0)){ useAcc(hydrate(j.state)); saveLocal(); return true; }
+      if(j.found&&j.state&&(j.state.lastSave||0)>(acc.lastSave||0)){ useAcc(hydrate(j.state)); saveLocal(); applyGrants(j.refGrants); return true; }
+      applyGrants(j.refGrants);
     }catch(e){ serverOk=false; }
     renderSaveState();
     return false;
@@ -994,8 +1005,13 @@
   async function gas2(action,extra){ return gas(Object.assign({action,adminToken:gameAdminToken()},extra||{})); }
   function admWrap(inner){
     return `<div class="gm-adm-title">${menuIcon('rank')} 게임 관리 <small>슈퍼 관리자</small></div>`+inner+
-      `<div class="gm-adm-sec">돌발 이벤트 <small>누르면 모두에게 30분 동안 걸립니다</small></div>`+
+      `<div class="gm-adm-sec">추천서 지급 <small>전원에게 1번씩 (접속할 때 받음, 7일 유효)</small></div>`+
+      `<div class="gm-adm-grant"><input type="number" id="gmAdmGrant" min="1" max="500" value="10"/><span>장</span><button type="button" class="gm-btn primary" onclick="gmAdminGrant()">${ic('ticket.png')}전원 지급</button></div>`+
+      `<div class="gm-adm-sec">돌발 이벤트 <small>시작 시각과 시간을 정한 뒤 이벤트를 누르세요</small></div>`+
+      `<div class="gm-adm-when"><label>시작<input type="datetime-local" id="gmAdmFrom" value="${admNowLocal()}"/></label><label>시간<input type="number" id="gmAdmMins" min="1" max="1440" value="30"/>분</label></div>`+
       (()=>{ const f=forcedEvent();
+        const pend=!f&&forcedEv&&forcedEv.from>Date.now()?EVENTS.find(x=>x.id===forcedEv.ev):null;
+        if(pend) return `<div class="gm-adm-evnow"><img src="${UI}${pend.img}.png" alt=""/><span><b>${escHtml(pend.name)}</b> 예약</span><em>${new Date(forcedEv.from).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} 시작</em></div>`;
         return f?`<div class="gm-adm-evnow"><img src="${UI}${f.img}.png" alt=""/><span><b>${escHtml(f.name)}</b> · ${escHtml(f.desc)}</span><em>${Math.ceil(f.left/60)}분 남음</em></div>`
                 :`<div class="gm-adm-evnow off">지금 걸린 돌발 이벤트가 없습니다</div>`; })()+
       `<div class="gm-adm-evs">${EVENTS.map(e=>`<button type="button" title="${escHtml(e.name)} — ${escHtml(e.desc)}" onclick="gmAdminEvent('${e.id}')"><img src="${UI}${e.img}.png" alt=""/><span>${escHtml(e.name)}</span></button>`).join('')}`+
@@ -1043,11 +1059,21 @@
   };
   window.gmAdminEvent=async function(ev){
     try{
-      const j=await gas2('gameAdminEvent',{ev,minutes:30});
+      const fromV=el('gmAdmFrom')&&el('gmAdmFrom').value, from=fromV?new Date(fromV).getTime():Date.now();
+      const minutes=Math.max(1,Math.min(1440,+((el('gmAdmMins')||{}).value)||30));
+      const j=await gas2('gameAdminEvent',{ev,minutes,from});
       if(j.success) setForced(j.forcedEvent||null);
       toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500);
       render();
     }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
+  };
+  function admNowLocal(){ const d=new Date(Date.now()-new Date().getTimezoneOffset()*60000); return d.toISOString().slice(0,16); }
+  window.gmAdminGrant=async function(){
+    const n=Math.floor(+((el('gmAdmGrant')||{}).value)||0);
+    if(n<1||n>500){ toast('⚠ 1~500장 사이로 입력해주세요',2500); return; }
+    if(!confirm(`전원에게 추천서 ${n}장을 지급할까요?`)) return;
+    try{ const j=await gas2('gameAdminGrant',{count:n}); toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,4000); if(j.success) applyGrants(j.refGrants); }
+    catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
   };
   window.gmAdminBackup=async function(){
     try{ const j=await gas2('gameAdminBackup'); toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500); }
@@ -1675,9 +1701,11 @@
   // 인턴 뽑기는 싸고 실수가 많음, 사원 뽑기는 비싸고 등급이 높음. 같은 팀원이 또 나오면 그 팀원 레벨업(최대 5).
   // 팀은 직원(캐릭터)마다 따로. 이미지가 오기 전까지는 색 원 + 이름
   const TEAM_REQ=35; // 과장
-  const PULL_OPEN=false; // 인턴·사원 뽑기 — 팀원 이미지가 나오면 true로 (추천서는 지금도 미니게임에서 쌓임)
+  const PULL_OPEN=true; // 인턴·사원 뽑기 (추천서로)
   const TEAM_NAMES=['간소영','긴성훈','박근찬','정생주','추지원','정택후','김남석','우인득','최동명']; // 저장은 번호라 새 사람은 맨 뒤에만 추가
-  const TEAM_FACES={}; // 이름 → 얼굴 이미지 경로 (받는 대로 추가)
+  const TEAM_FILES=['soyoung','sunghun','geunchan','saengju','jiwon','taekhu','namseok','indeuk','dongmyeong']; // TEAM_NAMES와 같은 순서
+  const TEAM_FACES={}, TEAM_BODIES={};
+  TEAM_NAMES.forEach((n,i)=>{ TEAM_FACES[n]=`assets/game/team/${TEAM_FILES[i]}-face.png`; TEAM_BODIES[n]=`assets/game/team/${TEAM_FILES[i]}.png`; });
   const TEAM_COLORS=['#f48fb1','#64b5f6','#81c784','#ffb74d','#ba68c8','#4db6ac','#e57373','#a1887f','#7986cb'];
   const TEAM_GRADE_HELP=[0,0.03,0.06,0.10,0.16,0.25];       // 등급별 기본 도움(처리량 +%)
   const TEAM_TRAITS={
@@ -1751,18 +1779,39 @@
     } else { const m={id,kind,grade,trait,lv:1}; st.team.push(m); result={m,dup:false}; }
     saveServer(true);
     gmShowTeam();
-    // 카드 뒤집기 연출
-    const w=el('gmWidget'), m=result.m, d=document.createElement('div');
-    d.className='gm-pull g'+m.grade;
-    d.innerHTML=`<div class="gm-pull-card"><div class="gm-pull-back">?</div><div class="gm-pull-front">
-      <div class="gm-pull-face">${teamFace(m.id,'gm-pull-img')}</div>
-      <div class="gm-team-stars g${m.grade}">${stars(m.grade)}</div>
-      <b>${escHtml(TEAM_NAMES[m.id])}</b><small>${TEAM_PULL[m.kind].rank} · ${m.trait}${result.dup?` · Lv.${m.lv}로 레벨업!`:''}</small>
-      <small>도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></div></div>`;
-    d.addEventListener('click',()=>d.remove()); setTimeout(()=>d.remove(),4200);
-    w.appendChild(d);
-    if(m.grade>=4) fxPop('fx-confetti',{cls:'big',ms:1400,x:50});
+    gachaShow(result.m,result.dup);
   };
+  // 뽑기 연출 — ① 봉투가 떨어져 등급 색으로 흔들림(★5는 가끔 파랑으로 속였다가 금색으로 승급)
+  // ② 빛기둥 회전 + 섬광 → ③ 카드가 뒤집히며 전신 등장, 별이 하나씩 박힘 → ④ ★4 이상 문구·색종이, ★5는 화면 흔들림·무지개
+  const GRADE_COL=['','#9e9e9e','#66bb6a','#42a5f5','#ab47bc','#ffb300'];
+  const GRADE_TAG=['','노멀','레어','슈퍼 레어','에픽','레전드'];
+  function gachaShow(m,dup){
+    const w=el('gmWidget'); w.querySelector('.gm-gacha')?.remove();
+    const g=m.grade, fake=g===5&&Math.random()<0.5; // 레전드 절반은 파랑으로 시작했다가 승급
+    const name=TEAM_NAMES[m.id], body=TEAM_BODIES[name];
+    const d=document.createElement('div'); d.className='gm-gacha';
+    d.style.setProperty('--gc',GRADE_COL[fake?3:g]);
+    d.innerHTML=`<div class="gm-gacha-rays"></div><div class="gm-gacha-flash"></div>
+      <div class="gm-gacha-env"><div class="gm-gacha-seal">${ic('ticket.png')}</div><div class="gm-gacha-hint">${TEAM_PULL[m.kind].name}</div></div>
+      <div class="gm-gacha-card g${g}">
+        <div class="gm-gacha-tag">${GRADE_TAG[g]}</div>
+        <div class="gm-gacha-body">${body?`<img src="${body}" alt=""/>`:teamFace(m.id,'gm-pull-img')}</div>
+        <div class="gm-gacha-stars">${Array.from({length:5},(_,i)=>`<i class="${i<g?'on':''}" style="animation-delay:${1.55+i*0.14}s">★</i>`).join('')}</div>
+        <b>${escHtml(name)}</b>
+        <small><span class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</span> ${m.trait}${dup?` · <em>Lv.${m.lv} 레벨업!</em>`:' · 새 팀원!'}</small>
+        <small>도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small>
+      </div>
+      ${g>=4?`<div class="gm-gacha-banner">${g===5?'★ LEGEND ★':'EPIC!'}</div>`:''}
+      <div class="gm-gacha-skip">화면을 누르면 닫힘</div>`;
+    w.appendChild(d);
+    if(fake) setTimeout(()=>{ d.style.setProperty('--gc',GRADE_COL[5]); d.classList.add('upgrade'); },700); // 승급 연출
+    setTimeout(()=>{ d.classList.add('open');
+      if(g>=4) fxPop('fx-confetti',{cls:'big',ms:1600,x:50});
+      if(g===5){ w.classList.add('gm-shake'); setTimeout(()=>w.classList.remove('gm-shake'),600); setTimeout(()=>fxPop('fx-project',{cls:'big',ms:1400,x:50}),300); }
+    },1200);
+    let canClose=false; setTimeout(()=>canClose=true,900);
+    d.addEventListener('click',()=>{ if(!canClose) return; if(!d.classList.contains('open')){ d.classList.add('open'); return; } d.remove(); });
+  }
   window.gmTeamRelease=function(i){
     const m=st.team&&st.team[i]; if(!m) return;
     if(!confirm(`${TEAM_NAMES[m.id]}을(를) 방출할까요? (되돌릴 수 없음)`)) return;
@@ -1824,6 +1873,7 @@
     // 서버 진행이 기준(항상 마지막으로 로그인한 기기만 저장할 수 있음). 서버에 아직 없을 때만 이 기기 저장 사용
     const pick=j.state||localSt;
     useAcc(hydrate(pick));
+    setForced(j.forcedEvent); applyGrants(j.refGrants);
     if(j.created) toast(`${j.nickname} 님, 입사를 환영합니다!`,3000);
     else toast(`${j.nickname} 님, 이어서 플레이합니다`,2500);
     dirty=true; saveServer(true); startPlay();
