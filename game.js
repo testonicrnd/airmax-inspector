@@ -2138,8 +2138,8 @@
 
   /* ---------- 팀원 뽑기 (과장부터) ---------- */
   // 다른 팀의 인턴·사원을 데려와 팀을 꾸림. 도움(처리량 +%)을 주지만 업무를 끝낼 때 확률로 실수해서 실적을 까먹음.
-  // 인턴 뽑기는 싸고 실수가 많음, 사원 뽑기는 비싸고 등급이 높음. 같은 팀원이 또 나오면 그 팀원 레벨업(최대 5).
-  // 팀은 직원(캐릭터)마다 따로. 이미지가 오기 전까지는 색 원 + 이름
+  // 뽑기 하나로 통합 — 추천서 1장 = 1회, 10장 = 11회(★3 이상 1명 보장). 뽑은 팀원은 계정 보관함(acc.inv)으로 들어가고,
+  // 보관함에서 팀(직원마다 따로, st.team)에 배치·빼기·방출. 같은 사람 카드는 강화 재료(레벨 최대 5, 등급은 높은 쪽으로)
   const TEAM_REQ=35; // 과장
   const PULL_OPEN=true; // 인턴·사원 뽑기 (추천서로)
   const TEAM_NAMES=['간소영','긴성훈','박근찬','정생주','추지원','정택후','김남석','우인득','최동명']; // 저장은 번호라 새 사람은 맨 뒤에만 추가
@@ -2155,17 +2155,21 @@
     '칼퇴':{help:0.8, miss:0.5, desc:'도움 적고 실수 적음'},
     '무난':{help:1,   miss:1,   desc:'평범'},
   };
-  const TEAM_PULL={
-    intern:{name:'인턴 뽑기', rank:'인턴', refs:4,   odds:[0,50,30,15,4.5,0.5], miss:0.08, loss:1.5, helpMul:1},
-    staff: {name:'사원 뽑기', rank:'사원', refs:10,  odds:[0,0,40,35,20,5],     miss:0.04, loss:1, helpMul:1.5}, // 둘 다 미니게임 추천서로 — 등급 확률만 다름
+  const TEAM_PULL={ // 직급은 등급으로 정해짐(★1·2 인턴, ★3 이상 사원). 예전에 뽑은 팀원은 원래 직급 그대로
+    intern:{rank:'인턴', miss:0.08, loss:1.5, helpMul:1},
+    staff: {rank:'사원', miss:0.04, loss:1,   helpMul:1.5},
   };
+  const PULL_ODDS=[0,55,28,12.4,4,0.6], PULL_SAFE=[0,0,0,12.4,4,0.6]; // ★1~★5 확률(%) · 11회 보장 칸(★3 이상)
+  const PULL_COST={1:1,11:10}, INV_MAX=100;
+  const kindOf=g=>g>=3?'staff':'intern';
+  function newUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
   const TEAM_MISTAKES=['서류를 잘못 보냄','엑셀 수식을 날림','거래처에 엉뚱한 메일 발송','회의 시간을 착각','복사기를 고장 냄','결재 서류를 분실','커피를 키보드에 쏟음','견적서 숫자를 틀림'];
   function teamUnlocked(){ return st.lv>=TEAM_REQ; }
   function teamSlots(){ const n=rankNo(st.lv); return n<5?0:Math.min(5,n-3); } // 과장 2 · 차장 3 · 부장 4 · 이사 이상 5
   function memberHelp(m){ const P=TEAM_PULL[m.kind]; return TEAM_GRADE_HELP[m.grade]*P.helpMul*TEAM_TRAITS[m.trait].help*(1+0.25*(m.lv-1)); }
   function memberMiss(m){ const P=TEAM_PULL[m.kind]; return Math.max(0.005,P.miss*(1.2-0.15*m.grade)*TEAM_TRAITS[m.trait].miss*(1-0.12*(m.lv-1))); }
   function teamHelp(s){ return (s&&s.team||[]).reduce((a,m)=>a+memberHelp(m),0); }
-  function canPull(kind){ return PULL_OPEN&&(acc.refs||0)>=TEAM_PULL[kind].refs; }
+  function canPull(n){ return PULL_OPEN&&(acc.refs||0)>=PULL_COST[n]; }
   // 업무를 끝낼 때마다 팀원별로 실수 판정 — 실수하면 그 업무 보상의 몇 배를 까먹음(가진 실적까지만)
   function teamMistake(g){
     for(const m of st.team||[]){
@@ -2190,63 +2194,92 @@
     return `<div class="gm-crew" id="gmCrew">${t.map((m,i)=>{ const b=TEAM_BODIES[TEAM_NAMES[m.id]];
       return `<span class="gm-crew-m g${m.grade}" data-id="${m.id}" title="${escHtml(TEAM_NAMES[m.id])} ${stars(m.grade)}" style="--d:${(i*0.37).toFixed(2)}s;z-index:${10-i}">${b?`<img src="${b}" alt=""/>`:teamFace(m.id)}<i>😵</i></span>`; }).join('')}</div>`;
   }
+  function teamCards(){ st.team=st.team||[]; acc.inv=acc.inv||[]; [...st.team,...acc.inv].forEach(m=>{ if(!m.uid) m.uid=newUid(); }); }
+  function findCard(uid){ let i=st.team.findIndex(m=>m.uid===uid); if(i>=0) return {m:st.team[i],i,where:'team'};
+    i=acc.inv.findIndex(m=>m.uid===uid); return i>=0?{m:acc.inv[i],i,where:'inv'}:null; }
+  // 강화 재료 — 보관함에 있는 같은 사람 카드 중 가장 약한 것
+  function upMaterial(m){ return acc.inv.filter(x=>x.id===m.id&&x.uid!==m.uid).sort((a,b)=>a.grade-b.grade||a.lv-b.lv)[0]; }
+  function canUp(m){ const x=upMaterial(m); return !!x&&(m.lv<5||x.grade>m.grade); }
+  function memberRow(m,where,slotFree){
+    const btn=(cls,fn,txt)=>`<button type="button" class="gm-team-act ${cls}" onclick="${fn}('${m.uid}')">${txt}</button>`;
+    return `<div class="gm-team-row g${m.grade}">
+        <span class="gm-avatar">${teamFace(m.id)}</span>
+        <span class="gm-team-text"><b>${escHtml(TEAM_NAMES[m.id])} <small class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</small> <span class="gm-team-stars g${m.grade}">${stars(m.grade)}</span> <small>Lv.${m.lv}</small></b>
+          <small>${m.trait} · 도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></span>
+        ${canUp(m)?btn('up','gmTeamUp','강화'):''}${where==='team'?btn('out','gmTeamUnassign','빼기'):(slotFree?btn('in','gmTeamAssign','배치'):'')+btn('out','gmTeamRelease','방출')}</div>`;
+  }
   function gmShowTeam(){
     if(!teamUnlocked()){ toast(`🔒 지금 키우는 직원이 과장(Lv.${TEAM_REQ}) 이상이면 팀원을 뽑을 수 있습니다`,2800); return; }
-    st.team=st.team||[];
-    const slots=teamSlots(), full=st.team.length>=slots;
-    const rows=st.team.map((m,i)=>`<div class="gm-team-row">
-        <span class="gm-avatar">${teamFace(m.id)}</span>
-        <span class="gm-team-text"><b>${escHtml(TEAM_NAMES[m.id])} <small class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</small> <span class="gm-team-stars g${m.grade}">${stars(m.grade)}</span>${m.lv>1?` <small>Lv.${m.lv}</small>`:''}</b>
-          <small>${m.trait} · 도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></span>
-        <button type="button" class="gm-team-out" onclick="gmTeamRelease(${i})">방출</button></div>`).join('');
-    const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>뽑기로 팀원을 데려오세요</small></span></div>`).join('');
-    const pullBtn=k=>{ const P=TEAM_PULL[k], ok=canPull(k)&&!full;
-      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${ic('ticket.png')}추천서 ${P.refs}장${PULL_OPEN?'':' · 준비 중'}</small></button>`; };
+    teamCards();
+    const slots=teamSlots(), free=st.team.length<slots;
+    const inv=acc.inv.slice().sort((a,b)=>b.grade-a.grade||b.lv-a.lv||a.id-b.id);
+    const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>${inv.length?'아래 보관함에서 [배치]를 누르세요':'뽑기로 팀원을 데려오세요'}</small></span></div>`).join('');
+    const low=acc.inv.filter(m=>m.grade<=2).length;
     el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${acc.refs||0}</b>장</span></div>
-      <div class="gm-team-list">${rows}${empty}</div>
-      <div class="gm-team-pulls">${pullBtn('intern')}${pullBtn('staff')}</div>
-      <div class="gm-st-info" id="gmTeamMsg">${!PULL_OPEN?'팀원 뽑기는 곧 열립니다. 추천서는 미니게임에서 미리 모아 두세요':full?'자리가 꽉 찼습니다. 방출하면 새로 뽑을 수 있어요':'인턴은 싸지만 실수가 많고, 사원은 비싸지만 든든합니다'}</div>
+      <div class="gm-team-scroll">
+        <div class="gm-team-list">${st.team.map(m=>memberRow(m,'team')).join('')}${empty}</div>
+        <div class="gm-team-pulls">
+          <button type="button" class="gm-team-pull one" ${canPull(1)?'':'disabled'} onclick="gmTeamPull(1)"><b>1회 뽑기</b><small>${ic('ticket.png')}추천서 1장</small></button>
+          <button type="button" class="gm-team-pull ten" ${canPull(11)?'':'disabled'} onclick="gmTeamPull(11)"><b>11회 뽑기</b><small>${ic('ticket.png')}추천서 10장 · ★3↑ 1명 보장</small></button>
+        </div>
+        <div class="gm-team-odds">★1 ${PULL_ODDS[1]}% · ★2 ${PULL_ODDS[2]}% · ★3 ${PULL_ODDS[3]}% · ★4 ${PULL_ODDS[4]}% · ★5 ${PULL_ODDS[5]}% — ★1·2는 인턴, ★3 이상은 사원</div>
+        <div class="gm-adm-sec gm-inv-head">보관함 <small>${acc.inv.length}/${INV_MAX}명 · 같은 사람 카드로 강화</small>${low?`<button type="button" class="gm-team-act out" onclick="gmTeamReleaseLow()">★1·2 모두 방출 (${low})</button>`:''}</div>
+        <div class="gm-team-list">${inv.length?inv.map(m=>memberRow(m,'inv',free)).join(''):'<div class="gm-st-info">보관함이 비어 있어요</div>'}</div>
+      </div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
   }
-  function rollGrade(odds){ let r=Math.random()*100; for(let g=1;g<odds.length;g++){ r-=odds[g]; if(r<0) return g; } return odds.length-1; }
-  window.gmTeamPull=function(kind){
-    const P=TEAM_PULL[kind];
-    st.team=st.team||[];
-    if(!canPull(kind)||st.team.length>=teamSlots()) return;
-    acc.refs-=P.refs;
-    dirty=true; lastInput=Date.now();
-    const id=Math.floor(Math.random()*TEAM_NAMES.length), grade=rollGrade(P.odds);
-    const traits=Object.keys(TEAM_TRAITS), trait=traits[Math.floor(Math.random()*traits.length)];
-    const dup=st.team.find(m=>m.id===id);
-    let result;
-    if(dup){ // 이미 있는 팀원 → 레벨업(최대 5), 더 높은 등급이 나오면 등급도 올림
-      dup.lv=Math.min(5,dup.lv+1); if(grade>dup.grade) dup.grade=grade; if(kind==='staff') dup.kind='staff';
-      result={m:dup,dup:true};
-    } else { const m={id,kind,grade,trait,lv:1}; st.team.push(m); result={m,dup:false}; }
-    saveServer(true);
-    gmShowTeam();
-    gachaShow(result.m,result.dup);
+  function rollGrade(odds){ const tot=odds.reduce((a,b)=>a+b,0); let r=Math.random()*tot; for(let g=1;g<odds.length;g++){ r-=odds[g]; if(r<0) return g; } return odds.length-1; }
+  function newMember(g){ const traits=Object.keys(TEAM_TRAITS); return {uid:newUid(),id:Math.floor(Math.random()*TEAM_NAMES.length),kind:kindOf(g),grade:g,trait:traits[Math.floor(Math.random()*traits.length)],lv:1}; }
+  window.gmTeamPull=function(n){
+    n=n===11?11:1; teamCards();
+    if(!canPull(n)) return;
+    if(acc.inv.length+n>INV_MAX){ toast(`📦 보관함이 꽉 찼어요(${INV_MAX}명) — 방출하거나 강화해서 비워 주세요`,2600); return; }
+    acc.refs-=PULL_COST[n]; dirty=true; lastInput=Date.now();
+    const got=Array.from({length:n},()=>newMember(rollGrade(PULL_ODDS)));
+    if(n===11&&!got.some(m=>m.grade>=3)) got[10]=newMember(rollGrade(PULL_SAFE));
+    const owned=new Set([...st.team,...acc.inv].map(m=>m.id)), notes=got.map(m=>{ const nw=!owned.has(m.id); owned.add(m.id); return nw?'새 팀원!':'강화 재료!'; });
+    acc.inv.push(...got);
+    saveServer(true); gmShowTeam();
+    if(n===1){ gachaShow(got[0],notes[0]); return; }
+    let bi=0; got.forEach((m,i)=>{ if(m.grade>got[bi].grade) bi=i; });
+    if(got[bi].grade>=4) gachaShow(got[bi],notes[bi],()=>gachaMulti(got,notes)); else gachaMulti(got,notes);
   };
+  window.gmTeamAssign=function(uid){ teamCards(); const c=findCard(uid); if(!c||c.where!=='inv') return;
+    if(st.team.length>=teamSlots()){ toast('팀 자리가 꽉 찼어요 — 먼저 [빼기]로 자리를 비우세요',2200); return; }
+    acc.inv.splice(c.i,1); st.team.push(c.m); dirty=true; saveServer(true); gmShowTeam(); };
+  window.gmTeamUnassign=function(uid){ teamCards(); const c=findCard(uid); if(!c||c.where!=='team') return;
+    st.team.splice(c.i,1); acc.inv.push(c.m); dirty=true; saveServer(true); gmShowTeam(); };
+  window.gmTeamUp=function(uid){ teamCards(); const c=findCard(uid); if(!c) return; const m=c.m, x=upMaterial(m); if(!x||!canUp(m)) return;
+    const lv0=m.lv, g0=m.grade;
+    m.lv=Math.min(5,m.lv+x.lv); if(x.grade>m.grade){ m.grade=x.grade; if(m.kind!=='staff') m.kind=kindOf(m.grade); }
+    acc.inv.splice(acc.inv.indexOf(x),1); dirty=true; saveServer(true);
+    toast(`⬆ ${TEAM_NAMES[m.id]} 강화! Lv.${lv0}→${m.lv}${m.grade>g0?` · ★${g0}→★${m.grade}`:''}`,2000); gmShowTeam(); };
+  window.gmTeamRelease=function(uid){ teamCards(); const c=findCard(uid); if(!c||c.where!=='inv') return;
+    if(c.m.grade>=3&&!confirm(`${TEAM_NAMES[c.m.id]} ${stars(c.m.grade)}을(를) 방출할까요? (되돌릴 수 없음)`)) return;
+    acc.inv.splice(c.i,1); dirty=true; saveServer(true); gmShowTeam(); };
+  window.gmTeamReleaseLow=function(){ teamCards(); const n=acc.inv.filter(m=>m.grade<=2).length; if(!n) return;
+    if(!confirm(`보관함의 ★1·★2 팀원 ${n}명을 모두 방출할까요? (강화 재료로 쓸 수도 있어요)`)) return;
+    acc.inv=acc.inv.filter(m=>m.grade>2); dirty=true; saveServer(true); gmShowTeam(); };
   // 뽑기 연출 — ① 봉투가 떨어져 등급 색으로 흔들림(★5는 가끔 파랑으로 속였다가 금색으로 승급)
   // ② 빛기둥 회전 + 섬광 → ③ 카드가 뒤집히며 전신 등장, 별이 하나씩 박힘 → ④ ★4 이상 문구·색종이, ★5는 화면 흔들림·무지개
   const GRADE_COL=['','#9e9e9e','#66bb6a','#42a5f5','#ab47bc','#ffb300'];
   const GRADE_TAG=['','노멀','레어','슈퍼 레어','에픽','레전드'];
-  function gachaShow(m,dup){
+  function gachaShow(m,note,onClose){
     const w=el('gmWidget'); w.querySelector('.gm-gacha')?.remove();
     const g=m.grade, fake=g===5&&Math.random()<0.5; // 레전드 절반은 파랑으로 시작했다가 승급
     const name=TEAM_NAMES[m.id], body=TEAM_BODIES[name];
     const d=document.createElement('div'); d.className='gm-gacha';
     d.style.setProperty('--gc',GRADE_COL[fake?3:g]);
     d.innerHTML=`<div class="gm-gacha-rays"></div><div class="gm-gacha-flash"></div>
-      <div class="gm-gacha-env"><img src="${UI}gacha-env.png" alt=""/><div class="gm-gacha-hint">${TEAM_PULL[m.kind].name}</div></div>
+      <div class="gm-gacha-env"><img src="${UI}gacha-env.png" alt=""/><div class="gm-gacha-hint">팀원 뽑기</div></div>
       <div class="gm-gacha-card g${g}">
         ${g>=4?`<img class="gm-gacha-frame" src="${UI}gacha-frame.png" alt=""/>`:''}
         <div class="gm-gacha-tag">${GRADE_TAG[g]}</div>
         <div class="gm-gacha-body">${body?`<img src="${body}" alt=""/>`:teamFace(m.id,'gm-pull-img')}</div>
         <div class="gm-gacha-stars">${Array.from({length:5},(_,i)=>`<i class="${i<g?'on':''}" style="animation-delay:${1.55+i*0.14}s">★</i>`).join('')}</div>
         <b>${escHtml(name)}</b>
-        <small><span class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</span> ${m.trait}${dup?` · <em>Lv.${m.lv} 레벨업!</em>`:' · 새 팀원!'}</small>
+        <small><span class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</span> ${m.trait} · <em>${note||'새 팀원!'}</em></small>
         <small>도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small>
       </div>
       ${g>=4?`<div class="gm-gacha-banner">${g===5?'★ LEGEND ★':'EPIC!'}</div>`:''}
@@ -2258,7 +2291,20 @@
       if(g===5){ w.classList.add('gm-shake'); setTimeout(()=>w.classList.remove('gm-shake'),600); setTimeout(()=>fxPop('fx-project',{cls:'big',ms:1400,x:50}),300); }
     },1200);
     let canClose=false; setTimeout(()=>canClose=true,900);
-    d.addEventListener('click',()=>{ if(!canClose) return; if(!d.classList.contains('open')){ d.classList.add('open'); return; } d.remove(); });
+    d.addEventListener('click',()=>{ if(!canClose) return; if(!d.classList.contains('open')){ d.classList.add('open'); return; } d.remove(); if(onClose) onClose(); });
+  }
+  // 11회 결과 — 카드가 차례로 뒤집힘. ★4 이상이 있으면 그 한 장은 위의 큰 연출을 먼저 보여 줌
+  function gachaMulti(list,notes){
+    const w=el('gmWidget'); w.querySelector('.gm-gacha')?.remove();
+    const best=Math.max(...list.map(m=>m.grade));
+    const d=document.createElement('div'); d.className='gm-gacha gm-gacha-multi'; d.style.setProperty('--gc',GRADE_COL[best]);
+    d.innerHTML=`<div class="gm-gacha-rays"></div><div class="gm-gm-title">11회 뽑기 결과</div>
+      <div class="gm-gm-grid">${list.map((m,i)=>`<div class="gm-gm-card g${m.grade}" style="animation-delay:${(0.15+i*0.11).toFixed(2)}s">
+        <div class="gm-gm-face">${teamFace(m.id)}</div><div class="gm-gm-stars">${'★'.repeat(m.grade)}</div><b>${escHtml(TEAM_NAMES[m.id])}</b>${notes[i]==='새 팀원!'?'<i class="gm-gm-new">NEW</i>':''}</div>`).join('')}</div>
+      <div class="gm-gacha-skip">화면을 누르면 닫힘 · 보관함에 들어갔어요</div>`;
+    w.appendChild(d);
+    let canClose=false; setTimeout(()=>canClose=true,900);
+    d.addEventListener('click',()=>{ if(canClose) d.remove(); });
   }
   window.gmTeamRelease=function(i){
     const m=st.team&&st.team[i]; if(!m) return;

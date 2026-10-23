@@ -2204,3 +2204,33 @@ body.checklist-page-active { padding-bottom:46px; }
 .oc-take.must.atk { background:linear-gradient(90deg,#e53935,#ff7043); box-shadow:0 0 0 2px #fff, 0 0 18px rgba(255,82,82,0.95); }
 @keyframes ocMust { to { transform:scale(1.05); box-shadow:0 0 0 2px #fff, 0 0 26px rgba(255,138,80,1); } }
 .oc-must { color:#e53935; font-weight:900; }
+/* 좆좋소 키우기 — 통합 뽑기 · 보관함 · 강화 */
+.gm-body.fixed > .gm-team-scroll { flex:1 1 0; flex-shrink:1; min-height:0; }
+.gm-team-scroll { overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:6px; padding-right:2px; scrollbar-width:thin; }
+.gm-team-scroll .gm-team-pulls { margin-top:4px; }
+.gm-team-pull.one { background:linear-gradient(180deg,#9ccc65,#689f38); }
+.gm-team-pull.ten { flex:1.4; background:linear-gradient(180deg,#ffb74d,#f57c00); }
+.gm-team-odds { font-size:10px; color:var(--text3); text-align:center; word-break:keep-all; }
+.gm-inv-head { display:flex; align-items:center; gap:6px; margin-top:4px; }
+.gm-inv-head small { flex:1; }
+.gm-team-row { gap:6px; }
+.gm-team-row.g3 { border-left:3px solid #42a5f5; } .gm-team-row.g4 { border-left:3px solid #ab47bc; } .gm-team-row.g5 { border-left:3px solid #ffb300; }
+.gm-team-act { flex-shrink:0; padding:4px 7px; border-radius:8px; border:1px solid var(--border); background:none; color:var(--text2); font-size:11px; font-weight:700; font-family:inherit; cursor:pointer; white-space:nowrap; }
+.gm-team-act.in { color:#fff; border-color:transparent; background:var(--accent); }
+.gm-team-act.up { color:#fff; border-color:transparent; background:linear-gradient(90deg,#ab47bc,#7e57c2); animation:ocAtk 0.8s ease-in-out infinite alternate; }
+.gm-team-act.out:hover { color:#e53935; border-color:#e53935; }
+/* 11회 결과 */
+.gm-gacha-multi { flex-direction:column; gap:10px; }
+.gm-gacha-multi .gm-gacha-rays { opacity:0.35; }
+.gm-gm-title { position:relative; color:#fff; font-size:16px; font-weight:900; text-shadow:0 2px 6px rgba(0,0,0,0.5); }
+.gm-gm-grid { position:relative; display:grid; grid-template-columns:repeat(4,1fr); gap:6px; width:min(92%,380px); }
+.gm-gm-card { position:relative; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 2px 5px; border-radius:10px; color:#fff; font-size:10.5px;
+  background:linear-gradient(170deg,#3a3a3a,#1c1c1c); border:2px solid #777; opacity:0; transform:scale(0.4) rotateY(180deg); animation:gmMultiIn 0.4s cubic-bezier(.2,1.4,.4,1) forwards; }
+.gm-gm-card.g2 { border-color:#66bb6a; } .gm-gm-card.g3 { border-color:#42a5f5; box-shadow:0 0 8px rgba(66,165,245,0.6); }
+.gm-gm-card.g4 { border-color:#ab47bc; box-shadow:0 0 12px rgba(171,71,188,0.8); background:linear-gradient(170deg,#3b1a47,#1c1022); }
+.gm-gm-card.g5 { border-color:#ffb300; box-shadow:0 0 16px rgba(255,179,0,0.9); background:linear-gradient(170deg,#4a3500,#14101c); }
+@keyframes gmMultiIn { to { opacity:1; transform:none; } }
+.gm-gm-face .gm-face-ph, .gm-gm-face img { width:38px; height:38px; border-radius:50%; object-fit:cover; display:block; }
+.gm-gm-stars { font-size:9px; letter-spacing:-1px; color:#ffd54f; line-height:1.1; }
+.gm-gm-card b { font-size:10.5px; white-space:nowrap; }
+.gm-gm-new { position:absolute; top:-6px; right:-4px; font-style:normal; font-size:8.5px; font-weight:900; color:#fff; background:#e53935; padding:1px 4px; border-radius:6px; }
