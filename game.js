@@ -863,7 +863,7 @@
       `<span class="gm-exp-num">${st.lv>=BOSS_LV?'만렙':`${fmt(Math.floor(st.exp))} / ${fmt(need)} (${pct.toFixed(1)}%)`}</span>`;
     el('gmExpBar').style.width=(st.lv>=BOSS_LV?100:Math.min(100,st.exp/expNeed(st.lv)*100))+'%';
     el('gmGold').textContent=fmt(st.gold);
-    el('gmRefs').textContent=(acc.refs||0).toLocaleString();
+    el('gmRefs').textContent=fmtRefs(acc.refs);
     el('gmStage').textContent=`${st.stage}단계 ${mon&&mon.boss?'보스':st.kills+'/10'}`;
     el('gmDps').textContent=`초당 ${fmt(autoDps(st))}`;
     // 선배 사장님의 격려가 걸려 있으면 남은 시간과 함께 보여줌
@@ -1808,8 +1808,18 @@
   const OC_REQ=50, OC_BASE=1000, OC_POLL=1500;
   let oc=null; // {mode:'solo'|'lobby'|'room'|'multi', s, view, room, key, seat, timer, done, pick}
   function ocUnlocked(){ return acc.runs.some(r=>r&&r.lv>=OC_REQ); }
-  function ocStop(){ if(oc){ clearInterval(oc.timer); oc.timer=0; } }
+  function ocStop(){ if(oc){ clearInterval(oc.timer); oc.timer=0; } ocTitleAlert(false); }
+  let ocTitleT=0, ocTitle0='';
+  function ocTitleAlert(on){
+    if(!on){ if(ocTitleT){ clearInterval(ocTitleT); ocTitleT=0; document.title=ocTitle0; } return; }
+    if(ocTitleT) return; ocTitle0=document.title; let k=0;
+    ocTitleT=setInterval(()=>{ document.title=(k++%2)?ocTitle0:'🔔 내 차례! — 원카드'; },800);
+  }
+  window.addEventListener('focus',()=>ocTitleAlert(false));
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) ocTitleAlert(false); });
   function ocFaceImg(f,cls){ const c=CHARS[f]||CHARS[0]; return c.face?`<img class="${cls||''}" src="${c.face}" alt=""/>`:`<span class="gm-face-ph ${cls||''}">${escHtml(c.name.slice(1))}</span>`; }
+  const OC_HAND_RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'], OC_SUIT_ORDER={S:0,H:1,C:2,D:3}; // 손패 정렬 순서
+  function ocOrder(c){ return ocJoker(c)?(c==='CJ'?901:900):OC_SUIT_ORDER[ocSuit(c)]*100+OC_HAND_RANKS.indexOf(ocRank(c)); }
   function ocCardHtml(c,opt){
     opt=opt||{};
     if(c==='BACK') return `<span class="oc-card back"></span>`;
@@ -1882,6 +1892,7 @@
   function ocApply(j){
     lastInput=Date.now(); // 같이 하기 중 다른 사람 차례를 기다리는 동안 창이 흐려지거나 내려가지 않게
     if(j.room) oc.info=j.room;
+    if(j.seat!=null&&!j.view) oc.seat=j.seat;
     if(j.emo) setTimeout(()=>ocTakeEmotes(j.emo),0);
     if(j.view){ if(oc.view&&j.view.ver<oc.view.ver) return; // 내가 낸 뒤에 도착한 옛 상태는 무시(카드가 손에 되돌아온 것처럼 보이는 문제)
       oc.view=j.view; oc.mode='multi'; ocGameRender(); } else ocRoomRender();
@@ -1916,7 +1927,7 @@
         ${ocFaceImg(p.face,'oc-face')}<b>${escHtml(p.name)}</b>${!rel&&i===v.turn&&v.winner<0?'<span class="oc-mine">내 차례!</span>':''}
         <span class="oc-cnt">${p.out?'파산':p.n+'장'}</span>${rel?`<span class="oc-fan">${Array.from({length:Math.min(p.n,8)},()=>'<i></i>').join('')}</span>`:''}</div>`; }).join('');
     const top=v.top, suitChanged=v.suit&&(v.suit==='*'||ocJoker(top)||v.suit!==ocSuit(top));
-    const myTurn=v.turn===me&&v.winner<0, hand=v.hand||[];
+    const myTurn=v.turn===me&&v.winner<0, hand=(v.hand||[]).slice().sort((a,b)=>ocOrder(a)-ocOrder(b));
     const can=c=>myTurn&&ocCanPlay({pile:[top],suit:v.suit,attack:v.attack,atkPow:v.atkPow},c); // 낼 수 있는 카드 강조(최종 판정은 엔진·서버)
     const w=Math.max(10,Math.min(42,(340-40)/Math.max(1,hand.length-1)));
     const body=el('gmBody');
@@ -1927,7 +1938,9 @@
       body.dataset.oc='g'; oc.bodyHtml=null; oc.handSig=null; lockBodySize();
     }
     const tbl=el('ocTable'); tbl.classList.toggle('myturn',myTurn&&!oc.sending);
-    if(myTurn&&!oc.wasMyTurn) ocFxBanner(); oc.wasMyTurn=myTurn;
+    if(myTurn&&!oc.wasMyTurn){ ocFxBanner(); if(oc.mode==='multi'&&(document.hidden||!document.hasFocus())) ocTitleAlert(true); }
+    if(!myTurn) ocTitleAlert(false);
+    oc.wasMyTurn=myTurn;
     el('ocTableIn').innerHTML=`${seats}
         <div class="oc-center">
           <div class="oc-deck">${ocCardHtml('BACK')}<small>${v.deck}</small></div>
@@ -2162,6 +2175,9 @@
   const PULL_ODDS=[0,55,28,12.4,4,0.6], PULL_SAFE=[0,0,0,12.4,4,0.6]; // ★1~★5 확률(%) · 11회 보장 칸(★3 이상)
   const PULL_COST={1:1,11:10}, INV_MAX=100;
   const kindOf=g=>g>=3?'staff':'intern';
+  const REFUND=0.1; // 방출 1명당 추천서 0.1장
+  function addRefs(x){ acc.refs=Math.round(((acc.refs||0)+x)*10)/10; }
+  function fmtRefs(x){ x=x||0; return Number.isInteger(x)?x.toLocaleString():x.toFixed(1); }
   function newUid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
   const TEAM_MISTAKES=['서류를 잘못 보냄','엑셀 수식을 날림','거래처에 엉뚱한 메일 발송','회의 시간을 착각','복사기를 고장 냄','결재 서류를 분실','커피를 키보드에 쏟음','견적서 숫자를 틀림'];
   function teamUnlocked(){ return st.lv>=TEAM_REQ; }
@@ -2215,14 +2231,14 @@
     const inv=acc.inv.slice().sort((a,b)=>b.grade-a.grade||b.lv-a.lv||a.id-b.id);
     const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>${inv.length?'아래 보관함에서 [배치]를 누르세요':'뽑기로 팀원을 데려오세요'}</small></span></div>`).join('');
     const low=acc.inv.filter(m=>m.grade<=2).length;
-    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${acc.refs||0}</b>장</span></div>
+    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${fmtRefs(acc.refs)}</b>장</span></div>
       <div class="gm-team-scroll">
         <div class="gm-team-list">${st.team.map(m=>memberRow(m,'team')).join('')}${empty}</div>
         <div class="gm-team-pulls">
           <button type="button" class="gm-team-pull one" ${canPull(1)?'':'disabled'} onclick="gmTeamPull(1)"><b>1회 뽑기</b><small>${ic('ticket.png')}추천서 1장</small></button>
           <button type="button" class="gm-team-pull ten" ${canPull(11)?'':'disabled'} onclick="gmTeamPull(11)"><b>11회 뽑기</b><small>${ic('ticket.png')}추천서 10장 · ★3↑ 1명 보장</small></button>
         </div>
-        <div class="gm-team-odds">★1 ${PULL_ODDS[1]}% · ★2 ${PULL_ODDS[2]}% · ★3 ${PULL_ODDS[3]}% · ★4 ${PULL_ODDS[4]}% · ★5 ${PULL_ODDS[5]}% — ★1·2는 인턴, ★3 이상은 사원</div>
+        <div class="gm-team-odds">★1 ${PULL_ODDS[1]}% · ★2 ${PULL_ODDS[2]}% · ★3 ${PULL_ODDS[3]}% · ★4 ${PULL_ODDS[4]}% · ★5 ${PULL_ODDS[5]}% — ★1·2는 인턴, ★3 이상은 사원 · 방출하면 추천서 ${REFUND}장</div>
         <div class="gm-adm-sec gm-inv-head">보관함 <small>${acc.inv.length}/${INV_MAX}명 · 같은 사람 카드로 강화</small>${low?`<button type="button" class="gm-team-act out" onclick="gmTeamReleaseLow()">★1·2 모두 방출 (${low})</button>`:''}</div>
         <div class="gm-team-list">${inv.length?inv.map(m=>memberRow(m,'inv',free)).join(''):'<div class="gm-st-info">보관함이 비어 있어요</div>'}</div>
       </div>
@@ -2235,7 +2251,7 @@
     n=n===11?11:1; teamCards();
     if(!canPull(n)) return;
     if(acc.inv.length+n>INV_MAX){ toast(`📦 보관함이 꽉 찼어요(${INV_MAX}명) — 방출하거나 강화해서 비워 주세요`,2600); return; }
-    acc.refs-=PULL_COST[n]; dirty=true; lastInput=Date.now();
+    addRefs(-PULL_COST[n]); dirty=true; lastInput=Date.now();
     const got=Array.from({length:n},()=>newMember(rollGrade(PULL_ODDS)));
     if(n===11&&!got.some(m=>m.grade>=3)) got[10]=newMember(rollGrade(PULL_SAFE));
     const owned=new Set([...st.team,...acc.inv].map(m=>m.id)), notes=got.map(m=>{ const nw=!owned.has(m.id); owned.add(m.id); return nw?'새 팀원!':'강화 재료!'; });
@@ -2256,11 +2272,11 @@
     acc.inv.splice(acc.inv.indexOf(x),1); dirty=true; saveServer(true);
     toast(`⬆ ${TEAM_NAMES[m.id]} 강화! Lv.${lv0}→${m.lv}${m.grade>g0?` · ★${g0}→★${m.grade}`:''}`,2000); gmShowTeam(); };
   window.gmTeamRelease=function(uid){ teamCards(); const c=findCard(uid); if(!c||c.where!=='inv') return;
-    if(c.m.grade>=3&&!confirm(`${TEAM_NAMES[c.m.id]} ${stars(c.m.grade)}을(를) 방출할까요? (되돌릴 수 없음)`)) return;
-    acc.inv.splice(c.i,1); dirty=true; saveServer(true); gmShowTeam(); };
+    if(c.m.grade>=3&&!confirm(`${TEAM_NAMES[c.m.id]} ${stars(c.m.grade)}을(를) 방출할까요? (되돌릴 수 없음 · 추천서 ${REFUND}장 돌려받음)`)) return;
+    acc.inv.splice(c.i,1); addRefs(REFUND); dirty=true; saveServer(true); toast(`👋 방출 · 추천서 +${REFUND}장`,1400); gmShowTeam(); };
   window.gmTeamReleaseLow=function(){ teamCards(); const n=acc.inv.filter(m=>m.grade<=2).length; if(!n) return;
-    if(!confirm(`보관함의 ★1·★2 팀원 ${n}명을 모두 방출할까요? (강화 재료로 쓸 수도 있어요)`)) return;
-    acc.inv=acc.inv.filter(m=>m.grade>2); dirty=true; saveServer(true); gmShowTeam(); };
+    if(!confirm(`보관함의 ★1·★2 팀원 ${n}명을 모두 방출할까요? 추천서 ${fmtRefs(Math.round(n*REFUND*10)/10)}장을 돌려받아요. (강화 재료로 쓸 수도 있어요)`)) return;
+    acc.inv=acc.inv.filter(m=>m.grade>2); addRefs(n*REFUND); dirty=true; saveServer(true); toast(`👋 ${n}명 방출 · 추천서 +${fmtRefs(Math.round(n*REFUND*10)/10)}장`,1600); gmShowTeam(); };
   // 뽑기 연출 — ① 봉투가 떨어져 등급 색으로 흔들림(★5는 가끔 파랑으로 속였다가 금색으로 승급)
   // ② 빛기둥 회전 + 섬광 → ③ 카드가 뒤집히며 전신 등장, 별이 하나씩 박힘 → ④ ★4 이상 문구·색종이, ★5는 화면 흔들림·무지개
   const GRADE_COL=['','#9e9e9e','#66bb6a','#42a5f5','#ab47bc','#ffb300'];
@@ -2306,11 +2322,6 @@
     let canClose=false; setTimeout(()=>canClose=true,900);
     d.addEventListener('click',()=>{ if(canClose) d.remove(); });
   }
-  window.gmTeamRelease=function(i){
-    const m=st.team&&st.team[i]; if(!m) return;
-    if(!confirm(`${TEAM_NAMES[m.id]}을(를) 방출할까요? (되돌릴 수 없음)`)) return;
-    st.team.splice(i,1); dirty=true; saveServer(true); gmShowTeam();
-  };
   window.gmShowTeam=gmShowTeam;
 
   /* ---------- 열기/닫기 ---------- */

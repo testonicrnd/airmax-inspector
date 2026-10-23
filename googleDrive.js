@@ -2126,6 +2126,9 @@ function ocSaveRoom(room) { room.at = Date.now(); ocCache().put('oc_r_' + room.i
 function ocLobbyIds() { try { return JSON.parse(ocCache().get(OC_LOBBY_KEY) || '[]'); } catch (e) { return []; } }
 function ocSetLobby(ids) { ocCache().put(OC_LOBBY_KEY, JSON.stringify(ids.slice(-30)), OC_ROOM_TTL); }
 function ocNewKey() { return Utilities.getUuid().replace(/-/g, '').slice(0, 20); }
+// 대기실 유령 정리 — 대기실 화면은 1.5초마다 ocState를 보내므로, 1분 넘게 소식 없는 자리는 창을 닫고 나간 것으로 봄
+var OC_SEAT_IDLE = 60000;
+function ocSeatAlive(room, x, now) { return now - (x.seen || room.at || 0) < OC_SEAT_IDLE; }
 function ocSeatIndex(room, key) { for (var i = 0; i < room.seats.length; i++) if (room.seats[i].key === key) return i; return -1; }
 // 게임 중 이모지 — 정해진 8개 중 번호만 받음(아무 글자나 못 보내게). 자리마다 1.2초에 한 번, 최근 8개만 6초 동안 보여 줌
 var OC_EMOTE_N = 8, OC_EMOTE_GAP = 1200, OC_EMOTE_SHOW = 6000;
@@ -2148,7 +2151,8 @@ function handleOneCard(data) {
     try {
         if (act === 'ocLobby') {
             var list = [];
-            ocLobbyIds().forEach(function(id) { var r = ocLoadRoom(id); if (r && !r.state && r.seats.length && now - r.at < OC_ROOM_IDLE) list.push(ocRoomInfo(r)); });
+            ocLobbyIds().forEach(function(id) { var r = ocLoadRoom(id);
+                if (r && !r.state && r.seats.length && now - r.at < OC_ROOM_IDLE && r.seats.some(function(x) { return ocSeatAlive(r, x, now); })) list.push(ocRoomInfo(r)); });
             return buildJson({ success: true, rooms: list });
         }
         if (act === 'ocCreate' || act === 'ocJoin') {
@@ -2167,7 +2171,7 @@ function handleOneCard(data) {
                 if (mine) { ocSaveRoom(room); return buildJson({ success: true, room: ocRoomInfo(room), key: mine.key, seat: ocSeatIndex(room, mine.key) }); }
                 if (room.seats.length >= OC_MAX) return buildJson({ success: false, error: '방이 꽉 찼습니다.' });
             }
-            room.seats.push({ key: key, pid: who.pid, nick: who.nick, face: face });
+            room.seats.push({ key: key, pid: who.pid, nick: who.nick, face: face, seen: now });
             ocSaveRoom(room);
             return buildJson({ success: true, room: ocRoomInfo(room), key: key, seat: room.seats.length - 1 });
         }
@@ -2177,6 +2181,11 @@ function handleOneCard(data) {
         if (!rm) return buildJson({ success: false, gone: true, error: '방이 없어졌습니다.' });
         var si = ocSeatIndex(rm, String(data.key || ''));
         if (si < 0) return buildJson({ success: false, gone: true, error: '이 방의 참가자가 아닙니다.' });
+        if (!rm.state) { // 대기실: 나는 살아 있음 표시, 오래 조용한 자리는 비움(방장이 나가면 다음 사람이 방장)
+            rm.seats[si].seen = now;
+            rm.seats = rm.seats.filter(function(x, k) { return k === si || ocSeatAlive(rm, x, now); });
+            si = ocSeatIndex(rm, String(data.key || ''));
+        }
         if (act === 'ocLeave') {
             if (!rm.state) { rm.seats.splice(si, 1); if (!rm.seats.length) { ocCache().remove('oc_r_' + rm.id); return buildJson({ success: true }); } }
             else { rm.seats[si].left = true; var pl = rm.state.players[si]; if (pl && !pl.ai) { pl.ai = true; pl.name += '(컴퓨터)'; rm.state.aiAt = now; } } // 게임 중이면 컴퓨터가 이어받음
