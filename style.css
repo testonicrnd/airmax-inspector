@@ -2372,3 +2372,15 @@ button.bs-c { cursor:crosshair; font-family:inherit; }
 .gm-notes-v { font-size:10.5px; font-weight:800; color:var(--accent); margin-top:6px; }
 .gm-notes-card ul { margin:4px 0 8px; padding-left:18px; line-height:1.6; word-break:keep-all; }
 .gm-notes-card .gm-btn { margin-top:4px; }
+/* 근무 외 시간 사고 — 사무실 장면 덮개 */
+.gm-arena[class*="db-"]::after { content:''; position:absolute; inset:0; pointer-events:none; z-index:3; border-radius:inherit; }
+.gm-arena.db-dark::after { background:radial-gradient(circle at 50% 42%, rgba(255,240,180,0.10) 0%, rgba(0,0,0,0.25) 28%, rgba(0,0,0,0.72) 62%); animation:dbFlicker 4s steps(1) infinite; }
+@keyframes dbFlicker { 0%,100% { opacity:1; } 47% { opacity:1; } 48% { opacity:0.55; } 50% { opacity:1; } 51% { opacity:0.7; } 52% { opacity:1; } }
+.gm-arena.db-hot::after { background:linear-gradient(180deg, rgba(255,120,40,0.28), rgba(255,60,0,0.12)); animation:dbHeat 2.4s ease-in-out infinite alternate; }
+@keyframes dbHeat { to { opacity:0.6; } }
+.gm-arena.db-net { filter:saturate(0.55) hue-rotate(-10deg); }
+.gm-arena.db-net::after { background:repeating-linear-gradient(0deg, rgba(120,170,255,0.06) 0 2px, transparent 2px 5px); animation:dbStatic 0.25s steps(2) infinite; }
+@keyframes dbStatic { 50% { transform:translateY(2px); } }
+.gm-arena.db-tired { filter:grayscale(0.45) brightness(0.92); }
+.gm-arena.db-dust::after { background:radial-gradient(circle at 30% 70%, rgba(220,200,160,0.35), transparent 60%), radial-gradient(circle at 75% 35%, rgba(220,200,160,0.25), transparent 55%); animation:dbHeat 3s ease-in-out infinite alternate; }
+.gm-event.off { background:linear-gradient(90deg,rgba(229,57,53,0.22),rgba(63,81,181,0.14)); border-color:rgba(229,57,53,0.45); }

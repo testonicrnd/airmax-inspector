@@ -254,7 +254,7 @@
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
   // 새로 생긴 것 카드 — 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
   const PATCH_NOTES=[
-    {v:'2.52.0', items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서 (위 숫자 줄의 📋)','🏆 <b>주간 랭킹</b> — 미니게임 순위가 매주 월요일 새로 시작, 지난주 1~3위 추천서 10·6·3장','🌙 <b>근무 시간</b> — 평일 8~19시 정상, 조출·야근·주말은 효율 50%']},
+    {v:'2.52.0', items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서 (위 숫자 줄의 📋)','🏆 <b>주간 랭킹</b> — 미니게임 순위가 매주 월요일 새로 시작, 지난주 1~3위 추천서 10·6·3장','⚡ <b>근무 외 시간 사고</b> — 평일 8~19시 밖·주말엔 정전·인터넷 먹통 같은 사고로 효율 50%']},
     {v:'2.50.0', items:['🧩 <b>블록 블라스트</b> — 과장부터, 미니게임 월드에서']},
     {v:'2.49.0', items:['🚢 <b>해전</b> — 주임부터, 컴퓨터 또는 동료와 1:1','🔄 같이 하기 중 새로고침해도 로비를 열면 이어서']},
   ];
@@ -317,7 +317,7 @@
       :'<div class="gm-intro">🏖️ 주말엔 미션이 없어요. 월요일에 새 미션이 나와요!</div>';
     el('gmBody').innerHTML=`<div class="gm-rank-title">📋 오늘의 미션 <small>평일만 · 매일 새로</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${fmtRefs(acc.refs)}</b>장</span></div>
       <div class="gm-mis">${rows}</div>
-      <div class="gm-st-info">평일 8~19시가 근무 시간이에요. 그 밖(조출·야근)과 주말은 효율이 절반이에요.</div>
+      <div class="gm-st-info">평일 8~19시가 근무 시간이에요. 그 밖(조출·야근)과 주말엔 정전 같은 사고가 터져서 효율이 절반이에요.</div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
   };
@@ -330,10 +330,21 @@
   // 근무 시간 — 평일 8~19시(한국 시간)는 정상, 그 밖(조출·야근)과 주말은 경험치·실적·추천서 효율 50%.
   // 슈퍼 관리자가 서버에서 끄면(offFree) 언제나 정상. 공휴일·연차는 따로 알 수 없어 평일 기준만
   const HOURS_FROM=8, HOURS_TO=19, HOURS_PENALTY=0.5;
-  let hoursFree=false;
+  let hoursFree=false, lastDebuff=null; // lastDebuff: 마지막으로 알린 사고(처음 열 때는 조용히 장면만)
   function setHoursFree(v){ if(v!=null) hoursFree=!!v; }
+  // 근무 외 시간은 '사고 이벤트'로 — 조출·야근·주말마다 그날 하나가 걸림(날짜로 정해서 모두 같음). 효과는 똑같이 50%
+  const DEBUFFS=[
+    {id:'blackout', icon:'🔌', name:'정전',          desc:'비상 전원으로 근무 중',          scene:'dark'},
+    {id:'aircon',   icon:'🥵', name:'냉난방 고장',   desc:'덥고 추워서 일이 손에 안 잡힘',  scene:'hot'},
+    {id:'network',  icon:'📡', name:'인터넷 먹통',   desc:'메일·결재 시스템이 느려요',      scene:'net'},
+    {id:'elevator', icon:'🛗', name:'엘리베이터 점검', desc:'계단으로 올라와서 기진맥진',    scene:'tired'},
+    {id:'cleaning', icon:'🧹', name:'대청소',        desc:'청소기 소리에 집중이 안 돼요',   scene:'dust'},
+    {id:'security', icon:'🔒', name:'보안 통제',     desc:'출입 카드가 자꾸 막혀요',        scene:'dark'},
+  ];
   function offHours(){ if(hoursFree) return null; const k=kst();
-    if(k.wd===0||k.wd===6) return {name:'주말 근무',icon:'🏖️'}; if(k.h<HOURS_FROM) return {name:'조출',icon:'🌅'}; if(k.h>=HOURS_TO) return {name:'야근',icon:'🌙'}; return null; }
+    const period=(k.wd===0||k.wd===6)?'주말':k.h<HOURS_FROM?'조출':k.h>=HOURS_TO?'야근':null; if(!period) return null;
+    const rnd=seeded('debuff-'+k.key+'-'+period), d=DEBUFFS[Math.floor(rnd()*DEBUFFS.length)];
+    return {...d,period,key:k.key+'-'+period}; }
   function hoursMult(){ return offHours()?HOURS_PENALTY:1; }
   const EV_DAYS=['일','월','화','수','목','금','토'];
   // 다음 이벤트 — 이벤트 줄은 늘 한 줄을 차지하므로, 쉬는 동안에는 다음 시각을 보여준다(빈 줄 낭비 방지)
@@ -981,6 +992,11 @@
         }
       }
     }
+    { const oh=offHours(), ar=el('gmArena'), sc=oh?oh.scene:'';
+      if(ar&&ar.dataset.debuff!==sc){ ar.dataset.debuff=sc; DEBUFFS.forEach(d=>ar.classList.remove('db-'+d.scene)); if(sc) ar.classList.add('db-'+sc); }
+      if(oh&&lastDebuff!==oh.key){ if(lastDebuff!==null) toast(`${oh.icon} ${oh.period} 사고 발생 — ${oh.name}! ${oh.desc} (효율 50%)`,3500); lastDebuff=oh.key; }
+      else if(!oh&&lastDebuff){ toast('💡 사고 복구! 정상 근무 시간이에요',2500); lastDebuff=''; }
+      else if(!oh&&lastDebuff===null) lastDebuff=''; }
     const ev=currentEvent(), eb=el('gmEvent');
     if(eb){
       eb.style.display=''; // 늘 한 줄을 차지 — 이벤트가 켜지고 꺼질 때 창 높이가 바뀌지 않게
@@ -989,8 +1005,8 @@
         if(eb.dataset.id!==ev.id){ eb.innerHTML=`<img class="gm-ev-ic" src="${UI}${ev.img}.png" alt=""/><span class="gm-ev-txt"><b>${ev.name}</b> · ${ev.desc}</span><span class="gm-ev-left" id="gmEvLeft"></span>`; eb.dataset.id=ev.id; }
         el('gmEvLeft').textContent=`${Math.ceil(ev.left/60)}분`;
       } else if(offHours()){
-        const oh=offHours(), id='off-'+oh.name; eb.classList.add('off');
-        if(eb.dataset.id!==id){ eb.innerHTML=`<span class="gm-ev-emo">${oh.icon}</span><span class="gm-ev-txt"><b>${oh.name} 시간</b> · 경험치·실적·추천서 효율 50%</span><span class="gm-ev-left">평일 8~19시 정상</span>`; eb.dataset.id=id; }
+        const oh=offHours(), id='off-'+oh.key; eb.classList.add('off');
+        if(eb.dataset.id!==id){ eb.innerHTML=`<span class="gm-ev-emo">${oh.icon}</span><span class="gm-ev-txt"><b>${oh.period} 사고: ${oh.name}!</b> · ${oh.desc} · 효율 50%</span><span class="gm-ev-left">평일 8시 복구</span>`; eb.dataset.id=id; }
       } else {
         eb.classList.remove('off');
         const nx=nextEvent(), id='next'+(nx?nx.days+'-'+nx.h:'');
@@ -1137,8 +1153,8 @@
     return `<div class="gm-adm-title">${menuIcon('rank')} 게임 관리 <small>슈퍼 관리자</small></div>`+inner+
       `<div class="gm-adm-sec">추천서 지급 <small>전원에게 1번씩 (접속할 때 받음, 7일 유효)</small></div>`+
       `<div class="gm-adm-grant"><input type="number" id="gmAdmGrant" min="1" max="500" value="10"/><span>장</span><button type="button" class="gm-btn primary" onclick="gmAdminGrant()">${ic('ticket.png')}전원 지급</button></div>`+
-      `<div class="gm-adm-sec">근무 외 시간 패널티 <small>평일 8~19시 밖·주말은 효율 50%</small></div>`+
-      `<div class="gm-adm-hours"><span>${hoursFree?'🟢 꺼짐 — 언제나 정상 효율':'🌙 켜짐'}</span><button type="button" class="gm-btn ${hoursFree?'':'primary'}" onclick="gmAdminHours(${!hoursFree})">${hoursFree?'패널티 다시 켜기':'패널티 끄기'}</button></div>`+
+      `<div class="gm-adm-sec">근무 외 시간 사고 <small>평일 8~19시 밖·주말엔 정전 등 사고 이벤트(효율 50%)</small></div>`+
+      `<div class="gm-adm-hours"><span>${hoursFree?'🟢 꺼짐 — 언제나 정상 근무':'⚡ 켜짐 — 근무 외 시간엔 사고 발생'}</span><button type="button" class="gm-btn ${hoursFree?'':'primary'}" onclick="gmAdminHours(${!hoursFree})">${hoursFree?'사고 다시 켜기':'사고 끄기(공휴일 등)'}</button></div>`+
       `<div class="gm-adm-sec">돌발 이벤트 <small>시작 시각과 시간을 정한 뒤 이벤트를 누르세요</small></div>`+
       `<div class="gm-adm-when"><label>시작<input type="datetime-local" id="gmAdmFrom" value="${admNowLocal()}"/></label><label>시간<input type="number" id="gmAdmMins" min="1" max="1440" value="30"/>분</label></div>`+
       (()=>{ const f=forcedEvent();
