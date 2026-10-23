@@ -1067,9 +1067,10 @@
     const tip=el('gmTip'), box=el('gmUps'), w=el('gmWidget');
     if(!tip||!box||tipIdx<0){ if(tip) tip.style.display='none'; return; }
     const u=UPGRADES[tipIdx], lv=st[u.key]||0, maxed=lv>=u.max, locked=u.req&&st.lv<u.req;
-    tip.innerHTML=`<b>${SKILL_IMG[u.key]?ic('skill-'+SKILL_IMG[u.key]+'.png'):u.icon} ${u.name}</b> <span>Lv.${lv}${maxed?' (MAX)':''}</span><br>`+
+    const capped=u.max<9999; // 9999는 사실상 끝없음
+    tip.innerHTML=`<b>${SKILL_IMG[u.key]?ic('skill-'+SKILL_IMG[u.key]+'.png'):u.icon} ${u.name}</b> <span>Lv.${lv} / ${capped?u.max:'무제한'}${maxed?' (MAX)':''}</span><br>`+
       (locked?`${ic('lock.png')}${rankOf(u.req)[2]}(Lv.${u.req}) 달성 시 열림<br>`:'')+
-      `현재: ${u.desc(lv)}`+(maxed?'':`<br>다음: ${u.desc(lv+1)}`);
+      `현재: ${u.desc(lv)}`+(maxed?'':`<br>다음: ${u.desc(lv+1)}`)+(capped&&!maxed&&lv+1<u.max?`<br><small>최대(Lv.${u.max}): ${u.desc(u.max)}</small>`:'');
     tip.style.display='';
     const wr=w.getBoundingClientRect(), br=box.getBoundingClientRect();
     tip.style.top=Math.max(4,br.top-wr.top-tip.offsetHeight-6)+'px';
