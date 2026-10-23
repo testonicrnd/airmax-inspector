@@ -1996,71 +1996,45 @@
 
   /* ---------- 미니게임 월드 ---------- */
   // 구름 섬 지도. 열린 섬은 둥실둥실 + 최고 기록, 잠긴 섬은 안개 + 🔒(누르면 해금 직급 안내). 준비 중 섬으로 다음 게임 예고
-  // pos: 지도 그림(world-map.jpg) 안 빈 섬의 위치(가로·세로 비율). 본사 섬에서 점선을 따라 계단 → 수박 → 테트리스
+  // 태양계처럼 본사 섬을 가운데 두고 미니게임 섬들이 궤도 위에 떠 있음. orb: [몇 번째 궤도, 각도(0=오른쪽, -90=위)]
+  // 새 미니게임은 바깥 궤도 빈 자리에 각도만 정해서 추가하면 됨. 궤도가 꽉 차면 WORLD_ORBITS에 한 줄 더
   const WORLD=[
-    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),pos:[0.645,0.545],img:'isle-stairs.png',ar:1.42,top:0.62},
-    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), pos:[0.32,0.345],img:'isle-suika.png',ar:1.07,top:0.45},
-    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),pos:[0.645,0.16],img:'isle-tetris.png',ar:1.11,top:0.45},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),pos:[0.33,-0.2],img:'isle-onecard.png',ar:1.09,top:0.45,size:0.44},
+    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[0,168],img:'isle-stairs.png',ar:1.42},
+    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[0,-22],img:'isle-suika.png',ar:1.07},
+    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
   ];
-  const MAP_W=760, MAP_H=1064; // world-map.jpg 크기
-  // 지도 그림을 영역에 꽉 채웠을 때(cover, 세로는 위쪽 20% 기준 — CSS background-position과 같게) 섬 위치를 화면 좌표로.
-  // 섬 그림은 잔디 윗면(top: 그림 높이 대비 위치)이 지도 속 빈 섬 위에 오도록 배치
-  // 지도 위쪽(세로 위치가 음수인 섬)은 하늘을 이어 붙여 세로로 길게 — 창 너비에 맞추고 위아래로 스크롤
-  const MAP_EXT=Math.ceil(Math.max(0,...WORLD.map(w=>-w.pos[1]))*MAP_H)+260;
-  let worldScroll=null;
-  function worldPath(){ // 지도 밖(위쪽) 섬들을 앞 섬과 점선으로 이어 줌
-    let d=''; WORLD.forEach((w,i)=>{ const p=WORLD[i-1]; if(!p||w.pos[1]>=0) return;
-      const ih=q=>(q.size||0.30)*MAP_W*q.ar;
-      const x1=p.pos[0]*MAP_W, y1=p.pos[1]*MAP_H-ih(p)*0.3, x2=w.pos[0]*MAP_W, y2=w.pos[1]*MAP_H+ih(w)*0.42, m=(y1-y2)/2;
-      d+=`M${x1.toFixed(0)},${y1.toFixed(0)} C${x1.toFixed(0)},${(y1-m).toFixed(0)} ${x2.toFixed(0)},${(y2+m).toFixed(0)} ${x2.toFixed(0)},${y2.toFixed(0)} `; });
-    return `<svg class="gm-world-path" viewBox="0 ${-MAP_EXT} ${MAP_W} ${MAP_H+MAP_EXT}" preserveAspectRatio="none"><path d="${d}"/></svg>`;
-  }
+  const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비)
   function placeIsles(){
-    const box=el('gmWorld'), inn=el('gmWorldIn'); if(!box||!inn) return;
-    const W=box.clientWidth, H=box.clientHeight, k=Math.max(W/MAP_W,H/(MAP_H+MAP_EXT)), ox=(W-MAP_W*k)/2, oy=MAP_EXT*k;
-    inn.style.height=Math.round((MAP_H+MAP_EXT)*k)+'px';
-    inn.querySelectorAll('.gm-world-map,.gm-world-path').forEach(m=>{ m.style.left=ox+'px'; m.style.width=MAP_W*k+'px'; });
-    inn.querySelector('.gm-world-map').style.top=oy+'px';
-    const sky=inn.querySelector('.gm-world-sky'); sky.style.left=ox+'px'; sky.style.width=MAP_W*k+'px'; sky.style.height=(oy+MAP_H*k*0.1)+'px';
-    box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], x=ox+w.pos[0]*MAP_W*k, y=oy+w.pos[1]*MAP_H*k;
-      if(w.img){ const iw=Math.round((w.size||0.30)*MAP_W*k); b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*w.ar*w.top)+'px'; }
-      else { b.style.left=x+'px'; b.style.top=y+'px'; } });
+    const box=el('gmWorld'); if(!box) return;
+    const W=box.clientWidth, H=box.clientHeight, cx=W/2, cy=H*0.5, unit=Math.min(W,H*0.85);
+    const svg=box.querySelector('.gm-orbits'); svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    svg.innerHTML=WORLD_ORBITS.map(([rx,ry],i)=>`<ellipse class="o${i}" cx="${cx}" cy="${cy}" rx="${rx*W}" ry="${ry*H}"/>`).join('');
+    const hq=box.querySelector('.gm-hq'), hw=Math.round(unit*0.31); hq.style.width=hw+'px'; hq.style.left=(cx-hw/2)+'px'; hq.style.top=(cy-hw*0.5)+'px';
+    box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], [rx,ry]=WORLD_ORBITS[w.orb[0]], t=w.orb[1]*Math.PI/180;
+      const x=cx+Math.cos(t)*rx*W, y=cy+Math.sin(t)*ry*H, iw=Math.round(unit*0.27*(w.size||1));
+      b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*(w.ar||1)*0.5)+'px'; });
   }
-  function worldHint(){ const box=el('gmWorld'), h=el('gmWorldUp'); if(!box||!h) return; // 화면 위로 가려진 섬이 있을 때만
-    h.classList.toggle('show',[...box.querySelectorAll('.gm-isle')].some(b=>b.offsetTop+b.offsetHeight*0.5<box.scrollTop)); }
   function gmShowWorld(){
     ocStop(); oc=null;
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
     const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
     el('gmBody').innerHTML=`
       <div class="gm-st-head"><b>${ic(IC.world)}미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
-      <div class="gm-world" id="gmWorld"><div class="gm-world-up" id="gmWorldUp">▲ 위로 더 있어요</div><div class="gm-world-in" id="gmWorldIn">
-        <i class="gm-world-sky"></i><img class="gm-world-map" src="${UI}world-map.jpg" alt=""/>${worldPath()}
-        <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i><i class="gm-cloud c4"></i>
+      <div class="gm-world" id="gmWorld">
+        <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i>
+        <svg class="gm-orbits" preserveAspectRatio="none"></svg>
+        <button type="button" class="gm-hq" title="본사로 돌아가기" onclick="gmBack()"><img src="${UI}isle-hq.png" alt=""/><span class="gm-isle-label"><b>본사</b><small>업무로 돌아가기</small></span></button>
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
             ${w.img?`<img class="gm-isle-art" src="${UI}${w.img}" alt=""/>`:`<span class="gm-isle-icon">${w.icon}</span>`}
             <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
             ${o||soon?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
-      </div></div>
+      </div>
       <div class="gm-st-info" id="gmWorldMsg">섬을 눌러 미니게임에 들어가세요</div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
     placeIsles();
-    // 처음 들어오면 본사(맨 아래)에서 시작해 가장 높이 열린 섬까지 쭈욱 올라감. 게임 하고 돌아오면 보던 자리 그대로
-    const box=el('gmWorld'), bottom=box.scrollHeight-box.clientHeight;
-    box.addEventListener('scroll',()=>{ worldScroll=box.scrollTop; worldHint(); });
-    if(worldScroll!=null){ box.scrollTop=Math.min(worldScroll,bottom); worldHint(); return; }
-    box.scrollTop=bottom; worldHint();
-    let topIsle=null; box.querySelectorAll('.gm-isle:not(.locked)').forEach(b=>{ if(!topIsle||b.offsetTop<topIsle.offsetTop) topIsle=b; });
-    const to=topIsle?Math.max(0,Math.min(bottom,topIsle.offsetTop+topIsle.offsetHeight/2-box.clientHeight/2)):bottom;
-    if(to<bottom-10) setTimeout(()=>{ let stop=false; const t0=performance.now(), dur=Math.min(1600,500+(bottom-to)*1.2);
-      const step=now=>{ if(stop||el('gmWorld')!==box) return; const p=Math.min(1,(now-t0)/dur), e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
-        box.scrollTop=bottom+(to-bottom)*e; if(p<1) requestAnimationFrame(step); };
-      requestAnimationFrame(step);
-      ['wheel','mousedown','touchstart'].forEach(n=>box.addEventListener(n,()=>{ stop=true; },{once:true}));
-    },350);
   }
   window.gmShowWorld=gmShowWorld;
   window.gmWorldGo=function(i){

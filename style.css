@@ -1682,8 +1682,8 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-tt-btns button { padding:10px 0; font-size:16px; }
 
 /* 좆좋소 키우기 — 그림 리소스 적용 */
-.gm-world, :root[data-theme="dark"] .gm-world { background:#8fd0ff url("assets/game/ui/world-map.jpg") center/cover no-repeat; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#8fd0ff url("assets/game/ui/world-map.jpg") center/cover no-repeat; } }
+.gm-world, :root[data-theme="dark"] .gm-world { background:#8fd0ff url("assets/game/ui/world-sky.jpg") center/cover no-repeat; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#8fd0ff url("assets/game/ui/world-sky.jpg") center/cover no-repeat; } }
 .gm-cloud { background:rgba(255,255,255,0.7); }
 .gm-isle.art { width:150px; padding:0; background:none; box-shadow:none; border-radius:0; gap:0; }
 .gm-isle.art::before, .gm-isle.art::after { display:none; }
@@ -2143,19 +2143,20 @@ body.checklist-page-active { padding-bottom:46px; }
 .oc-result-btns { display:flex; gap:8px; } .oc-result-btns .gm-btn { margin:0; }
 .gm-body.fixed .oc-table { min-height:0; }
 
-/* 좆좋소 키우기 — 세로로 긴 월드(위로 스크롤). 지도 그림 위쪽은 같은 색 하늘로 이어 붙임 */
-.gm-world, :root[data-theme="dark"] .gm-world { overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; background:#4facf5; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#4facf5; } }
-.gm-world-in { position:relative; overflow:hidden; background:#106ff0; }
-.gm-world-sky { position:absolute; top:0; background:#106ff0 url("assets/game/ui/world-sky.jpg") center bottom/100% auto no-repeat; pointer-events:none; }
-.gm-world-map { position:absolute; display:block; height:auto; pointer-events:none; user-select:none; }
-.gm-world-path { position:absolute; top:0; height:100%; pointer-events:none; overflow:visible; }
-.gm-world-path path { fill:none; stroke:rgba(255,255,255,0.88); stroke-width:7; stroke-linecap:round; stroke-dasharray:16 13; }
-.gm-cloud.c4 { top:5%; left:-35%; animation-duration:40s; animation-delay:-8s; transform:scale(0.9); }
-.gm-cloud.c1 { top:4%; } .gm-cloud.c2 { top:30%; } .gm-cloud.c3 { top:62%; }
-.gm-world-up { position:sticky; top:6px; z-index:5; width:max-content; height:22px; margin:0 auto -22px; padding:0 10px; border-radius:11px; line-height:22px;
-  font-size:10.5px; font-weight:700; color:#1e5f9e; background:rgba(255,255,255,0.88); box-shadow:0 2px 6px rgba(0,40,80,0.2); pointer-events:none; opacity:0; transition:opacity 0.3s; }
-.gm-world-up.show { opacity:1; }
-.gm-body.fixed .gm-world { flex:1 1 0; flex-shrink:1; min-height:200px; }
-.gm-body:not(.fixed) .gm-world { height:420px; }
-.gm-world-map { -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 13%); mask-image:linear-gradient(180deg,transparent 0,#000 13%); }
+/* 좆좋소 키우기 — 월드: 하늘 배경 하나에 본사 섬을 가운데 두고 궤도 위에 미니게임 섬 */
+.gm-world, :root[data-theme="dark"] .gm-world { background:#2f8de8 url("assets/game/ui/world-sky.jpg") center/cover no-repeat; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#2f8de8 url("assets/game/ui/world-sky.jpg") center/cover no-repeat; } }
+.gm-body.fixed > .gm-world { flex:1 1 0; flex-shrink:1; min-height:240px; }
+.gm-body:not(.fixed) > .gm-world { height:420px; }
+.gm-world::after { content:''; position:absolute; left:50%; top:50%; width:46%; aspect-ratio:1; transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle,rgba(255,250,220,0.55) 0%,rgba(255,255,255,0.18) 45%,transparent 70%); }
+.gm-orbits { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.gm-orbits ellipse { fill:none; stroke:rgba(255,255,255,0.75); stroke-width:2; stroke-dasharray:3 9; stroke-linecap:round; animation:gmOrbit 30s linear infinite; filter:drop-shadow(0 0 2px rgba(0,60,140,0.35)); }
+.gm-orbits ellipse.o1 { stroke:rgba(255,255,255,0.6); animation-duration:45s; animation-direction:reverse; }
+@keyframes gmOrbit { to { stroke-dashoffset:-240; } }
+.gm-hq { position:absolute; z-index:1; padding:0; border:none; background:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; animation:gmIsleBob 4s ease-in-out infinite; }
+.gm-hq img { width:100%; height:auto; display:block; pointer-events:none; filter:drop-shadow(0 8px 10px rgba(0,40,80,0.3)); }
+.gm-hq:hover img { filter:drop-shadow(0 0 6px rgba(255,255,255,0.95)) drop-shadow(0 0 3px var(--accent)); }
+.gm-hq .gm-isle-label { margin-top:-12px; background:rgba(255,255,255,0.92); box-shadow:0 2px 6px rgba(0,40,80,0.2); }
+.gm-hq .gm-isle-label b { font-size:11.5px; color:#222; } .gm-hq .gm-isle-label small { font-size:10px; }
+.gm-world .gm-isle { z-index:2; }
