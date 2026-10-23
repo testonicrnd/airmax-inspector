@@ -68,7 +68,7 @@
   const BOSS_LV=RANKS[RANKS.length-1][0];
   // 그림 리소스(assets/game/ui) — 스킬·업무·아이템 아이콘, 월드 지도, 계단 배경·발판
   const UI='assets/game/ui/';
-  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay',
+  const SKILL_IMG={atkLv:'atk',autoLv:'auto',critLv:'crit',bonusLv:'bonus',offLv:'off',stairLv:'stair',suikaLv:'suika',tetrisLv:'tetris',ocLv:'onecard',extLv:'ext',mastLv:'mast',cafLv:'caf',focusLv:'focus',awakeLv:'awake',projLv:'proj',payLv:'pay',
     bossLv:'boss',preLv:'pre',vetLv:'vet',critPowLv:'critpow',orgLv:'org',signLv:'sign'};
   const TASK_IMG={'메일 폭탄':'mail','엑셀 정리':'excel','주간 보고서':'report','고객 전화':'phone','서류 더미':'papers','첨부 누락':'clip',
     '프린터 고장':'printer','회의록':'notebook','시스템 오류':'laptop','점검표 취합':'clipboard',
@@ -171,6 +171,7 @@
     {key:'stairLv', icon:'🦵', name:'계단 단련',   desc:lv=>`무한의 계단 경험치 +${lv*20}%`, base:3000, grow:1.45, max:25, req:12},
     {key:'suikaLv', icon:'🍉', name:'수박 장인',   desc:lv=>`수박 게임 경험치 +${lv*20}%`, base:250000, grow:1.45, max:25, req:22},
     {key:'tetrisLv',icon:'🧱', name:'테트리스 고수', desc:lv=>`테트리스 경험치 +${lv*20}%`, base:30000000, grow:1.45, max:25, req:35},
+    {key:'ocLv',    icon:'🃏', name:'원카드 타짜', desc:lv=>`원카드 경험치 +${lv*20}%`, base:2000000000, grow:1.45, max:25, req:50},
     {key:'extLv',   icon:'⏳', name:'결재 연장',   desc:lv=>`보스(결재) 제한 시간 ${BOSS_TIME+2*lv}초`, base:2000, grow:1.5, max:15, req:12},
     {key:'mastLv',  icon:'🧠', name:'숙련',        desc:lv=>`업무력 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
     {key:'cafLv',   icon:'🫖', name:'카페인 중독', desc:lv=>`커피 수혈 효과 +${lv*10}%`, base:300000, grow:1.25, max:9999, req:22},
@@ -187,7 +188,7 @@
     {key:'signLv',    icon:'👑', name:'전결권',    desc:lv=>`보스(결재) 중에는 콤보 한계 ×${(1+0.3*lv).toFixed(1)}`, base:400000000000, grow:1.4, max:15, req:130},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0,team:[]});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,ocLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0,team:[]});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,refs:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -1973,7 +1974,7 @@
     const rank=order.indexOf(me)+1, others=players.reduce((s,p,i)=>s+(i===me||p.out?0:p.n),0);
     let score=players[me].out?0:[0,1000+40*others,400,200,80][rank]||0;
     if(oc.mode==='multi') score=Math.round(score*1.5);
-    const exp=miniExp(score,OC_BASE,0,rank===1?4:1.5), refs=earnRefs(score,OC_BASE);
+    const exp=miniExp(score,OC_BASE,st.ocLv,rank===1?4:1.5), refs=earnRefs(score,OC_BASE);
     if(rank===1){ acc.ocWins=(acc.ocWins||0)+1; }
     acc.ocGames=(acc.ocGames||0)+1;
     if(exp>0) gainExp(exp);
@@ -2000,36 +2001,65 @@
     {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),pos:[0.645,0.545],img:'isle-stairs.png',ar:1.42,top:0.62},
     {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), pos:[0.32,0.345],img:'isle-suika.png',ar:1.07,top:0.45},
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),pos:[0.645,0.16],img:'isle-tetris.png',ar:1.11,top:0.45},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),pos:[0.19,0.15],img:'isle-onecard.png',ar:1.09,top:0.45},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),pos:[0.33,-0.2],img:'isle-onecard.png',ar:1.09,top:0.45,size:0.44},
   ];
   const MAP_W=760, MAP_H=1064; // world-map.jpg 크기
   // 지도 그림을 영역에 꽉 채웠을 때(cover, 세로는 위쪽 20% 기준 — CSS background-position과 같게) 섬 위치를 화면 좌표로.
   // 섬 그림은 잔디 윗면(top: 그림 높이 대비 위치)이 지도 속 빈 섬 위에 오도록 배치
+  // 지도 위쪽(세로 위치가 음수인 섬)은 하늘을 이어 붙여 세로로 길게 — 창 너비에 맞추고 위아래로 스크롤
+  const MAP_EXT=Math.ceil(Math.max(0,...WORLD.map(w=>-w.pos[1]))*MAP_H)+260;
+  let worldScroll=null;
+  function worldPath(){ // 지도 밖(위쪽) 섬들을 앞 섬과 점선으로 이어 줌
+    let d=''; WORLD.forEach((w,i)=>{ const p=WORLD[i-1]; if(!p||w.pos[1]>=0) return;
+      const ih=q=>(q.size||0.30)*MAP_W*q.ar;
+      const x1=p.pos[0]*MAP_W, y1=p.pos[1]*MAP_H-ih(p)*0.3, x2=w.pos[0]*MAP_W, y2=w.pos[1]*MAP_H+ih(w)*0.42, m=(y1-y2)/2;
+      d+=`M${x1.toFixed(0)},${y1.toFixed(0)} C${x1.toFixed(0)},${(y1-m).toFixed(0)} ${x2.toFixed(0)},${(y2+m).toFixed(0)} ${x2.toFixed(0)},${y2.toFixed(0)} `; });
+    return `<svg class="gm-world-path" viewBox="0 ${-MAP_EXT} ${MAP_W} ${MAP_H+MAP_EXT}" preserveAspectRatio="none"><path d="${d}"/></svg>`;
+  }
   function placeIsles(){
-    const box=el('gmWorld'); if(!box) return;
-    const W=box.clientWidth, H=box.clientHeight, k=Math.max(W/MAP_W,H/MAP_H), ox=(W-MAP_W*k)/2, oy=(H-MAP_H*k)*0.2;
+    const box=el('gmWorld'), inn=el('gmWorldIn'); if(!box||!inn) return;
+    const W=box.clientWidth, H=box.clientHeight, k=Math.max(W/MAP_W,H/(MAP_H+MAP_EXT)), ox=(W-MAP_W*k)/2, oy=MAP_EXT*k;
+    inn.style.height=Math.round((MAP_H+MAP_EXT)*k)+'px';
+    inn.querySelectorAll('.gm-world-map,.gm-world-path').forEach(m=>{ m.style.left=ox+'px'; m.style.width=MAP_W*k+'px'; });
+    inn.querySelector('.gm-world-map').style.top=oy+'px';
     box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], x=ox+w.pos[0]*MAP_W*k, y=oy+w.pos[1]*MAP_H*k;
       if(w.img){ const iw=Math.round((w.size||0.30)*MAP_W*k); b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*w.ar*w.top)+'px'; }
       else { b.style.left=x+'px'; b.style.top=y+'px'; } });
   }
+  function worldHint(){ const box=el('gmWorld'), h=el('gmWorldUp'); if(!box||!h) return; // 화면 위로 가려진 섬이 있을 때만
+    h.classList.toggle('show',[...box.querySelectorAll('.gm-isle')].some(b=>b.offsetTop+b.offsetHeight*0.5<box.scrollTop)); }
   function gmShowWorld(){
     ocStop(); oc=null;
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; } if(suika){ cancelAnimationFrame(suika.raf); suika=null; } if(tetris){ cancelAnimationFrame(tetris.raf); tetris=null; }
     const open=w=>w.req!=null&&acc.runs.some(r=>r&&r.lv>=w.req);
     el('gmBody').innerHTML=`
       <div class="gm-st-head"><b>${ic(IC.world)}미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
-      <div class="gm-world" id="gmWorld">
-        <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i>
+      <div class="gm-world" id="gmWorld"><div class="gm-world-up" id="gmWorldUp">▲ 위로 더 있어요</div><div class="gm-world-in" id="gmWorldIn">
+        <img class="gm-world-map" src="${UI}world-map.jpg" alt=""/>${worldPath()}
+        <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i><i class="gm-cloud c4"></i>
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">
             ${w.img?`<img class="gm-isle-art" src="${UI}${w.img}" alt=""/>`:`<span class="gm-isle-icon">${w.icon}</span>`}
             <span class="gm-isle-label"><b>${o||soon?'':ic('lock.png')}${w.name}</b><small>${soon?'곧 추가됩니다':o?'최고 '+w.best():`${rankOf(w.req)[2]} 이상 해금`}</small></span>
             ${o||soon?'':'<i class="gm-isle-fog"></i>'}</button>`; }).join('')}
-      </div>
+      </div></div>
       <div class="gm-st-info" id="gmWorldMsg">섬을 눌러 미니게임에 들어가세요</div>
       <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
     lockBodySize();
     placeIsles();
+    // 처음 들어오면 본사(맨 아래)에서 시작해 가장 높이 열린 섬까지 쭈욱 올라감. 게임 하고 돌아오면 보던 자리 그대로
+    const box=el('gmWorld'), bottom=box.scrollHeight-box.clientHeight;
+    box.addEventListener('scroll',()=>{ worldScroll=box.scrollTop; worldHint(); });
+    if(worldScroll!=null){ box.scrollTop=Math.min(worldScroll,bottom); worldHint(); return; }
+    box.scrollTop=bottom; worldHint();
+    let topIsle=null; box.querySelectorAll('.gm-isle:not(.locked)').forEach(b=>{ if(!topIsle||b.offsetTop<topIsle.offsetTop) topIsle=b; });
+    const to=topIsle?Math.max(0,Math.min(bottom,topIsle.offsetTop+topIsle.offsetHeight/2-box.clientHeight/2)):bottom;
+    if(to<bottom-10) setTimeout(()=>{ let stop=false; const t0=performance.now(), dur=Math.min(1600,500+(bottom-to)*1.2);
+      const step=now=>{ if(stop||el('gmWorld')!==box) return; const p=Math.min(1,(now-t0)/dur), e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+        box.scrollTop=bottom+(to-bottom)*e; if(p<1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+      ['wheel','mousedown','touchstart'].forEach(n=>box.addEventListener(n,()=>{ stop=true; },{once:true}));
+    },350);
   }
   window.gmShowWorld=gmShowWorld;
   window.gmWorldGo=function(i){

@@ -2142,3 +2142,23 @@ body.checklist-page-active { padding-bottom:46px; }
 .oc-result.win .oc-result-rank { color:#e8a000; }
 .oc-result-btns { display:flex; gap:8px; } .oc-result-btns .gm-btn { margin:0; }
 .gm-body.fixed .oc-table { min-height:0; }
+
+/* 좆좋소 키우기 — 세로로 긴 월드(위로 스크롤). 지도 그림 위쪽은 같은 색 하늘로 이어 붙임 */
+.gm-world, :root[data-theme="dark"] .gm-world { overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; background:#4facf5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#4facf5; } }
+.gm-world-in { position:relative; overflow:hidden;
+  background:radial-gradient(ellipse 34% 7% at 12% 18%,rgba(255,255,255,0.85),transparent 70%),
+    radial-gradient(ellipse 30% 6% at 88% 34%,rgba(255,255,255,0.8),transparent 70%),
+    radial-gradient(ellipse 26% 5% at 82% 6%,rgba(255,255,255,0.7),transparent 70%),
+    linear-gradient(180deg,#2f86de 0%,#4facf5 30%); }
+.gm-world-map { position:absolute; display:block; height:auto; pointer-events:none; user-select:none; }
+.gm-world-path { position:absolute; top:0; height:100%; pointer-events:none; overflow:visible; }
+.gm-world-path path { fill:none; stroke:rgba(255,255,255,0.88); stroke-width:7; stroke-linecap:round; stroke-dasharray:16 13; }
+.gm-cloud.c4 { top:5%; left:-35%; animation-duration:40s; animation-delay:-8s; transform:scale(0.9); }
+.gm-cloud.c1 { top:4%; } .gm-cloud.c2 { top:30%; } .gm-cloud.c3 { top:62%; }
+.gm-world-up { position:sticky; top:6px; z-index:5; width:max-content; height:22px; margin:0 auto -22px; padding:0 10px; border-radius:11px; line-height:22px;
+  font-size:10.5px; font-weight:700; color:#1e5f9e; background:rgba(255,255,255,0.88); box-shadow:0 2px 6px rgba(0,40,80,0.2); pointer-events:none; opacity:0; transition:opacity 0.3s; }
+.gm-world-up.show { opacity:1; }
+.gm-body.fixed .gm-world { flex:1 1 0; flex-shrink:1; min-height:200px; }
+.gm-body:not(.fixed) .gm-world { height:420px; }
+.gm-world-map { -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 9%); mask-image:linear-gradient(180deg,transparent 0,#000 9%); }
