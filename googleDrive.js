@@ -83,6 +83,7 @@ try {
     if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
     if (action === 'gameLogin' || action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
     if (GAME_ADMIN_ACTIONS[action]) return handleGameAdmin(data);
+    if (/^oc(Lobby|Create|Join|Leave|Start|State|Play|Take|Call)$/.test(action)) return handleOneCard(data);
     if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
@@ -1298,10 +1299,10 @@ function handleGameAction(data) {
             }
             // 승진 순위: 가장 늦게 입사한(어려운) 직원 → 그 직원의 단계 → 레벨 → 누적 실적
             // board='stairs': 무한의 계단 최고 층수 / 'suika': 수박 게임 / 'tetris': 테트리스 최고 점수 순위 (기록 있는 사람만)
-            var board = ['stairs', 'suika', 'tetris'].indexOf(data.board) >= 0 ? data.board : 'promo';
+            var board = ['stairs', 'suika', 'tetris', 'onecard'].indexOf(data.board) >= 0 ? data.board : 'promo';
             var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
                 var s = gameReadState(r) || {};
-                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0 };
+                return { pid: String(r[0]), nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0, stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, onecard: Number(s.ocWins) || 0 };
             });
             if (board !== 'promo') {
                 list = list.filter(function(x) { return x[board] > 0; });
@@ -1948,3 +1949,262 @@ function buildJson(obj) {
     return ContentService.createTextOutput(JSON.stringify(obj))
         .setMimeType(ContentService.MimeType.JSON);
 }
+
+// ===== 원카드 규칙 엔진 — game.js(혼자 하기)와 googleDrive.js(같이 하기 서버)에 똑같은 코드. 고칠 땐 둘 다 =====
+// 카드: 'S10','HA','DK'… (S♠ H♥ D♦ C♣), 조커 'BJ'(흑백) 'CJ'(컬러)
+// 공격: 2 +2 · A +3 · 흑백조커 +5 · 컬러조커 +7 — 같거나 센 공격 카드(같은 무늬·숫자, 조커는 아무 때나)로 막아 넘기거나 쌓인 만큼 먹음
+// J 다음 사람 건너뛰기 · Q 방향 바꾸기 · K 한 번 더 · 7 무늬 바꾸기 · 조커 다음은 아무 카드나
+// 패가 1장 남으면 "원카드!" — 본인이 먼저 외치면 안전, 남이 먼저 외치면 1장 먹음. 20장 이상이면 파산(탈락)
+var OC_SUITS = ['S', 'H', 'D', 'C'];
+var OC_RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+var OC_SUIT_NAME = { S: '♠', H: '♥', D: '♦', C: '♣', '*': '아무거나' };
+var OC_START = 7, OC_BUST = 20, OC_ONE_MS = 2500, OC_AI_MS = 1100, OC_TURN_MS = 30000;
+function ocShuffle(d) { for (var i = d.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = d[i]; d[i] = d[j]; d[j] = t; } return d; }
+function ocDeck() { var d = []; OC_SUITS.forEach(function(s) { OC_RANKS.forEach(function(r) { d.push(s + r); }); }); d.push('BJ', 'CJ'); return ocShuffle(d); }
+function ocJoker(c) { return c === 'BJ' || c === 'CJ'; }
+function ocSuit(c) { return ocJoker(c) ? '*' : c.charAt(0); }
+function ocRank(c) { return ocJoker(c) ? c : c.slice(1); }
+function ocPower(c) { var r = ocRank(c); return r === '2' ? 2 : r === 'A' ? 3 : r === 'BJ' ? 5 : r === 'CJ' ? 7 : 0; }
+function ocName(c) { return c === 'BJ' ? '흑백 조커' : c === 'CJ' ? '컬러 조커' : OC_SUIT_NAME[ocSuit(c)] + ocRank(c); }
+function ocTop(s) { return s.pile[s.pile.length - 1]; }
+function ocAlive(s) { var a = []; s.players.forEach(function(p, i) { if (!p.out) a.push(i); }); return a; }
+function ocLog(s, t) { s.log.push(t); if (s.log.length > 6) s.log.shift(); }
+// players: [{name, face, ai, key}]
+function ocNew(players, now) {
+    var s = { players: players.map(function(p) { return { name: p.name, face: p.face, ai: !!p.ai, key: p.key || '', hand: [], out: false }; }),
+        deck: ocDeck(), pile: [], suit: '', dir: 1, turn: 0, attack: 0, atkPow: 0, winner: -1, one: null, log: [], ver: 1, aiAt: 0, turnAt: now };
+    for (var k = 0; k < OC_START; k++) s.players.forEach(function(p) { p.hand.push(s.deck.pop()); });
+    var top = null;
+    while (!top) { top = s.deck.pop(); if (ocPower(top) || /^(7|J|Q|K|BJ|CJ)$/.test(ocRank(top))) { s.deck.unshift(top); top = null; } } // 첫 장은 평범한 숫자 카드
+    s.pile.push(top); s.suit = ocSuit(top);
+    s.turn = Math.floor(Math.random() * s.players.length);
+    ocLog(s, '게임 시작! ' + s.players[s.turn].name + ' 먼저');
+    ocAfterTurn(s, now);
+    return s;
+}
+function ocCanPlay(s, c) {
+    var top = ocTop(s), joker = ocJoker(c);
+    if (s.attack > 0) {
+        var p = ocPower(c);
+        if (!p || p < s.atkPow) return false;
+        return joker || s.suit === '*' || ocSuit(c) === s.suit || ocRank(c) === ocRank(top);
+    }
+    if (joker || s.suit === '*') return true;
+    return ocSuit(c) === s.suit || ocRank(c) === ocRank(top);
+}
+function ocNext(s, from, step) {
+    var n = s.players.length, i = from;
+    for (var k = 0; k < (step || 1); k++) { var g = 0; do { i = (i + s.dir + n) % n; } while (s.players[i].out && g++ < n); }
+    return i;
+}
+function ocDraw1(s) {
+    if (!s.deck.length) { var top = s.pile.pop(); s.deck = ocShuffle(s.pile); s.pile = [top]; }
+    return s.deck.length ? s.deck.pop() : null;
+}
+function ocAfterTurn(s, now) { s.ver++; s.turnAt = now; s.aiAt = now + (s.players[s.turn].ai ? OC_AI_MS : 0); }
+function ocBust(s, pi) {
+    var p = s.players[pi];
+    if (p.hand.length < OC_BUST || p.out) return;
+    p.out = true; p.bust = p.hand.length; ocLog(s, '💥 ' + p.name + ' 파산! (' + p.hand.length + '장)');
+    s.deck = ocShuffle(s.deck.concat(p.hand)); p.hand = [];                 // 파산한 사람 카드는 다시 덱으로
+    var alive = ocAlive(s);
+    if (alive.length === 1) { s.winner = alive[0]; ocLog(s, '🏆 ' + s.players[s.winner].name + ' 승리!'); }
+}
+function ocOneAi(s, owner, now) {
+    var r = {};
+    s.players.forEach(function(p, i) { if (p.ai && !p.out) r[i] = now + (i === owner ? 500 + Math.random() * 1500 : 900 + Math.random() * 2600); });
+    return r;
+}
+function ocPlay(s, pi, c, chosen, now) {
+    var p = s.players[pi];
+    if (s.winner >= 0 || s.turn !== pi) return '내 차례가 아닙니다';
+    var h = p.hand.indexOf(c);
+    if (h < 0 || !ocCanPlay(s, c)) return '낼 수 없는 카드입니다';
+    p.hand.splice(h, 1); s.pile.push(c);
+    var r = ocRank(c), pw = ocPower(c), step = 1, again = false;
+    s.suit = ocSuit(c);
+    if (pw) { s.attack += pw; s.atkPow = pw; }
+    if (r === '7') s.suit = OC_SUITS.indexOf(chosen) >= 0 ? chosen : s.suit;
+    else if (r === 'J') step = 2;
+    else if (r === 'Q') { s.dir *= -1; if (ocAlive(s).length === 2) step = 2; }
+    else if (r === 'K') again = true;
+    ocLog(s, p.name + ' ▶ ' + ocName(c) + (r === '7' ? ' (' + OC_SUIT_NAME[s.suit] + '로)' : pw ? ' 공격 +' + s.attack : r === 'J' ? ' 건너뛰기' : r === 'Q' ? ' 방향 전환' : r === 'K' ? ' 한 번 더' : ''));
+    if (!p.hand.length) { s.winner = pi; s.one = null; ocLog(s, '🏆 ' + p.name + ' 승리!'); s.ver++; return ''; }
+    if (p.hand.length === 1) s.one = { p: pi, until: now + OC_ONE_MS, ai: ocOneAi(s, pi, now) };
+    if (!again) s.turn = ocNext(s, pi, step);
+    ocAfterTurn(s, now);
+    return '';
+}
+function ocTake(s, pi, now) {
+    var p = s.players[pi];
+    if (s.winner >= 0 || s.turn !== pi) return '내 차례가 아닙니다';
+    var n = s.attack > 0 ? s.attack : 1;
+    var got = 0;
+    for (var i = 0; i < n; i++) { var c = ocDraw1(s); if (c) { p.hand.push(c); got++; } }
+    s.stall = got ? 0 : (s.stall || 0) + 1;
+    ocLog(s, p.name + ' ' + n + '장 먹음' + (s.attack > 0 ? ' 💢' : ''));
+    s.attack = 0; s.atkPow = 0;
+    if (s.one && s.one.p === pi) s.one = null;
+    ocBust(s, pi);
+    if (s.winner < 0 && s.stall >= ocAlive(s).length * 2) {                  // 아무도 못 내고 덱도 비면 패가 가장 적은 사람 승리
+        var al = ocAlive(s); s.winner = al.reduce(function(a, b) { return s.players[b].hand.length < s.players[a].hand.length ? b : a; }, al[0]);
+        ocLog(s, '🃏 더 낼 카드가 없어 패가 가장 적은 ' + s.players[s.winner].name + ' 승리!');
+    }
+    if (s.winner < 0) s.turn = ocNext(s, pi, 1);
+    ocAfterTurn(s, now);
+    return '';
+}
+// 원카드 외치기 — 본인이면 안전, 남이면 본인이 1장 먹음
+function ocCall(s, caller, now) {
+    var o = s.one; if (!o || s.winner >= 0) return;
+    if (caller === o.p) ocLog(s, '☝ ' + s.players[o.p].name + ' 원카드!');
+    else { var p = s.players[o.p], c = ocDraw1(s); if (c) p.hand.push(c); ocLog(s, '🚨 ' + s.players[caller].name + ' 원카드 저격! ' + p.name + ' +1장'); }
+    s.one = null; s.ver++;
+}
+function ocAiMove(s, pi) {
+    var h = s.players[pi].hand, ok = h.filter(function(c) { return ocCanPlay(s, c); });
+    if (!ok.length) return null;
+    var nextN = s.players[ocNext(s, pi, 1)].hand.length;
+    function score(c) {
+        var pw = ocPower(c), r = ocRank(c);
+        if (s.attack > 0) return -pw;                       // 막을 때는 약한 카드부터
+        var v = 0;
+        if (pw) v += nextN <= 3 ? 40 : -12;                 // 다음 사람 패가 적으면 공격
+        if (ocJoker(c)) v -= 25;                            // 조커는 아껴 둠
+        if (r === '7') v -= 6;
+        if (r === 'K' || r === 'J') v += 6;
+        v += h.filter(function(x) { return ocSuit(x) === ocSuit(c); }).length * 3;
+        return v + Math.random() * 4;
+    }
+    ok.sort(function(a, b) { return score(b) - score(a); });
+    var c = ok[0], su = '';
+    if (ocRank(c) === '7') {
+        var cnt = {}; h.forEach(function(x) { if (x !== c && !ocJoker(x)) cnt[ocSuit(x)] = (cnt[ocSuit(x)] || 0) + 1; });
+        su = Object.keys(cnt).sort(function(a, b) { return cnt[b] - cnt[a]; })[0] || 'S';
+    }
+    return { c: c, s: su };
+}
+// 시간 흐름 — 원카드 판정(컴퓨터 반응), 컴퓨터 차례, 사람 시간 초과(timeoutMs가 있을 때만)
+function ocTick(s, now, timeoutMs) {
+    if (s.winner >= 0) return;
+    if (s.one) {
+        var best = -1, bt = Infinity;
+        for (var k in s.one.ai) if (s.one.ai[k] <= now && s.one.ai[k] < bt) { bt = s.one.ai[k]; best = +k; }
+        if (best >= 0) ocCall(s, best, now);
+        else if (now > s.one.until) { s.one = null; s.ver++; }
+    }
+    var cur = s.players[s.turn];
+    if (cur.ai && now >= s.aiAt) {
+        var mv = ocAiMove(s, s.turn);
+        if (mv) ocPlay(s, s.turn, mv.c, mv.s, now); else ocTake(s, s.turn, now);
+    } else if (!cur.ai && timeoutMs && now - s.turnAt > timeoutMs) {
+        ocLog(s, '⏰ ' + cur.name + ' 시간 초과'); ocTake(s, s.turn, now);
+    }
+}
+// 한 사람에게 보여줄 화면 — 남의 패는 장수만
+function ocView(s, pi, now) {
+    return { me: pi, ver: s.ver, top: ocTop(s), suit: s.suit, dir: s.dir, turn: s.turn, attack: s.attack, atkPow: s.atkPow, winner: s.winner, deck: s.deck.length,
+        hand: pi >= 0 ? s.players[pi].hand.slice() : [], log: s.log.slice(),
+        one: s.one ? { p: s.one.p, left: Math.max(0, s.one.until - now) } : null,
+        turnLeft: Math.max(0, OC_TURN_MS - (now - s.turnAt)),
+        players: s.players.map(function(p) { return { name: p.name, face: p.face, ai: p.ai, n: p.out ? (p.bust || 0) : p.hand.length, out: p.out }; }) };
+}
+// ===== 원카드 규칙 엔진 끝 =====
+
+// ===== 원카드 같이 하기 (방) =====
+// 방 상태는 CacheService(최대 6시간)에 보관 — 시트는 쓰지 않음. 참가할 때만 시트로 계정(토큰)을 확인하고,
+// 그 뒤로는 방에서 받은 자리 키(seatKey)로만 요청. 판정은 서버의 규칙 엔진(위 원카드 엔진)이 하고, 남의 패는 장수만 보냄.
+// 앱은 1.5초마다 ocState로 확인 → 그때 컴퓨터 차례·원카드 판정·시간 초과도 서버가 진행
+var OC_ROOM_TTL = 21600, OC_LOBBY_KEY = 'oc_lobby', OC_MAX = 4, OC_ROOM_IDLE = 15 * 60000;
+function ocCache() { return CacheService.getScriptCache(); }
+function ocLoadRoom(id) { try { var raw = ocCache().get('oc_r_' + id); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+function ocSaveRoom(room) { room.at = Date.now(); ocCache().put('oc_r_' + room.id, JSON.stringify(room), OC_ROOM_TTL); }
+function ocLobbyIds() { try { return JSON.parse(ocCache().get(OC_LOBBY_KEY) || '[]'); } catch (e) { return []; } }
+function ocSetLobby(ids) { ocCache().put(OC_LOBBY_KEY, JSON.stringify(ids.slice(-30)), OC_ROOM_TTL); }
+function ocNewKey() { return Utilities.getUuid().replace(/-/g, '').slice(0, 20); }
+function ocSeatIndex(room, key) { for (var i = 0; i < room.seats.length; i++) if (room.seats[i].key === key) return i; return -1; }
+function ocRoomInfo(room) {
+    return { id: room.id, title: room.title, host: room.seats.length ? room.seats[0].nick : '', started: !!room.state, ended: !!(room.state && room.state.winner >= 0),
+        seats: room.seats.map(function(x) { return { nick: x.nick, face: x.face, left: !!x.left }; }) };
+}
+// 계정 확인 — 게임 시트에서 playerId·토큰이 맞는지 (방 만들기·참가 때만)
+function ocCheckPlayer(data) {
+    var sheet = getGameSheet(), last = sheet.getLastRow();
+    var values = last >= 2 ? sheet.getRange(2, 1, last - 1, GAME_HEADERS.length).getValues() : [];
+    var idx = gameFindRow(values, String(data.playerId || ''));
+    if (idx < 0 || String(values[idx][9]) !== String(data.token || '')) return null;
+    return { pid: String(values[idx][0]), nick: String(values[idx][1]) };
+}
+function handleOneCard(data) {
+    var act = data.action, now = Date.now();
+    var lock = LockService.getScriptLock();
+    try {
+        if (act === 'ocLobby') {
+            var list = [];
+            ocLobbyIds().forEach(function(id) { var r = ocLoadRoom(id); if (r && !r.state && r.seats.length && now - r.at < OC_ROOM_IDLE) list.push(ocRoomInfo(r)); });
+            return buildJson({ success: true, rooms: list });
+        }
+        if (act === 'ocCreate' || act === 'ocJoin') {
+            var who = ocCheckPlayer(data);
+            if (!who) return buildJson({ success: false, auth: false, error: '다시 로그인해주세요.' });
+            lock.waitLock(15000);
+            var room, key = ocNewKey(), face = Math.max(0, Math.min(7, Number(data.face) || 0));
+            if (act === 'ocCreate') {
+                room = { id: ocNewKey().slice(0, 8), title: String(data.title || who.nick + '의 방').slice(0, 20), seats: [], state: null, at: now };
+                var ids = ocLobbyIds(); ids.push(room.id); ocSetLobby(ids);
+            } else {
+                room = ocLoadRoom(String(data.room || ''));
+                if (!room) return buildJson({ success: false, error: '방이 없어졌습니다.' });
+                if (room.state) return buildJson({ success: false, error: '이미 시작한 방입니다.' });
+                var mine = room.seats.filter(function(x) { return x.pid === who.pid; })[0];
+                if (mine) { ocSaveRoom(room); return buildJson({ success: true, room: ocRoomInfo(room), key: mine.key, seat: ocSeatIndex(room, mine.key) }); }
+                if (room.seats.length >= OC_MAX) return buildJson({ success: false, error: '방이 꽉 찼습니다.' });
+            }
+            room.seats.push({ key: key, pid: who.pid, nick: who.nick, face: face });
+            ocSaveRoom(room);
+            return buildJson({ success: true, room: ocRoomInfo(room), key: key, seat: room.seats.length - 1 });
+        }
+        // 아래는 방 안 요청 — 자리 키로 확인
+        lock.waitLock(15000);
+        var rm = ocLoadRoom(String(data.room || ''));
+        if (!rm) return buildJson({ success: false, gone: true, error: '방이 없어졌습니다.' });
+        var si = ocSeatIndex(rm, String(data.key || ''));
+        if (si < 0) return buildJson({ success: false, gone: true, error: '이 방의 참가자가 아닙니다.' });
+        if (act === 'ocLeave') {
+            if (!rm.state) { rm.seats.splice(si, 1); if (!rm.seats.length) { ocCache().remove('oc_r_' + rm.id); return buildJson({ success: true }); } }
+            else { rm.seats[si].left = true; var pl = rm.state.players[si]; if (pl && !pl.ai) { pl.ai = true; pl.name += '(컴퓨터)'; rm.state.aiAt = now; } } // 게임 중이면 컴퓨터가 이어받음
+            ocSaveRoom(rm); return buildJson({ success: true });
+        }
+        if (act === 'ocStart') {
+            if (si !== 0) return buildJson({ success: false, error: '방장만 시작할 수 있습니다.' });
+            if (rm.state) return buildJson({ success: false, error: '이미 시작했습니다.' });
+            var used = rm.seats.map(function(x) { return x.face; });
+            var players = rm.seats.map(function(x) { return { name: x.nick, face: x.face, ai: false, key: x.key }; });
+            var pool = [0, 1, 2, 3, 4, 5, 6, 7].filter(function(f) { return used.indexOf(f) < 0; });
+            while (players.length < OC_MAX) { var f = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]; players.push({ name: OC_AI_NAMES[f], face: f, ai: true }); }
+            rm.state = ocNew(players, now);
+            ocSaveRoom(rm);
+        }
+        if (act === 'ocPlay' || act === 'ocTake' || act === 'ocCall') {
+            if (!rm.state) return buildJson({ success: false, error: '아직 시작 전입니다.' });
+            var err = act === 'ocPlay' ? ocPlay(rm.state, si, String(data.card || ''), String(data.suit || ''), now)
+                    : act === 'ocTake' ? ocTake(rm.state, si, now) : (ocCall(rm.state, si, now), '');
+            if (err) return buildJson({ success: false, error: err, view: ocView(rm.state, si, now) });
+            ocSaveRoom(rm);
+        }
+        // ocState(그리고 위 요청의 응답) — 시간 흐름 진행 후 내 화면
+        if (rm.state) {
+            var v0 = rm.state.ver;
+            for (var t = 0; t < 4; t++) ocTick(rm.state, now, OC_TURN_MS);   // 밀린 컴퓨터 차례를 조금씩 진행
+            if (rm.state.ver !== v0) ocSaveRoom(rm);
+            return buildJson({ success: true, room: ocRoomInfo(rm), view: ocView(rm.state, si, now) });
+        }
+        if (act === 'ocState') ocSaveRoom(rm); // 대기실에 있다는 표시
+        return buildJson({ success: true, room: ocRoomInfo(rm), seat: si });
+    } catch (err) {
+        return buildJson({ success: false, error: err.message });
+    } finally {
+        try { lock.releaseLock(); } catch (e) {}
+    }
+}
+var OC_AI_NAMES = ['쉰동준', '쉰원철', '약옥녀', '삼용훈', '하달순', '쉰원옥', '천병돌', '육찬근'];

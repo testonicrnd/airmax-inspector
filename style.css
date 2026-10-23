@@ -2063,3 +2063,82 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-adm-evs button.on { border-color:var(--accent) !important; background:var(--accent-bg) !important; box-shadow:inset 0 2px 4px rgba(0,0,0,0.25), 0 0 0 2px rgba(232,115,42,0.35); transform:translateY(1px); }
 .gm-adm-evs button.on span { font-weight:800; color:var(--accent-text); }
 .gm-adm-evs button.pending { border-style:dashed !important; border-color:var(--accent) !important; }
+
+/* 좆좋소 키우기 — 원카드 */
+.oc-lobby { display:flex; flex-direction:column; gap:8px; flex:1 1 auto; min-height:0; }
+.oc-modes { display:flex; gap:8px; }
+.oc-mode { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:14px 6px; border:none; border-radius:14px; color:#fff; font-family:inherit; cursor:pointer; box-shadow:0 4px 0 rgba(0,0,0,0.25); }
+.oc-mode b { font-size:14px; } .oc-mode small { font-size:10.5px; opacity:0.9; }
+.oc-mode.solo { background:linear-gradient(180deg,#26a69a,#00796b); }
+.oc-mode.multi { background:linear-gradient(180deg,#ff8a50,#e8732a); }
+.oc-mode:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,0.25); }
+.oc-rooms { display:flex; flex-direction:column; gap:5px; overflow-y:auto; max-height:170px; }
+.oc-room { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; background:var(--input-bg); border:1px solid var(--border2); }
+.oc-room .gm-btn { width:auto; margin:0; padding:6px 12px; }
+.oc-room-faces { display:flex; } .oc-room-faces .oc-mini { width:24px; height:24px; border-radius:50%; margin-left:-6px; border:2px solid var(--surface); object-fit:cover; }
+.oc-room-faces .oc-mini:first-child { margin-left:0; }
+.oc-room-t { flex:1; min-width:0; display:flex; flex-direction:column; font-size:12px; } .oc-room-t small { color:var(--text3); font-size:10.5px; }
+.oc-rules { font-size:10.5px; line-height:1.55; color:var(--text3); padding:8px 10px; border-radius:10px; background:var(--input-bg); word-break:keep-all; margin-top:auto; }
+.oc-waits { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.oc-wait { display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 4px; border-radius:12px; background:var(--input-bg); border:1px solid var(--border2); font-size:12px; text-align:center; }
+.oc-wait small { font-size:10px; color:var(--text3); } .oc-wait.empty { opacity:0.55; border-style:dashed; }
+.oc-face { width:38px; height:38px; border-radius:50%; object-fit:cover; background:#f1ede8; border:2px solid rgba(255,255,255,0.7); display:flex; align-items:center; justify-content:center; font-size:12px; }
+/* 테이블 */
+.oc-table { position:relative; flex:1 1 auto; min-height:230px; border-radius:16px; overflow:hidden;
+  background:radial-gradient(ellipse at center,#2e7d4f 0%,#1b5e3a 65%,#123f27 100%); box-shadow:inset 0 0 0 4px #6d4c2f, inset 0 0 0 6px #8d6a46, inset 0 0 30px rgba(0,0,0,0.5); }
+.oc-seat { position:absolute; display:flex; flex-direction:column; align-items:center; gap:1px; color:#fff; font-size:11px; text-shadow:0 1px 2px rgba(0,0,0,0.7); transition:transform 0.2s; }
+.oc-seat b { font-size:11px; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oc-seat.top { top:8px; left:50%; transform:translateX(-50%); }
+.oc-seat.left { left:8px; top:40%; transform:translateY(-50%); }
+.oc-seat.right { right:8px; top:40%; transform:translateY(-50%); }
+.oc-seat.bottom { left:10px; bottom:6px; flex-direction:row; gap:5px; }
+.oc-seat.bottom .oc-face { width:30px; height:30px; }
+.oc-seat.turn .oc-face { box-shadow:0 0 0 3px #ffd54f, 0 0 14px #ffd54f; animation:ocTurn 1s ease-in-out infinite; }
+@keyframes ocTurn { 50% { box-shadow:0 0 0 3px #ffd54f, 0 0 24px #ffd54f; } }
+.oc-seat.out { opacity:0.4; filter:grayscale(1); }
+.oc-seat.win .oc-face { box-shadow:0 0 0 3px #69f0ae, 0 0 18px #69f0ae; }
+.oc-cnt { font-size:10px; font-weight:800; padding:1px 7px; border-radius:8px; background:rgba(0,0,0,0.45); }
+.oc-fan { display:flex; margin-top:2px; } .oc-fan i { width:9px; height:13px; margin-left:-4px; border-radius:2px; background:linear-gradient(135deg,#c62828,#7b1fa2); border:1px solid #fff; }
+.oc-fan i:first-child { margin-left:0; }
+.oc-center { position:absolute; left:50%; top:46%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:12px; }
+.oc-deck { position:relative; } .oc-deck small { position:absolute; bottom:-14px; left:0; right:0; text-align:center; color:#fff; font-size:10px; opacity:0.8; }
+.oc-pile .oc-card { transform:rotate(-4deg) scale(1.08); box-shadow:0 4px 10px rgba(0,0,0,0.5); animation:ocDrop 0.25s ease-out; }
+@keyframes ocDrop { from { transform:translateY(-30px) rotate(-14deg) scale(1.2); opacity:0; } }
+.oc-state { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.oc-dir { font-size:22px; color:rgba(255,255,255,0.75); line-height:1; }
+.oc-suit { font-size:22px; line-height:1; padding:2px 6px; border-radius:8px; background:#fff; color:#222; box-shadow:0 0 10px rgba(255,255,255,0.6); }
+.oc-suit.red { color:#d32f2f; }
+.oc-atk { font-size:15px; font-weight:900; color:#fff; padding:2px 8px; border-radius:10px; background:#d32f2f; box-shadow:0 0 12px #ff5252; animation:ocAtk 0.6s ease-in-out infinite alternate; }
+@keyframes ocAtk { to { transform:scale(1.15); } }
+.oc-one { position:absolute; left:50%; top:74%; transform:translateX(-50%); color:#ffd54f; font-size:14px; font-weight:900; text-shadow:0 0 8px #000; white-space:nowrap; }
+.oc-one:not(:empty) { animation:ocAtk 0.4s ease-in-out infinite alternate; }
+/* 카드 */
+.oc-card { width:42px; height:60px; box-sizing:border-box; border-radius:7px; background:#fff; border:1.5px solid #cfcfcf; color:#222; font-family:inherit; padding:2px 3px;
+  display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; box-shadow:0 2px 4px rgba(0,0,0,0.3); flex-shrink:0; }
+.oc-card .r { font-size:13px; font-weight:900; line-height:1; } .oc-card .su { font-size:22px; line-height:1; align-self:center; margin-bottom:6px; }
+.oc-card.red { color:#d32f2f; }
+.oc-card.back { background:repeating-linear-gradient(45deg,#c62828 0 5px,#b71c1c 5px 10px); border:2px solid #fff; }
+.oc-card.joker .r { font-size:8px; letter-spacing:0.5px; } .oc-card.joker .su { font-size:24px; }
+.oc-card.joker.bj { background:linear-gradient(160deg,#fff,#cfd8dc); }
+.oc-card.joker.cj { background:linear-gradient(160deg,#fff59d,#f48fb1,#90caf9); }
+.oc-log { font-size:11.5px; text-align:center; color:var(--text2); min-height:16px; margin:5px 0 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.oc-hand { display:flex; justify-content:center; align-items:flex-end; height:74px; padding:0 6px; }
+.oc-slot { flex-shrink:0; display:flex; }
+.oc-hand button.oc-card { cursor:pointer; transition:transform 0.12s; opacity:0.55; }
+.oc-hand.my button.oc-card.ok { opacity:1; transform:translateY(-8px); box-shadow:0 0 0 2px #ffd54f, 0 4px 10px rgba(0,0,0,0.35); }
+.oc-hand.my button.oc-card.ok:hover { transform:translateY(-14px); }
+.oc-hand:not(.my) button.oc-card { opacity:0.85; cursor:default; }
+.oc-btns { display:flex; gap:8px; margin-top:4px; }
+.oc-btns .gm-btn { margin:0; flex:1; padding:9px; }
+.oc-onebtn.hot { border:none; color:#fff; font-weight:900; background:linear-gradient(90deg,#ff5252,#ffb300); animation:ocAtk 0.35s ease-in-out infinite alternate; }
+.oc-pick { position:absolute; inset:0; z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:rgba(0,0,0,0.55); color:#fff; }
+.oc-pick div { display:flex; gap:10px; }
+.oc-pick button { width:56px; height:56px; font-size:30px; border:none; border-radius:14px; background:#fff; color:#222; cursor:pointer; }
+.oc-pick button.red { color:#d32f2f; }
+.oc-result { position:absolute; inset:0; z-index:40; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.55); animation:gmFade 0.2s; }
+.oc-result-card { width:86%; padding:16px 14px; border-radius:16px; background:var(--surface); text-align:center; display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:var(--text2); box-shadow:0 12px 30px rgba(0,0,0,0.45); animation:gmSceneIn 0.3s ease-out; }
+.oc-result-card small { color:var(--text3); font-size:11px; }
+.oc-result-rank { font-size:24px; font-weight:900; color:var(--text); }
+.oc-result.win .oc-result-rank { color:#e8a000; }
+.oc-result-btns { display:flex; gap:8px; } .oc-result-btns .gm-btn { margin:0; }
+.gm-body.fixed .oc-table { min-height:0; }
