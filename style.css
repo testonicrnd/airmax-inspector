@@ -2421,3 +2421,11 @@ button.bs-c { cursor:crosshair; font-family:inherit; }
 .gm-link-mis { position:relative; }
 .gm-link-mis small { font-size:10px; color:var(--text3); }
 .gm-link-mis.ready::after { content:''; position:absolute; top:-2px; right:-5px; width:7px; height:7px; border-radius:50%; background:#e53935; box-shadow:0 0 0 2px var(--surface); animation:ocAtk 0.7s ease-in-out infinite alternate; }
+/* 직원 화면 — 사장 달성 시 격려(패시브) 보기 */
+.gm-cheer-help { font-size:10.5px; line-height:1.5; color:var(--text3); padding:6px 9px; margin-bottom:6px; border-radius:9px; background:var(--input-bg); word-break:keep-all; }
+.gm-cheer-help b { color:var(--text2); }
+.gm-char-cheer { display:block; margin-top:2px; font-size:10.5px; color:var(--text3); white-space:normal; word-break:keep-all; }
+.gm-char-cheer b { color:var(--text2); }
+.gm-char-cheer.on { color:#ef6c00; } .gm-char-cheer.on b { color:#e65100; }
+.gm-char-row-text small.gm-char-cheer { white-space:normal; overflow:visible; text-overflow:clip; }
+.gm-char-row.locked .gm-char-cheer { opacity:0.9; }

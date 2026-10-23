@@ -257,6 +257,7 @@
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
   // 새로 생긴 것 카드 — 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
   const PATCH_NOTES=[
+    {v:'2.55.2', items:['🚀 직원 화면에서 <b>사장 달성 시 받는 격려(버프)</b>를 미리 볼 수 있어요','📋 미션은 아래 메뉴 맨 앞으로 옮겼어요']},
     {v:'2.55.0', items:['🎰 <b>슬롯머신이 돈 버는 곳으로</b> — 가진 실적의 10·30·50%를 걸고 평균 1.5배! 하루 30번 (10%는 안정, 50%는 한방)']},
     {v:'2.54.0', items:['⌨️ <b>PC 타자 보상 상향</b> — 단어 글자당 처리량 ×1.3 → ×2.0','📱 휴대폰 탭은 ×0.4로 조정 (1초 7번까지) — 타자가 더 어려운 만큼 PC가 더 벌어요']},
     {v:'2.53.0', items:['🎰 <b>슬롯머신</b> — 이사부터, 실적을 걸고 한 판! 왕관 3개면 ×300 잭팟','🚢 해전 포격 효과가 두 번 터지던 문제 수정']},
@@ -2896,13 +2897,14 @@
   function gmShowChars(){
     const hire=canHire();
     el('gmBody').innerHTML=`<div class="gm-rank-title">${ic(IC.staff)}직원 <small>${hire?ic('ticket.png')+'입사권 1장 — 원하는 직원을 고르세요':'사장 1명 달성마다 원하는 직원 1명 입사'}</small></div>`+
+      `<div class="gm-cheer-help">🚀 사장을 달성한 직원은 <b>선배 사장님</b>이 되어, 다른 직원을 키울 때 업무를 끝낼 때마다 확률로 격려(버프)를 보내요 — 선배 1명당 2%, 최대 10%. 원하는 버프부터 사장을 만들어 보세요!</div>`+
       CHARS.map((c,i)=>{
         const r=acc.runs[i], open=!!r||hire, cur=i===acc.ch;
         const diff=`업무량 ×${fmt(Math.pow(HP_STEP,r?r.tier:hiredCount()))}`;
         const info=r?`${rankBadge(r.lv,'gm-row-badge')}${rankOf(r.lv)[2]} Lv.${r.lv} · ${r.stage}단계${r.done?' · 🚀 사장 달성':''}`:hire?ic('ticket.png')+'눌러서 입사시키기':ic('lock.png')+'사장을 달성하면 입사 가능';
         return `<button type="button" class="gm-char-row${cur?' cur':''}${open?'':' locked'}" ${open&&!cur?`onclick="gmSwitchChar(${i})"`:'disabled'}>
           <span class="gm-avatar">${faceHtml(i)}</span>
-          <span class="gm-char-row-text"><b>${escHtml(c.name)}${cur?' (키우는 중)':''}</b><small>${info}</small></span>
+          <span class="gm-char-row-text"><b>${escHtml(c.name)}${cur?' (키우는 중)':''}</b><small>${info}</small>${c.cheer?`<small class="gm-char-cheer${r&&r.done?' on':''}">${c.cheer.icon} 사장 달성 시 격려: <b>${escHtml(c.cheer.name)}</b> — ${escHtml(c.cheer.desc)} (${c.cheer.sec}초)${r&&r.done?' · 보유 ✓':''}</small>`:''}</span>
           <span class="gm-char-row-diff">${diff}</span></button>`;
       }).join('')+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
     lockBodySize();
