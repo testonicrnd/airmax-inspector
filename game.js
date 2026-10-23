@@ -461,7 +461,8 @@
     if(mon.golden) floatText('🌟 황금 업무! 실적 ×10',true,true);
     st.gold+=g; st.totalGold+=g;
     fxPop('fx-coin',{cls:'coin',gap:250,ms:800});
-    teamMistake(g);
+    // 실수 손실은 이벤트·격려·황금 업무 배율을 뺀 평소 보상 기준 (보너스 타임에 실수가 몇 배로 아프지 않게)
+    teamMistake(Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*(mon.boss?8:1)));
     gainExp(mon.boss?st.stage*6:st.stage);
     if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); }
     else st.kills++;
