@@ -25,7 +25,7 @@
    ===================================================================== */
 (function(){
   // 닉네임+PIN 계정으로 바꾸면서 저장 키를 새로 씀 — 예전(닉네임만) 기기 저장은 이어받지 않고 새로 시작(랭킹 초기화와 함께)
-  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy', LS_LOCK='airmax_game_lock', LS_OPACITY='airmax_game_opacity';
+  const LS_STATE='airmax_game_state3', LS_ACCT='airmax_game_acct', LS_POS='airmax_game_dim', LS_XY='airmax_game_xy', LS_LOCK='airmax_game_lock', LS_OPACITY='airmax_game_opacity', LS_AWAY='airmax_game_away';
   const SAVE_INTERVAL=30000, BOSS_TIME=30, IDLE_DIM=60000, IDLE_HIDE=300000; // 고정 안 했을 때: 1분 무입력 → 5% 투명, 5분 → 숨김
   // 게임이 비활성(숨김/닫힘/페이지 닫힘)일 때 커피 수혈은 10% 효율로, 최대 누적 시간은 야근 강화로 10분부터 5분씩 늘어남
   const OFFLINE_RATE=0.1, OFFLINE_BASE_MIN=10, OFFLINE_STEP_MIN=5;
@@ -707,11 +707,19 @@
     document.body.appendChild(chip);
     // 투명도 — 슬라이더로 정한 값을 마우스를 올리거나 플레이 중에도 그대로 유지(예전 '반투명' 켜 둔 기기는 35%로 시작)
     const head0=w.querySelector('.gm-head');
-    head0.insertAdjacentHTML('afterend',`<div class="gm-opbar" id="gmOpBar" style="display:none"><span>투명도</span><input type="range" id="gmOpRange" min="20" max="100" step="5"/><b id="gmOpVal"></b></div>`);
+    // 투명도 설정 — 창 높이를 늘리지 않고 제목줄 아래에 떠 있는 패널(오버레이)
+    head0.insertAdjacentHTML('afterend',`<div class="gm-opbar" id="gmOpBar" style="display:none">
+      <div class="gm-opbar-row"><span>투명도</span><input type="range" id="gmOpRange" min="20" max="100" step="5"/><b id="gmOpVal"></b></div>
+      <label class="gm-opbar-opt"><input type="checkbox" id="gmOpAway"/> 마우스가 창 밖으로 나가면 바로 5%로 흐리게</label></div>`);
     let op=Number(lsGet(LS_OPACITY,0))||(lsGet(LS_POS,false)?35:100);
     const applyOp=v=>{ op=Math.min(100,Math.max(20,v)); w.style.opacity=op/100; el('gmOpRange').value=op; el('gmOpVal').textContent=op+'%'; };
     applyOp(op);
     el('gmOpRange').addEventListener('input',e=>{ applyOp(+e.target.value); lsSet(LS_OPACITY,op); lastInput=Date.now(); });
+    // 옵션: 마우스가 창을 벗어나면 바로 5% (돌아오면 원래대로) — 이 기기에 기억
+    const away=el('gmOpAway'); away.checked=!!lsGet(LS_AWAY,false);
+    away.addEventListener('change',()=>{ lsSet(LS_AWAY,away.checked); });
+    w.addEventListener('pointerleave',e=>{ if(e.pointerType==='mouse'&&away.checked&&el('gmOpBar').style.display==='none') w.classList.add('away'); });
+    w.addEventListener('pointerenter',()=>w.classList.remove('away'));
     w.classList.toggle('locked',locked);
     w.addEventListener('pointerdown',()=>{ lastInput=Date.now(); });
     // 마우스를 올리면 바로 원래 투명도로
@@ -1021,7 +1029,7 @@
         if(pend) return `<div class="gm-adm-evnow"><img src="${UI}${pend.img}.png" alt=""/><span><b>${escHtml(pend.name)}</b> 예약</span><em>${new Date(forcedEv.from).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} 시작</em></div>`;
         return f?`<div class="gm-adm-evnow"><img src="${UI}${f.img}.png" alt=""/><span><b>${escHtml(f.name)}</b> · ${escHtml(f.desc)}</span><em>${Math.ceil(f.left/60)}분 남음</em></div>`
                 :`<div class="gm-adm-evnow off">지금 걸린 돌발 이벤트가 없습니다</div>`; })()+
-      `<div class="gm-adm-evs">${EVENTS.map(e=>`<button type="button" title="${escHtml(e.name)} — ${escHtml(e.desc)}" onclick="gmAdminEvent('${e.id}')"><img src="${UI}${e.img}.png" alt=""/><span>${escHtml(e.name)}</span></button>`).join('')}`+
+      `<div class="gm-adm-evs">${EVENTS.map(e=>`<button type="button" class="${forcedEv&&forcedEv.ev===e.id?(Date.now()<(forcedEv.from||0)?'pending':'on'):''}" title="${escHtml(e.name)} — ${escHtml(e.desc)}" onclick="gmAdminEvent('${e.id}')"><img src="${UI}${e.img}.png" alt=""/><span>${escHtml(e.name)}</span></button>`).join('')}`+
       `<button type="button" class="off" title="돌발 이벤트 끄기" onclick="gmAdminEvent('')"><span>끄기</span></button></div>`+
       `<div class="gm-adm-btns"><button type="button" class="gm-btn" onclick="gmAdminBackup()">지금 백업</button>`+
       `<button type="button" class="gm-btn danger" onclick="gmAdminResetAll()">랭킹 전체 초기화</button></div>`+
@@ -1072,6 +1080,7 @@
       if(j.success) setForced(j.forcedEvent||null);
       toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500);
       render();
+      if(j.success&&document.querySelector('.gm-adm-evs')) gmShowAdmin(); // 눌린 버튼 바로 반영
     }catch(e){ toast('⚠ 서버에 연결하지 못했습니다',3000); }
   };
   function admNowLocal(){ const d=new Date(Date.now()-new Date().getTimezoneOffset()*60000); return d.toISOString().slice(0,16); }
@@ -1943,6 +1952,8 @@
     toast(locked?'📌 고정 — 입력이 없어도 창을 숨기지 않습니다':'고정 해제 — 1분 쉬면 흐려지고, 5분 쉬면 숨깁니다',2200);
   };
   window.gmToggleDim=function(){ const b=el('gmOpBar'); if(b) b.style.display=b.style.display==='none'?'':'none'; };
+  // 투명도 패널 바깥을 누르면 닫힘
+  document.addEventListener('pointerdown',e=>{ const b=el('gmOpBar'); if(b&&b.style.display!=='none'&&!e.target.closest('#gmOpBar')&&!e.target.closest('[onclick="gmToggleDim()"]')) b.style.display='none'; },true);
 
   // 키보드 — 게임 창에 포커스가 있을 때만(대시보드 입력칸 타이핑과 섞이지 않게). Esc는 보스 키
   document.addEventListener('keydown',e=>{

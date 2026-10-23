@@ -1638,8 +1638,12 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-exp-num { flex-shrink:0; font-size:10.5px; color:var(--text3); font-variant-numeric:tabular-nums; }
 
 /* 좆좋소 키우기 — 투명도 슬라이더 (마우스를 올려도 유지) */
-.gm-opbar { display:flex; align-items:center; gap:8px; padding:6px 14px; border-bottom:1px solid var(--border2); font-size:11.5px; color:var(--text3); }
-.gm-opbar input { flex:1; accent-color:var(--accent); }
+.gm-opbar { position:absolute; left:10px; right:10px; top:40px; z-index:60; padding:10px 12px; border-radius:12px; border:1.5px solid var(--accent);
+  background:var(--surface); box-shadow:0 10px 24px rgba(0,0,0,0.35); font-size:11.5px; color:var(--text3); animation:gmToastIn 0.18s ease-out; }
+.gm-opbar-row { display:flex; align-items:center; gap:8px; }
+.gm-opbar-row input { flex:1; accent-color:var(--accent); }
+.gm-opbar-opt { display:flex; align-items:center; gap:6px; margin-top:8px; color:var(--text2); cursor:pointer; }
+.gm-opbar-opt input { accent-color:var(--accent); margin:0; }
 .gm-opbar b { width:36px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums; }
 
 /* 좆좋소 키우기 — 🗺️ 미니게임 월드 (구름 섬 지도) */
@@ -2052,3 +2056,10 @@ body.checklist-page-active { padding-bottom:46px; }
 /* 고정 안 했을 때 1분 쉬면 거의 안 보이게 — 사용자 투명도 설정보다 우선, 마우스를 올리면 복귀 */
 .gm-widget.idle { opacity:0.05 !important; transition:opacity 0.6s; }
 .gm-widget.idle:hover { opacity:1 !important; }
+
+/* 투명도 옵션 — 마우스가 창 밖이면 5% */
+.gm-widget.away { opacity:0.05 !important; transition:opacity 0.25s; }
+/* 관리 화면 — 지금 걸린 돌발 이벤트 버튼 눌린 상태, 예약은 점선 */
+.gm-adm-evs button.on { border-color:var(--accent) !important; background:var(--accent-bg) !important; box-shadow:inset 0 2px 4px rgba(0,0,0,0.25), 0 0 0 2px rgba(232,115,42,0.35); transform:translateY(1px); }
+.gm-adm-evs button.on span { font-weight:800; color:var(--accent-text); }
+.gm-adm-evs button.pending { border-style:dashed !important; border-color:var(--accent) !important; }
