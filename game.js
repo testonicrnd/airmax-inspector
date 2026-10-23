@@ -501,6 +501,7 @@
   }
   function afterWork(){
     for(const id of ['gmMonster','gmHero']){ const m=el(id); if(m){ m.classList.remove('hit'); void m.offsetWidth; m.classList.add('hit'); } }
+    if(Math.random()<0.25){ const c=document.querySelectorAll('#gmCrew .gm-crew-m'); if(c.length){ const x=c[Math.floor(Math.random()*c.length)]; x.classList.remove('hop'); void x.offsetWidth; x.classList.add('hop'); } } // 팀원도 가끔 폴짝
     render();
   }
   // PC 단어 입력 — 맞으면 단어 글자 수만큼 처리(×1.3, 콤보 배율), 틀리면 콤보 초기화
@@ -777,6 +778,7 @@
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         <div class="gm-cheer" id="gmCheer" style="display:none"></div>
         ${bodyHtml(acc.ch)}
+        ${crewHtml()}
         <div class="gm-task">
           <div class="gm-mon-name" id="gmMonName"></div>
           <div class="gm-monster" id="gmMonster"></div>
@@ -1735,6 +1737,7 @@
       if(loss<=0) continue;
       st.gold-=loss; dirty=true;
       floatText(`😵 ${TEAM_NAMES[m.id]} 실수! -${fmt(loss)}`,false);
+      { const x=document.querySelector(`#gmCrew .gm-crew-m[data-id="${m.id}"]`); if(x){ x.classList.remove('oops'); void x.offsetWidth; x.classList.add('oops'); } }
       if(Math.random()<0.25) toast(`😵 ${TEAM_NAMES[m.id]}이(가) ${TEAM_MISTAKES[Math.floor(Math.random()*TEAM_MISTAKES.length)]}! 실적 -${fmt(loss)}`,2600);
       return; // 한 번에 한 명만
     }
@@ -1744,6 +1747,12 @@
     return f?`<img class="${cls||''}" src="${f}" alt=""/>`:`<span class="gm-face-ph gm-team-ph ${cls||''}" style="background:${TEAM_COLORS[id]}">${escHtml(TEAM_NAMES[id].slice(1))}</span>`;
   }
   const stars=g=>'★'.repeat(g)+'☆'.repeat(5-g);
+  // 업무 화면에 늘 서 있는 팀원들 — 캐릭터 옆에 작은 전신으로. 실수하면 부르르 + 😵
+  function crewHtml(){
+    const t=(st&&st.team)||[]; if(!t.length) return '';
+    return `<div class="gm-crew" id="gmCrew">${t.map((m,i)=>{ const b=TEAM_BODIES[TEAM_NAMES[m.id]];
+      return `<span class="gm-crew-m g${m.grade}" data-id="${m.id}" title="${escHtml(TEAM_NAMES[m.id])} ${stars(m.grade)}" style="--d:${(i*0.37).toFixed(2)}s;z-index:${10-i}">${b?`<img src="${b}" alt=""/>`:teamFace(m.id)}<i>😵</i></span>`; }).join('')}</div>`;
+  }
   function gmShowTeam(){
     if(!teamUnlocked()){ toast(`🔒 지금 키우는 직원이 과장(Lv.${TEAM_REQ}) 이상이면 팀원을 뽑을 수 있습니다`,2800); return; }
     st.team=st.team||[];

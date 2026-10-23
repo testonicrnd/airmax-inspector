@@ -2031,3 +2031,21 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-gacha-frame { position:absolute; inset:-6px; width:calc(100% + 12px); height:calc(100% + 12px); pointer-events:none; z-index:2; filter:drop-shadow(0 0 10px var(--gc)); }
 .gm-gacha-card.g4 .gm-gacha-tag, .gm-gacha-card.g5 .gm-gacha-tag { z-index:3; top:-8px; }
 .gm-stat-refs b { color:#e8732a; }
+
+/* 업무 화면 — 팀원들이 캐릭터 옆에 서 있음 */
+.gm-crew { display:flex; align-items:flex-end; flex-shrink:0; margin-left:-14px; margin-right:-4px; align-self:flex-end; pointer-events:auto; }
+.gm-crew-m { position:relative; margin-left:-12px; animation:gmCrewBob 2.4s ease-in-out infinite; animation-delay:var(--d); transform-origin:bottom center; }
+.gm-crew-m:first-child { margin-left:0; }
+.gm-crew-m img { height:58px; width:auto; display:block; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
+.gm-crew-m .gm-face-ph { width:28px; height:28px; font-size:9px; }
+.gm-crew-m.g4::after, .gm-crew-m.g5::after { content:''; position:absolute; left:10%; right:10%; bottom:-2px; height:6px; border-radius:50%; z-index:-1; }
+.gm-crew-m.g4::after { background:radial-gradient(#ce93d8,transparent 70%); }
+.gm-crew-m.g5::after { background:radial-gradient(#ffd54f,transparent 70%); box-shadow:0 0 8px #ffd54f; }
+.gm-crew-m > i { position:absolute; top:-10px; left:50%; transform:translateX(-50%); font-style:normal; font-size:15px; opacity:0; pointer-events:none; }
+@keyframes gmCrewBob { 50% { transform:translateY(-2px); } }
+.gm-crew-m.hop { animation:gmCrewHop 0.35s ease-out; }
+@keyframes gmCrewHop { 40% { transform:translateY(-9px); } }
+.gm-crew-m.oops { animation:gmCrewOops 0.7s; }
+.gm-crew-m.oops > i { animation:gmOopsIco 1.2s ease-out; }
+@keyframes gmCrewOops { 10%,30%,50%,70% { transform:translateX(-3px) rotate(-5deg); } 20%,40%,60% { transform:translateX(3px) rotate(5deg); } }
+@keyframes gmOopsIco { 0% { opacity:0; transform:translate(-50%,4px) scale(0.5); } 20% { opacity:1; transform:translate(-50%,-4px) scale(1.2); } 80% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-10px); } }
