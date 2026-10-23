@@ -2088,12 +2088,10 @@
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
     {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
   ];
-  const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비)
+  const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
   function placeIsles(){
     const box=el('gmWorld'); if(!box) return;
     const W=box.clientWidth, H=box.clientHeight, cx=W/2, cy=H*0.5, unit=Math.min(W,H*0.85);
-    const svg=box.querySelector('.gm-orbits'); svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-    svg.innerHTML=WORLD_ORBITS.map(([rx,ry],i)=>`<ellipse class="o${i}" cx="${cx}" cy="${cy}" rx="${rx*W}" ry="${ry*H}"/>`).join('');
     const hq=box.querySelector('.gm-hq'), hw=Math.round(unit*0.36); hq.style.width=hw+'px'; hq.style.left=(cx-hw/2)+'px'; hq.style.top=(cy-hw*0.5)+'px';
     box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], [rx,ry]=WORLD_ORBITS[w.orb[0]], t=w.orb[1]*Math.PI/180;
       const x=cx+Math.cos(t)*rx*W, y=cy+Math.sin(t)*ry*H, iw=Math.round(unit*0.27*(w.size||1));
@@ -2107,7 +2105,6 @@
       <div class="gm-st-head"><b>${ic(IC.world)}미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
       <div class="gm-world" id="gmWorld">
         <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i>
-        <svg class="gm-orbits" preserveAspectRatio="none"></svg>
         <button type="button" class="gm-hq" title="본사로 돌아가기" onclick="gmBack()"><img src="${UI}isle-hq.png" alt=""/><span class="gm-isle-label"><b>본사</b><small>업무로 돌아가기</small></span></button>
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">

@@ -2151,10 +2151,6 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-body:not(.fixed) > .gm-world { height:420px; }
 .gm-world::after { content:''; position:absolute; left:50%; top:50%; width:46%; aspect-ratio:1; transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
   background:radial-gradient(circle,rgba(255,250,220,0.55) 0%,rgba(255,255,255,0.18) 45%,transparent 70%); }
-.gm-orbits { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-.gm-orbits ellipse { fill:none; stroke:rgba(255,255,255,0.75); stroke-width:2; stroke-dasharray:3 9; stroke-linecap:round; animation:gmOrbit 30s linear infinite; filter:drop-shadow(0 0 2px rgba(0,60,140,0.35)); }
-.gm-orbits ellipse.o1 { stroke:rgba(255,255,255,0.6); animation-duration:45s; animation-direction:reverse; }
-@keyframes gmOrbit { to { stroke-dashoffset:-240; } }
 .gm-hq { position:absolute; z-index:1; padding:0; border:none; background:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; animation:gmIsleBob 4s ease-in-out infinite; }
 .gm-hq img { width:100%; height:auto; display:block; pointer-events:none; filter:drop-shadow(0 8px 10px rgba(0,40,80,0.3)); }
 .gm-hq:hover img { filter:drop-shadow(0 0 6px rgba(255,255,255,0.95)) drop-shadow(0 0 3px var(--accent)); }
