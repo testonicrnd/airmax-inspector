@@ -2344,3 +2344,31 @@ button.bs-c { cursor:crosshair; font-family:inherit; }
 .gm-rank-tabs button .gm-ic { width:24px; height:24px; margin:0; }
 .gm-rank-tabs button:not(.on) .gm-ic { opacity:0.55; filter:grayscale(0.35); }
 .gm-rank-tabs button:hover .gm-ic { opacity:1; filter:none; }
+/* v2.52 — 미션 칩 · 미션 화면 · 주간 랭킹 · 근무 시간 · 새로 생긴 것 */
+.gm-stat-mis { cursor:pointer; padding:1px 7px; border-radius:10px; background:var(--input-bg); border:1px solid var(--border2); white-space:nowrap; }
+.gm-stat-mis b { margin-left:2px; }
+.gm-stat-mis.ready { border-color:#ffb300; background:rgba(255,179,0,0.15); animation:ocAtk 0.7s ease-in-out infinite alternate; }
+.gm-mis { display:flex; flex-direction:column; gap:6px; }
+.gm-mis-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px; background:var(--input-bg); border:1px solid var(--border2); }
+.gm-mis-row.claimed { opacity:0.6; }
+.gm-mis-row.bonus { border-style:dashed; }
+.gm-mis-t { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; font-size:12px; }
+.gm-mis-t small { color:var(--text3); font-size:10.5px; }
+.gm-mis-t .gm-bar { height:6px; }
+.gm-mis-row .gm-btn { width:auto; margin:0; padding:6px 10px; white-space:nowrap; }
+.gm-mis-ok { font-size:11px; color:#43a047; font-weight:700; white-space:nowrap; }
+.gm-rank-scope { display:flex; gap:4px; margin:-2px 0 8px; }
+.gm-rank-scope button { flex:1; padding:4px 0; border:1px solid var(--border); border-radius:8px; background:none; color:var(--text3); font-family:inherit; font-size:11.5px; cursor:pointer; }
+.gm-rank-scope button.on { border-color:var(--accent); color:var(--text); font-weight:700; background:var(--accent-bg); }
+.gm-rank-last { margin-top:8px; padding:6px 10px; border-radius:10px; font-size:11px; color:var(--text2); background:var(--input-bg); word-break:keep-all; }
+.gm-rank-last small { color:var(--text3); }
+.gm-adm-hours { display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:6px; }
+.gm-adm-hours span { flex:1; } .gm-adm-hours .gm-btn { width:auto; margin:0; padding:6px 12px; }
+.gm-event.off { background:linear-gradient(90deg,rgba(63,81,181,0.18),rgba(103,58,183,0.12)); }
+.gm-ev-emo { font-size:16px; line-height:1; }
+.gm-notes { position:absolute; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); animation:gmFade 0.2s; }
+.gm-notes-card { width:86%; max-height:80%; overflow:auto; padding:16px 16px 12px; border-radius:16px; background:var(--surface); box-shadow:0 12px 30px rgba(0,0,0,0.45); font-size:12.5px; color:var(--text2); animation:gmSceneIn 0.3s ease-out; }
+.gm-notes-title { font-size:16px; font-weight:900; color:var(--text); margin-bottom:8px; }
+.gm-notes-v { font-size:10.5px; font-weight:800; color:var(--accent); margin-top:6px; }
+.gm-notes-card ul { margin:4px 0 8px; padding-left:18px; line-height:1.6; word-break:keep-all; }
+.gm-notes-card .gm-btn { margin-top:4px; }

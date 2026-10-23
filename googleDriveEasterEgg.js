@@ -39,7 +39,7 @@ function doPost(e) {
 // 게임 관리(슈퍼 관리자 전용) 요청
 var GAME_ADMIN_ACTIONS = {
     gameAdminList: true, gameAdminReset: true, gameAdminDelete: true,
-    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true, gameAdminGrant: true
+    gameAdminUnlock: true, gameAdminBackup: true, gameAdminResetAll: true, gameAdminEvent: true, gameAdminGrant: true, gameAdminHours: true
 };
 // 관리자 토큰 확인 — 점검표 서버에 adminCheck로 물어봄(토큰·비밀번호는 점검표 서버에만 있음). 성공만 5분 캐시.
 // GAS 웹앱은 POST에 302로 답하고 결과는 그 주소를 GET해야 받음 → 직접 두 단계로(자동 따라가기는 POST를 다시 보내 실패할 수 있음)
@@ -72,6 +72,48 @@ function testChecklistLink() {
     getAdminLevel('연결-확인용-가짜-토큰');
     Logger.log(ADMIN_CHECK_WHY);
 }
+// ===== v2.52.0 — 근무 시간 / 주간 시즌 / 저장 안전장치 =====
+// 근무 외 시간(평일 8~19시 밖·주말) 효율 감소는 앱이 계산. 슈퍼 관리자가 끄면 GAME_HOURS_FREE='1' → 응답의 offFree로 모두에게 전달
+function readHoursFree() { return PropertiesService.getScriptProperties().getProperty('GAME_HOURS_FREE') === '1'; }
+// 주간 시즌 — 주 = 한국 시간 월요일 날짜('2026-10-19'). 앱은 계정에 이번 주 최고 기록(wk)·지난주(wkPrev)를 같이 저장
+function weekKeyOf(t) { var d = new Date(t + 9 * 3600000), wd = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - wd); return d.toISOString().slice(0, 10); }
+function curWeek() { return weekKeyOf(Date.now()); }
+// 같이 하기 전적 한 판 더하기 — 누적(w,g) + 이번 주(wk,ww,wg) + 지난주(pwk,pww,pwg)
+function statAdd(r, win) {
+    r = r || { w: 0, g: 0 }; var wk = curWeek();
+    if (r.wk !== wk) { if (r.wk) { r.pwk = r.wk; r.pww = r.ww || 0; r.pwg = r.wg || 0; } r.wk = wk; r.ww = 0; r.wg = 0; }
+    r.g = (r.g || 0) + 1; r.wg++; if (win) { r.w = (r.w || 0) + 1; r.ww++; }
+    return r;
+}
+function statWeekOf(r, wk) { if (!r) return { w: 0, g: 0 }; if (r.wk === wk) return { w: r.ww || 0, g: r.wg || 0 }; if (r.pwk === wk) return { w: r.pww || 0, g: r.pwg || 0 }; return { w: 0, g: 0 }; }
+function stateWeekOf(s, wk) { return s && s.wk && s.wk.k === wk ? s.wk : s && s.wkPrev && s.wkPrev.k === wk ? s.wkPrev : null; }
+var SEASON_BOARDS = [['stairs', '무한의 계단'], ['suika', '수박 게임'], ['tetris', '테트리스'], ['block', '블록 블라스트'], ['onecard', '원카드'], ['battleship', '해전']];
+var SEASON_PRIZE = [10, 6, 3]; // 지난주 1·2·3위 추천서
+// 새 주의 첫 저장 때 지난주를 마감 — 판마다 1~3위에게 추천서(그 사람에게만 가는 지급), 결과는 SEASON_LAST에. 잠금 안에서만 부름
+function seasonCloseIfNeeded(values) {
+    var props = PropertiesService.getScriptProperties(), last = weekKeyOf(Date.now() - 7 * 86400000);
+    if (props.getProperty('SEASON_DONE') === last) return;
+    var oc = ocLoadStats(), bs = bsLoadStats(), winners = {}, grants = [];
+    SEASON_BOARDS.forEach(function(b) {
+        var list = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
+            var id = String(r[0]), score = 0, games = 0;
+            if (b[0] === 'onecard' || b[0] === 'battleship') { var x = statWeekOf((b[0] === 'onecard' ? oc : bs)[id], last); score = x.w; games = x.g; }
+            else { var w = stateWeekOf(gameReadState(r), last); score = w ? Number(w[b[0]]) || 0 : 0; games = score; }
+            return { pid: id, nickname: String(r[1]), score: score, games: games };
+        }).filter(function(x) { return x.games > 0 && x.score > 0; })
+          .sort(function(a, c) { return (c.score - a.score) || (a.games - c.games); }).slice(0, 3);
+        winners[b[0]] = list.map(function(x, i) {
+            grants.push({ id: 'ss' + last.replace(/-/g, '') + b[0].slice(0, 2) + i, count: SEASON_PRIZE[i], at: Date.now(), pids: [x.pid], msg: '지난주 ' + b[1] + ' ' + (i + 1) + '위' });
+            return { nickname: x.nickname, score: x.score, prize: SEASON_PRIZE[i] };
+        });
+    });
+    if (grants.length) props.setProperty(GAME_GRANT_PROP, JSON.stringify(readRefGrants().concat(grants).slice(-60)));
+    props.setProperty('SEASON_LAST', JSON.stringify({ week: last, winners: winners }));
+    props.setProperty('SEASON_DONE', last);
+}
+function readSeasonLast() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('SEASON_LAST') || 'null'); } catch (e) { return null; } }
+// 저장 안전장치 — 시트 한 칸은 5만 글자가 한계. 추천서는 한 번 저장에 늘 수 있는 양을 제한(받은 지급은 따로 인정)
+var STATE_MAX = 45000, REFS_STEP_MAX = 60;
 // 랭킹 닉네임 정리(점검표 서버의 같은 이름 함수와 같은 규칙)
 function normalizeChecklistLocation(loc) {
     return String(loc || '').replace(/ +/g, ' ').trim();
@@ -284,11 +326,11 @@ function readForcedEvent() {
 // 추천서 지급 — 슈퍼 관리자가 장수를 정해 전원에게 1번씩. [{id, count, at}] 최근 7일분만 유지, 앱이 받은 id를 기억해서 중복 지급 안 함
 var GAME_GRANT_PROP = 'GAME_REF_GRANTS';
 var GAME_GRANT_DAYS = 7;
-function readRefGrants() {
+function readRefGrants(pid) { // pid를 주면 그 사람 몫만(전원 지급 + 그 사람에게 온 지급)
     try {
         var list = JSON.parse(PropertiesService.getScriptProperties().getProperty(GAME_GRANT_PROP) || '[]');
         var cut = Date.now() - GAME_GRANT_DAYS * 86400000;
-        return list.filter(function(g) { return g && g.at > cut; });
+        return list.filter(function(g) { return g && g.at > cut && (!pid || !g.pids || g.pids.indexOf(pid) >= 0); });
     } catch (e) { return []; }
 }
 function handleGameAdmin(data) {
@@ -320,10 +362,14 @@ function handleGameAdmin(data) {
             var list = readRefGrants();
             var g = { id: Utilities.getUuid().slice(0, 8), count: cnt, at: Date.now(), msg: String(data.msg || '').slice(0, 40) };
             list.push(g);
-            gp.setProperty(GAME_GRANT_PROP, JSON.stringify(list.slice(-20)));
+            gp.setProperty(GAME_GRANT_PROP, JSON.stringify(list.slice(-60)));
             return buildJson({ success: true, message: '전원에게 추천서 ' + cnt + '장을 지급했습니다. (접속할 때 받음, ' + GAME_GRANT_DAYS + '일 동안 유효)', refGrants: list });
         }
         if (act === 'gameAdminBackup') return buildJson({ success: true, message: backupGameRanking() });
+        if (act === 'gameAdminHours') { // 근무 외 시간 효율 감소 끄기/켜기
+            PropertiesService.getScriptProperties().setProperty('GAME_HOURS_FREE', data.free ? '1' : '');
+            return buildJson({ success: true, offFree: !!data.free, message: data.free ? '근무 외 시간 패널티를 껐습니다 — 언제나 정상 효율' : '근무 외 시간 패널티를 다시 켰습니다' });
+        }
 
         if (act === 'gameAdminResetAll') {
             resetGameRanking();
@@ -345,7 +391,7 @@ function handleGameAdmin(data) {
                 };
             });
             list.sort(function(a, b) { return (b.done - a.done) || (b.level - a.level) || (b.stage - a.stage); });
-            return buildJson({ success: true, players: list, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
+            return buildJson({ success: true, players: list, forcedEvent: readForcedEvent(), offFree: readHoursFree(), refGrants: readRefGrants() });
         }
 
         // 아래는 특정 플레이어 대상 — 행이 밀렸을 수 있으므로 playerId로 다시 찾는다
@@ -385,27 +431,32 @@ function handleGameAdmin(data) {
 // 한 번 시트를 읽을 때 7개 판을 모두 만들어 캐시에 같이 넣음 → 다른 탭도 시트를 다시 안 읽음.
 // 캐시를 시트보다 먼저 봄(예전엔 시트를 다 읽은 뒤에 캐시를 봐서 캐시가 있어도 0.6초쯤 더 걸렸음).
 // board='all'이면 7개 판을 한 번에 돌려줌 → 앱은 탭을 눌러도 기다리지 않음
-var RANK_BOARDS = ['promo', 'stairs', 'suika', 'tetris', 'block', 'onecard', 'battleship'];
+var RANK_BOARDS = ['promo', 'stairs', 'suika', 'tetris', 'block', 'onecard', 'battleship', 'stairs_w', 'suika_w', 'tetris_w', 'block_w', 'onecard_w', 'battleship_w']; // _w = 이번 주
 var RANK_TTL = 60;
 function rankBuildAll(values) {
-    var oc = ocLoadStats(), bs = bsLoadStats(), out = {};
+    var oc = ocLoadStats(), bs = bsLoadStats(), out = {}, wk = curWeek();
     var base = values.filter(function(r) { return r[0] && r[1]; }).map(function(r) {
-        var s = gameReadState(r) || {}, id = String(r[0]);
+        var s = gameReadState(r) || {}, id = String(r[0]), W = s.wk && s.wk.k === wk ? s.wk : {}, ow = statWeekOf(oc[id], wk), bw = statWeekOf(bs[id], wk);
         return { pid: id, nickname: String(r[1]), ch: Number(s.top) || 0, tier: Number(s.tier) || 0, stage: Number(r[2]) || 1, level: Number(r[3]) || 1, total: Number(r[4]) || 0,
             stairs: Number(s.stairsBest) || 0, suika: Number(s.suikaBest) || 0, tetris: Number(s.tetrisBest) || 0, block: Number(s.bbBest) || 0,
-            ocW: (oc[id] || {}).w || 0, ocG: (oc[id] || {}).g || 0, bsW: (bs[id] || {}).w || 0, bsG: (bs[id] || {}).g || 0 };
+            stairs_w: Number(W.stairs) || 0, suika_w: Number(W.suika) || 0, tetris_w: Number(W.tetris) || 0, block_w: Number(W.block) || 0,
+            ocW: (oc[id] || {}).w || 0, ocG: (oc[id] || {}).g || 0, bsW: (bs[id] || {}).w || 0, bsG: (bs[id] || {}).g || 0,
+            ocWW: ow.w, ocWG: ow.g, bsWW: bw.w, bsWG: bw.g };
     });
     var pick = function(x, keys) { var o = { pid: x.pid, nickname: x.nickname, ch: x.ch, tier: x.tier }; keys.forEach(function(k) { o[k] = x[k]; }); return o; };
     out.promo = base.slice().sort(function(a, b) { return (b.tier - a.tier) || (b.stage - a.stage) || (b.level - a.level) || (b.total - a.total); })
         .map(function(x) { return pick(x, ['stage', 'level']); });
     ['stairs', 'suika', 'tetris', 'block'].forEach(function(k) {
         out[k] = base.filter(function(x) { return x[k] > 0; }).sort(function(a, b) { return b[k] - a[k]; }).map(function(x) { return pick(x, [k]); });
+        // 이번 주 — 화면은 같은 이름(k)으로 점수를 읽음
+        out[k + '_w'] = base.filter(function(x) { return x[k + '_w'] > 0; }).sort(function(a, b) { return b[k + '_w'] - a[k + '_w']; })
+            .map(function(x) { var o = pick(x, []); o[k] = x[k + '_w']; return o; });
     });
     // 원카드·해전: 같이 하기 전적(서버 기록) — 승리 수 → 승률 → 판 수 적은 순. 화면은 onecard(승)·ocGames(판) 이름을 씀
-    [['onecard', 'ocW', 'ocG'], ['battleship', 'bsW', 'bsG']].forEach(function(d) {
+    [['onecard', 'ocW', 'ocG'], ['battleship', 'bsW', 'bsG'], ['onecard_w', 'ocWW', 'ocWG'], ['battleship_w', 'bsWW', 'bsWG']].forEach(function(d) {
         out[d[0]] = base.filter(function(x) { return x[d[2]] > 0; })
             .sort(function(a, b) { return (b[d[1]] - a[d[1]]) || (b[d[1]] / b[d[2]] - a[d[1]] / a[d[2]]) || (a[d[2]] - b[d[2]]); })
-            .map(function(x) { var o = pick(x, []); o.onecard = x[d[1]]; o.ocGames = x[d[2]]; o[d[0]] = x[d[1]]; return o; });
+            .map(function(x) { var o = pick(x, []); o.onecard = x[d[1]]; o.ocGames = x[d[2]]; o[d[0].replace('_w', '')] = x[d[1]]; return o; });
     });
     return out;
 }
@@ -423,14 +474,14 @@ function rankLoadAll() { // 캐시 → 없으면 시트 한 번 읽어 7개 다 
 function rankView(list, board, playerId) {
     var meIdx = rankOfPid(list, playerId), me = meIdx ? list[meIdx - 1] : null;
     var v = { players: list.length, myRank: meIdx, top: list.slice(0, 10).map(function(x) { return stripPid(x, playerId); }) };
-    if (board === 'onecard' || board === 'battleship') v.mine = me ? { w: me.onecard, g: me.ocGames } : { w: 0, g: 0 };
+    if (/^(onecard|battleship)/.test(board)) v.mine = me ? { w: me.onecard, g: me.ocGames } : { w: 0, g: 0 };
     return v;
 }
 function handleGameRanking(data) {
     var playerId = String(data.playerId || ''), all = rankLoadAll();
     if (data.board === 'all') {
         var boards = {}; RANK_BOARDS.forEach(function(b) { boards[b] = rankView(all[b], b, playerId); });
-        return buildJson({ success: true, boards: boards });
+        return buildJson({ success: true, boards: boards, week: curWeek(), lastSeason: readSeasonLast() });
     }
     var board = RANK_BOARDS.indexOf(data.board) >= 0 ? data.board : 'promo';
     var v = rankView(all[board], board, playerId); v.success = true;
@@ -469,7 +520,7 @@ function handleGameAction(data) {
                     var now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
                     sheet.getRange(sheet.getLastRow() + 1, 1, 1, GAME_HEADERS.length)
                         .setValues([[id, nickname, 1, 1, 0, '', now, now, gameHash(id + ':' + pin), tok]]);
-                    return buildJson({ success: true, created: true, playerId: id, token: tok, nickname: nickname, state: null, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
+                    return buildJson({ success: true, created: true, playerId: id, token: tok, nickname: nickname, state: null, forcedEvent: readForcedEvent(), offFree: readHoursFree(), refGrants: readRefGrants(id) });
                 }
                 var row = values[at], rowId = String(row[0]);
                 if (!row[8]) return buildJson({ success: false, error: '이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해주세요.' });
@@ -481,7 +532,7 @@ function handleGameAction(data) {
                 // 로그인할 때마다 새 토큰 — 예전 기기의 토큰은 무효가 되어 그 기기는 더 이상 저장할 수 없음(동시 접속 덮어쓰기·백섭 방지)
                 var t = gameNewId();
                 sheet.getRange(at + 2, 10).setValue(t);
-                return buildJson({ success: true, created: false, playerId: rowId, token: t, nickname: String(row[1]), state: gameReadState(row), forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
+                return buildJson({ success: true, created: false, playerId: rowId, token: t, nickname: String(row[1]), state: gameReadState(row), forcedEvent: readForcedEvent(), offFree: readHoursFree(), refGrants: readRefGrants(rowId) });
             } finally {
                 lock.releaseLock();
             }
@@ -495,26 +546,36 @@ function handleGameAction(data) {
         if (idx < 0 && token) return buildJson({ success: false, auth: false, error: '계정을 찾을 수 없습니다. 다시 로그인해주세요.' });
 
         if (data.action === 'gameLoad') {
-            if (idx < 0) return buildJson({ success: true, found: false, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
+            if (idx < 0) return buildJson({ success: true, found: false, forcedEvent: readForcedEvent(), offFree: readHoursFree(), refGrants: readRefGrants(playerId) });
             var saved = gameReadState(values[idx]);
-            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
+            return buildJson({ success: true, found: !!saved, nickname: String(values[idx][1]), state: saved, forcedEvent: readForcedEvent(), offFree: readHoursFree(), refGrants: readRefGrants(playerId) });
         }
 
         // gameSave — 새 행은 로그인(gameLogin)으로만 만들어짐. 닉네임은 가입할 때 정한 것을 유지
         if (idx < 0) return buildJson({ success: false, error: '저장할 계정이 없습니다.' });
         var stateStr = String(data.state || '');
-        if (stateStr.length > 8000) return buildJson({ success: false, error: '저장 데이터가 너무 큽니다.' });
+        // 예전 8000자 제한은 보관함이 생기면서 정상 계정도 넘을 수 있어 시트 한 칸 한계(5만) 아래로 올림
+        if (stateStr.length > STATE_MAX) return buildJson({ success: false, code: 'TOO_BIG', error: '저장 데이터가 너무 큽니다(' + stateStr.length + '자). 보관함을 정리해 주세요.' });
         var state;
         try { state = JSON.parse(stateStr); } catch (e) { return buildJson({ success: false, error: '저장 데이터 형식 오류' }); }
+        // 추천서가 한 번에 비정상적으로 늘면 잘라냄 — 받은 지급(grants)은 인정
+        var prev = gameReadState(values[idx]) || {}, refsFixed = null;
+        if (prev && prev.v) {
+            var got = (state.grantsGot || []).filter(function(id) { return (prev.grantsGot || []).indexOf(id) < 0; });
+            var granted = readRefGrants(playerId).reduce(function(a, g) { return a + (got.indexOf(g.id) >= 0 ? (g.count | 0) : 0); }, 0);
+            var allowed = Math.round(((Number(prev.refs) || 0) + REFS_STEP_MAX + granted) * 10) / 10;
+            if ((Number(state.refs) || 0) > allowed) { state.refs = allowed; refsFixed = allowed; stateStr = JSON.stringify(state); }
+        }
         var saveNow = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss');
         var saveLock = LockService.getScriptLock();
         saveLock.waitLock(20000);
         try {
             sheet.getRange(idx + 2, 3, 1, 5).setValues([[Number(state.stage) || 1, Number(state.lv) || 1, Math.floor(Number(state.totalGold) || 0), stateStr, saveNow]]);
+            try { seasonCloseIfNeeded(values); } catch (e) { /* 마감 실패는 저장을 막지 않음 — 다음 저장 때 다시 */ }
         } finally {
             saveLock.releaseLock();
         }
-        return buildJson({ success: true, savedAt: saveNow, forcedEvent: readForcedEvent(), refGrants: readRefGrants() });
+        return buildJson({ success: true, savedAt: saveNow, forcedEvent: readForcedEvent(), offFree: readHoursFree(), refGrants: readRefGrants(playerId), refsFixed: refsFixed });
     } catch (err) {
         return buildJson({ success: false, error: err.message });
     }
@@ -710,9 +771,7 @@ function ocRecord(rm) { // 끝난 판을 한 번만 기록. 잠금 안에서만 
     var stats = ocLoadStats();
     rm.seats.forEach(function(x, k) {
         if (!x.pid || x.counted) return; // 중간에 나간 사람은 나갈 때 이미 패로 기록함
-        var r = stats[x.pid] || { w: 0, g: 0 };
-        r.g++; if (k === rm.state.winner && !x.left) r.w++;
-        stats[x.pid] = r;
+        stats[x.pid] = statAdd(stats[x.pid], k === rm.state.winner && !x.left);
     });
     PropertiesService.getScriptProperties().setProperty('OC_STATS', JSON.stringify(stats));
     return true;
@@ -793,7 +852,7 @@ function handleOneCard(data) {
             if (!rm.state) { rm.seats.splice(si, 1); if (!rm.seats.length) { ocCache().remove('oc_r_' + rm.id); return buildJson({ success: true }); } }
             else { rm.seats[si].left = true;
                 if (rm.state.winner < 0 && !rm.seats[si].counted && rm.seats[si].pid) { // 끝나기 전에 나가면 바로 패 기록(남은 사람이 없어 판이 안 끝나도 빠지지 않게)
-                    var ocSt = ocLoadStats(), mr = ocSt[rm.seats[si].pid] || { w: 0, g: 0 }; mr.g++; ocSt[rm.seats[si].pid] = mr;
+                    var ocSt = ocLoadStats(); ocSt[rm.seats[si].pid] = statAdd(ocSt[rm.seats[si].pid], false);
                     PropertiesService.getScriptProperties().setProperty('OC_STATS', JSON.stringify(ocSt)); rm.seats[si].counted = true; }
                 var pl = rm.state.players[si]; if (pl && !pl.ai) { pl.ai = true; pl.name += '(컴퓨터)'; rm.state.aiAt = now; } } // 게임 중이면 컴퓨터가 이어받음
             ocSaveRoom(rm); return buildJson({ success: true });
@@ -993,7 +1052,7 @@ function bsRoomInfo(room) {
 }
 function bsLoadStats() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('BS_STATS') || '{}'); } catch (e) { return {}; } }
 function bsAddStat(pid, win) {
-    var st = bsLoadStats(), r = st[pid] || { w: 0, g: 0 }; r.g++; if (win) r.w++; st[pid] = r;
+    var st = bsLoadStats(); st[pid] = statAdd(st[pid], win);
     PropertiesService.getScriptProperties().setProperty('BS_STATS', JSON.stringify(st));
 }
 function bsRecord(rm) { // 끝난 판을 한 번만 기록(잠금 안에서). 중간에 나간 사람은 나갈 때 이미 패로 기록

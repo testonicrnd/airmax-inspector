@@ -223,10 +223,10 @@
   function applyGrants(list){
     if(!Array.isArray(list)||!pid) return;
     acc.grantsGot=acc.grantsGot||[];
-    let got=0;
-    list.forEach(g=>{ if(g&&g.id&&!acc.grantsGot.includes(g.id)){ acc.grantsGot.push(g.id); acc.refs=(acc.refs||0)+(g.count|0); got+=g.count|0; } });
+    let got=0; const why=[];
+    list.forEach(g=>{ if(g&&g.id&&!acc.grantsGot.includes(g.id)){ acc.grantsGot.push(g.id); acc.refs=(acc.refs||0)+(g.count|0); got+=g.count|0; if(g.msg) why.push(`${g.msg} +${g.count|0}`); } });
     if(acc.grantsGot.length>40) acc.grantsGot=acc.grantsGot.slice(-40);
-    if(got>0){ dirty=true; saveLocal(); setTimeout(()=>{ if(el('gmWidget')) gmScene('scene-hire.jpg',`<b>📜 추천서 ${got}장 지급!</b><br>팀원 화면에서 인턴·사원 뽑기에 쓸 수 있어요.`); },400); }
+    if(got>0){ dirty=true; saveLocal(); setTimeout(()=>{ if(el('gmWidget')) gmScene('scene-hire.jpg',`<b>📜 추천서 ${got}장 지급!</b>${why.length?`<br><small>${why.map(escHtml).join(' · ')}</small>`:''}<br>팀원 화면에서 인턴·사원 뽑기에 쓸 수 있어요.`); },400); }
   }
   function forcedEvent(){
     if(!forcedEv) return null;
@@ -252,6 +252,89 @@
     return slot?{...slot.ev,left:(59-k.m)*60+(60-k.s)}:null;
   }
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
+  // 새로 생긴 것 카드 — 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
+  const PATCH_NOTES=[
+    {v:'2.52.0', items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서 (위 숫자 줄의 📋)','🏆 <b>주간 랭킹</b> — 미니게임 순위가 매주 월요일 새로 시작, 지난주 1~3위 추천서 10·6·3장','🌙 <b>근무 시간</b> — 평일 8~19시 정상, 조출·야근·주말은 효율 50%']},
+    {v:'2.50.0', items:['🧩 <b>블록 블라스트</b> — 과장부터, 미니게임 월드에서']},
+    {v:'2.49.0', items:['🚢 <b>해전</b> — 주임부터, 컴퓨터 또는 동료와 1:1','🔄 같이 하기 중 새로고침해도 로비를 열면 이어서']},
+  ];
+  function showPatchNotes(){
+    const ver=(typeof APP_VERSION!=='undefined'?APP_VERSION:'').replace(/^v/,''); if(!ver||!pid) return;
+    const cmp=(a,b)=>{ const x=a.split('.').map(Number), y=b.split('.').map(Number); for(let i=0;i<3;i++){ if((x[i]||0)!==(y[i]||0)) return (x[i]||0)-(y[i]||0); } return 0; };
+    const seen=acc.notesSeen||'';
+    const list=PATCH_NOTES.filter(n=>cmp(n.v,ver)<=0&&(!seen||cmp(n.v,seen)>0)).slice(0,3);
+    acc.notesSeen=ver; dirty=true;
+    if(!seen||!list.length) return; // 처음 하는 사람에겐 안 띄움
+    const w=el('gmWidget'); if(!w) return; w.querySelector('.gm-notes')?.remove();
+    const d=document.createElement('div'); d.className='gm-notes';
+    d.innerHTML=`<div class="gm-notes-card"><div class="gm-notes-title">🎉 새로 생긴 것</div>${list.map(n=>`<div class="gm-notes-v">v${n.v}</div><ul>${n.items.map(x=>`<li>${x}</li>`).join('')}</ul>`).join('')}
+      <button type="button" class="gm-btn primary" onclick="this.closest('.gm-notes').remove()">확인</button></div>`;
+    w.appendChild(d);
+  }
+  // 일일 미션 — 평일(월~금)만, 하루 3개. 연속 출석 같은 건 없음(공휴일·연차에 손해 없게). 보상은 추천서, 셋 다 받으면 보너스
+  const MIS_POOL=[
+    {id:'task',  goals:[30,50,80], ref:1, txt:n=>`업무 ${n}건 처리`},
+    {id:'boss',  goals:[1,2],      ref:1, txt:n=>`결재(보스) ${n}번 통과`},
+    {id:'lvup',  goals:[2,3],      ref:1, txt:n=>`레벨 ${n}번 올리기`},
+    {id:'buy',   goals:[10,20],    ref:1, txt:n=>`스킬 ${n}번 강화`},
+    {id:'mini',  goals:[2,3],      ref:2, txt:n=>`미니게임 ${n}판`, need:()=>acc.runs.some(r=>r&&r.lv>=12)},
+    {id:'multi', goals:[1],        ref:2, txt:()=>'같이 하기 1판 (원카드·해전)', need:()=>acc.runs.some(r=>r&&r.lv>=12)},
+    {id:'pull',  goals:[1],        ref:1, txt:()=>'팀원 뽑기 1회', need:()=>st.lv>=35},
+  ];
+  const MIS_BONUS=2;
+  // 주간 시즌 — 이번 주(한국 시간 월요일 시작) 최고 기록을 계정에 따로 둠. 주가 바뀌면 지난주는 wkPrev로 옮김(서버가 지난주 1~3위 마감에 씀)
+  function weekKey(){ const d=new Date(Date.now()+9*3600e3), wd=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-wd); return d.toISOString().slice(0,10); }
+  function wkBest(board,score){ const k=weekKey(); if(!acc.wk||acc.wk.k!==k){ if(acc.wk) acc.wkPrev=acc.wk; acc.wk={k}; }
+    if(score>(acc.wk[board]||0)){ acc.wk[board]=score; dirty=true; } }
+  function miniDone(board,score){ misAdd('mini'); if(board) wkBest(board,score); }
+  function misToday(){
+    const k=kst(); if(k.wd===0||k.wd===6||!pid) return null;
+    if(!acc.mis||acc.mis.day!==k.key){
+      const rnd=seeded('mis-'+pid+'-'+k.key), pool=MIS_POOL.filter(m=>!m.need||m.need());
+      for(let i=pool.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+      acc.mis={day:k.key,bonus:false,list:pool.slice(0,3).map(m=>({id:m.id,goal:m.goals[Math.floor(rnd()*m.goals.length)],p:0,c:false}))};
+      dirty=true;
+    }
+    return acc.mis;
+  }
+  function misDef(m){ return MIS_POOL.find(x=>x.id===m.id)||MIS_POOL[0]; }
+  function misAdd(id,n){
+    const M=misToday(); if(!M) return;
+    M.list.forEach(m=>{ if(m.id===id&&m.p<m.goal){ m.p=Math.min(m.goal,m.p+(n||1)); dirty=true;
+      if(m.p>=m.goal) toast(`📋 미션 완료 — ${misDef(m).txt(m.goal)} · 📋 눌러서 보상 받기`,2600); } });
+    misChip();
+  }
+  function misChip(){ const c=el('gmMis'); if(!c) return; const M=misToday();
+    if(!M){ c.innerHTML='📋<b>주말</b>'; c.classList.remove('ready'); return; }
+    const done=M.list.filter(m=>m.p>=m.goal).length, ready=M.list.some(m=>m.p>=m.goal&&!m.c)||(M.list.every(m=>m.c)&&!M.bonus);
+    c.innerHTML=`📋<b>${done}/3</b>`; c.classList.toggle('ready',ready); }
+  window.gmShowMissions=function(){
+    const M=misToday();
+    const rows=M?M.list.map((m,i)=>{ const d=misDef(m), done=m.p>=m.goal;
+      return `<div class="gm-mis-row${m.c?' claimed':''}"><span class="gm-mis-t"><b>${escHtml(d.txt(m.goal))}</b><span class="gm-bar"><i style="width:${Math.min(100,m.p/m.goal*100)}%"></i></span><small>${m.p}/${m.goal}</small></span>
+        ${m.c?'<span class="gm-mis-ok">받음 ✓</span>':`<button type="button" class="gm-btn ${done?'primary':''}" ${done?'':'disabled'} onclick="gmMisClaim(${i})">${ic('ticket.png')}+${d.ref}</button>`}</div>`; }).join('')
+      +`<div class="gm-mis-row bonus${M.bonus?' claimed':''}"><span class="gm-mis-t"><b>🎁 셋 다 받으면 보너스</b></span>${M.bonus?'<span class="gm-mis-ok">받음 ✓</span>':`<button type="button" class="gm-btn ${M.list.every(m=>m.c)?'primary':''}" ${M.list.every(m=>m.c)?'':'disabled'} onclick="gmMisClaim(-1)">${ic('ticket.png')}+${MIS_BONUS}</button>`}</div>`
+      :'<div class="gm-intro">🏖️ 주말엔 미션이 없어요. 월요일에 새 미션이 나와요!</div>';
+    el('gmBody').innerHTML=`<div class="gm-rank-title">📋 오늘의 미션 <small>평일만 · 매일 새로</small><span class="gm-refs">${ic('ticket.png')}추천서 <b>${fmtRefs(acc.refs)}</b>장</span></div>
+      <div class="gm-mis">${rows}</div>
+      <div class="gm-st-info">평일 8~19시가 근무 시간이에요. 그 밖(조출·야근)과 주말은 효율이 절반이에요.</div>
+      <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
+    lockBodySize();
+  };
+  window.gmMisClaim=function(i){
+    const M=misToday(); if(!M) return;
+    if(i<0){ if(M.bonus||!M.list.every(m=>m.c)) return; M.bonus=true; addRefs(MIS_BONUS); toast(`🎁 미션 보너스 · 추천서 +${MIS_BONUS}`,1800); }
+    else { const m=M.list[i]; if(!m||m.c||m.p<m.goal) return; m.c=true; addRefs(misDef(m).ref); toast(`📋 미션 보상 · 추천서 +${misDef(m).ref}`,1600); }
+    dirty=true; saveServer(true); gmShowMissions();
+  };
+  // 근무 시간 — 평일 8~19시(한국 시간)는 정상, 그 밖(조출·야근)과 주말은 경험치·실적·추천서 효율 50%.
+  // 슈퍼 관리자가 서버에서 끄면(offFree) 언제나 정상. 공휴일·연차는 따로 알 수 없어 평일 기준만
+  const HOURS_FROM=8, HOURS_TO=19, HOURS_PENALTY=0.5;
+  let hoursFree=false;
+  function setHoursFree(v){ if(v!=null) hoursFree=!!v; }
+  function offHours(){ if(hoursFree) return null; const k=kst();
+    if(k.wd===0||k.wd===6) return {name:'주말 근무',icon:'🏖️'}; if(k.h<HOURS_FROM) return {name:'조출',icon:'🌅'}; if(k.h>=HOURS_TO) return {name:'야근',icon:'🌙'}; return null; }
+  function hoursMult(){ return offHours()?HOURS_PENALTY:1; }
   const EV_DAYS=['일','월','화','수','목','금','토'];
   // 다음 이벤트 — 이벤트 줄은 늘 한 줄을 차지하므로, 쉬는 동안에는 다음 시각을 보여준다(빈 줄 낭비 방지)
   function nextEvent(){
@@ -324,7 +407,7 @@
   // 연속 성공마다 +5%(단어는 +10%), 최대 2배(집중력으로 증가). 보스 중에는 전결권만큼 한계가 더 올라감
   function comboMult(){ return Math.min(1+combo*(usingWords()?0.1:0.05),(2+0.1*(st.focusLv||0))*(mon&&mon.boss?signMult():1)); }
   function hpOf(stage,boss){ const b=15*Math.pow(1.2,stage-1)*Math.pow(HP_STEP,st.tier); return Math.ceil(boss?b*8:b); }
-  function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv)*evMult('gold')*cheerMult('gold'); return Math.ceil(boss?r*8:r); }
+  function rewardOf(stage,boss){ const r=4*Math.pow(1.17,stage-1)*goldMult(st.bonusLv)*evMult('gold')*cheerMult('gold')*hoursMult(); return Math.ceil(boss?r*8:r); }
   function expNeed(lv){ return Math.round(10*Math.pow(EXP_STEP,st.tier)*Math.pow(lv,1.6)); }
   function costOf(u,lv){ return Math.ceil(u.base*Math.pow(u.grow,lv)); }
   // Lv.0은 효과 없음(자리를 비우면 아무것도 처리되지 않음). 1레벨이 기존 기본값인 10분, 이후 레벨당 +5분
@@ -402,7 +485,9 @@
     try{
       const j=await gas({action:'gameSave',playerId:pid,token,state:JSON.stringify(acc)});
       if(j.auth===false){ authLost(); return; }
-      setForced(j.forcedEvent); applyGrants(j.refGrants);
+      setHoursFree(j.offFree); setForced(j.forcedEvent); applyGrants(j.refGrants);
+      if(j.refsFixed!=null) acc.refs=j.refsFixed; // 한 번에 너무 많이 늘면 서버가 잘라냄
+      if(j.code==='TOO_BIG') toast(`⚠ ${j.error}`,5000);
       serverOk=!!j.success;
     }catch(e){ serverOk=false; }
     renderSaveState();
@@ -414,7 +499,7 @@
       if(j.auth===false){ authLost(); return false; }
       if(!j.success){ serverOk=false; return false; }
       serverOk=true;
-      setForced(j.forcedEvent);
+      setHoursFree(j.offFree); setForced(j.forcedEvent);
       // 서버 쪽이 더 최근에 저장됐으면(다른 기기에서 플레이) 서버 진행을 사용
       if(j.found&&j.state&&(j.state.lastSave||0)>(acc.lastSave||0)){ useAcc(hydrate(j.state)); saveLocal(); applyGrants(j.refGrants); return true; }
       applyGrants(j.refGrants);
@@ -470,16 +555,17 @@
     // 실수 손실은 이벤트·격려·황금 업무 배율을 뺀 평소 보상 기준 (보너스 타임에 실수가 몇 배로 아프지 않게)
     teamMistake(Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*(mon.boss?8:1)));
     gainExp(mon.boss?st.stage*6:st.stage);
-    if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); }
+    if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); misAdd('boss'); }
     else st.kills++;
+    misAdd('task');
     tryCheer();
     spawn(st.kills>=10);
   }
   function gainExp(n,quiet){
-    st.exp+=n*evMult('exp')*cheerMult('exp');
+    st.exp+=n*evMult('exp')*cheerMult('exp')*hoursMult();
     if(st.lv>=BOSS_LV){ st.lv=BOSS_LV; st.exp=0; } // 만렙 — 경험치는 더 쌓지 않음
     while(st.lv<BOSS_LV&&st.exp>=expNeed(st.lv)){
-      st.exp-=expNeed(st.lv); st.lv++;
+      st.exp-=expNeed(st.lv); st.lv++; misAdd('lvup');
       if(st.lv>=BOSS_LV) st.exp=0;
       const before=rankOf(st.lv-1), now=rankOf(st.lv);
       if(before[2]!==now[2]&&!quiet){ toast(`${now[2]}(으)로 승진했습니다!`); promoFx(st.lv); }
@@ -606,7 +692,7 @@
   function buy(i){
     const u=UPGRADES[i], lv=st[u.key]||0, c=costOf(u,lv);
     if(lv>=u.max||st.gold<c||(u.req&&st.lv<u.req)) return false;
-    st.gold-=c; st[u.key]++; dirty=true; render();
+    st.gold-=c; st[u.key]++; dirty=true; misAdd('buy'); render();
     return true;
   }
   // 강화 타일 — 누르면 1번, 꾹 누르고 있으면 돈이 되는 만큼 쭈루룩(점점 빨라짐). 타일이 다시 그려져도 이어지도록 목록 단위로 처리
@@ -793,7 +879,7 @@
       <div class="gm-event" id="gmEvent" style="display:none"></div>
       <div class="gm-char"><span class="gm-avatar">${faceHtml(acc.ch)}<i id="gmAvatar"></i></span>
         <div class="gm-char-info"><div id="gmRank"></div><div class="gm-bar"><i id="gmExpBar"></i></div></div></div>
-      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span class="gm-stat-refs" title="추천서 (팀원 뽑기)">${ic('ticket.png')}<b id="gmRefs"></b></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
+      <div class="gm-stats"><span>${MONEY} <b id="gmGold"></b></span><span class="gm-stat-refs" title="추천서 (팀원 뽑기)">${ic('ticket.png')}<b id="gmRefs"></b></span><span class="gm-stat-mis" id="gmMis" title="오늘의 미션" onclick="gmShowMissions()"></span><span>${ic('task-binder.png')}<span id="gmStage"></span></span><span>${ic('skill-auto.png')}<span id="gmDps"></span></span></div>
       <div class="gm-arena" id="gmArena" onpointerdown="gmTouchTap(event)">
         <div class="gm-cheer" id="gmCheer" style="display:none"></div>
         ${bodyHtml(acc.ch)}
@@ -813,7 +899,7 @@
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
       <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}<span class="gm-link-long">미니게임 </span>월드</button><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
-    render(); renderMonster(); renderKeys(); renderFocus();
+    render(); renderMonster(); renderKeys(); renderFocus(); misChip(); setTimeout(showPatchNotes,700);
     if(!resumeHinted&&(roomSaved('oc')||roomSaved('bs'))){ resumeHinted=true; const g=roomSaved('oc')?'원카드':'해전'; setTimeout(()=>toast(`🔄 진행 중이던 ${g}가 있어요 — 미니게임 월드 › ${g}에서 이어서 하세요`,3500),600); }
     { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
       if(short>0){ b.style.minHeight=(b.offsetHeight+short)+'px'; b.classList.add('padded'); } }
@@ -902,7 +988,11 @@
       if(ev){
         if(eb.dataset.id!==ev.id){ eb.innerHTML=`<img class="gm-ev-ic" src="${UI}${ev.img}.png" alt=""/><span class="gm-ev-txt"><b>${ev.name}</b> · ${ev.desc}</span><span class="gm-ev-left" id="gmEvLeft"></span>`; eb.dataset.id=ev.id; }
         el('gmEvLeft').textContent=`${Math.ceil(ev.left/60)}분`;
+      } else if(offHours()){
+        const oh=offHours(), id='off-'+oh.name; eb.classList.add('off');
+        if(eb.dataset.id!==id){ eb.innerHTML=`<span class="gm-ev-emo">${oh.icon}</span><span class="gm-ev-txt"><b>${oh.name} 시간</b> · 경험치·실적·추천서 효율 50%</span><span class="gm-ev-left">평일 8~19시 정상</span>`; eb.dataset.id=id; }
       } else {
+        eb.classList.remove('off');
         const nx=nextEvent(), id='next'+(nx?nx.days+'-'+nx.h:'');
         if(eb.dataset.id!==id){
           eb.innerHTML=nx
@@ -1034,15 +1124,21 @@
     const r=await gas({action:'gameRanking',playerId:pid,board:'all'});
     if(!r||!r.success) throw new Error((r&&r.error)||'실패');
     if(!r.boards){ rankAllOk=false; return false; }
-    Object.assign(rankCache,r.boards); rankAt=Date.now(); return true;
+    Object.assign(rankCache,r.boards); rankAt=Date.now(); rankWeek=r.week||''; rankLast=r.lastSeason||null; return true;
   }
   const NL2=String.fromCharCode(10,10);
   window.gmTitleClick=function(){ if(gameSuper()) gmShowAdmin(); };
+  window.gmAdminHours=async function(free){
+    try{ const j=await gas2('gameAdminHours',{free:!!free}); toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3000); if(j.success){ setHoursFree(j.offFree); gmShowAdmin(); } }
+    catch(e){ toast('⚠ 서버에 연결하지 못했습니다',2500); }
+  };
   async function gas2(action,extra){ return gas(Object.assign({action,adminToken:gameAdminToken()},extra||{})); }
   function admWrap(inner){
     return `<div class="gm-adm-title">${menuIcon('rank')} 게임 관리 <small>슈퍼 관리자</small></div>`+inner+
       `<div class="gm-adm-sec">추천서 지급 <small>전원에게 1번씩 (접속할 때 받음, 7일 유효)</small></div>`+
       `<div class="gm-adm-grant"><input type="number" id="gmAdmGrant" min="1" max="500" value="10"/><span>장</span><button type="button" class="gm-btn primary" onclick="gmAdminGrant()">${ic('ticket.png')}전원 지급</button></div>`+
+      `<div class="gm-adm-sec">근무 외 시간 패널티 <small>평일 8~19시 밖·주말은 효율 50%</small></div>`+
+      `<div class="gm-adm-hours"><span>${hoursFree?'🟢 꺼짐 — 언제나 정상 효율':'🌙 켜짐'}</span><button type="button" class="gm-btn ${hoursFree?'':'primary'}" onclick="gmAdminHours(${!hoursFree})">${hoursFree?'패널티 다시 켜기':'패널티 끄기'}</button></div>`+
       `<div class="gm-adm-sec">돌발 이벤트 <small>시작 시각과 시간을 정한 뒤 이벤트를 누르세요</small></div>`+
       `<div class="gm-adm-when"><label>시작<input type="datetime-local" id="gmAdmFrom" value="${admNowLocal()}"/></label><label>시간<input type="number" id="gmAdmMins" min="1" max="1440" value="30"/>분</label></div>`+
       (()=>{ const f=forcedEvent();
@@ -1064,7 +1160,7 @@
       const j=await gas2('gameAdminList');
       if(!j.success) throw new Error(j.error||'실패');
       adminList=j.players||[];
-      setForced(j.forcedEvent||null);
+      setHoursFree(j.offFree); setForced(j.forcedEvent||null);
       inner=adminList.length?`<div class="gm-adm-head"><span>닉네임</span><span>직급/단계</span><span>사장</span><span></span></div>`+
         adminList.map((x,i)=>`<div class="gm-adm-row">
           <b title="${escHtml(x.playerId)}">${escHtml(x.nickname)}</b>
@@ -1098,7 +1194,7 @@
       const fromV=el('gmAdmFrom')&&el('gmAdmFrom').value, from=fromV?new Date(fromV).getTime():Date.now();
       const minutes=Math.max(1,Math.min(1440,+((el('gmAdmMins')||{}).value)||30));
       const j=await gas2('gameAdminEvent',{ev,minutes,from});
-      if(j.success) setForced(j.forcedEvent||null);
+      if(j.success){ setHoursFree(j.offFree); setForced(j.forcedEvent||null); }
       toast(j.success?`✅ ${j.message}`:`⚠ ${j.error||'실패'}`,3500);
       render();
       if(j.success&&document.querySelector('.gm-adm-evs')) gmShowAdmin(); // 눌린 버튼 바로 반영
@@ -1125,30 +1221,37 @@
   };
   // 원카드 전적 — 12승 8패 · 60%
   function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
+  let rankScope='w', rankWeek='', rankLast=null; // 미니게임 판: 'w' 이번 주(기본) / 'all' 전체 기록
+  window.gmRankScope=function(sc,b){ rankScope=sc; gmShowRanking(b); };
   async function gmShowRanking(board){
     board=['stairs','suika','tetris','block','onecard','battleship'].includes(board)?board:'promo';
+    const weekly=board!=='promo'&&rankScope==='w', key=weekly?board+'_w':board;
     // 탭은 아이콘만(게임이 늘어 한 줄에 다 들어가게) — 이름은 마우스를 올리면 보임, 지금 탭 이름은 아래 제목에
     const tabs=`<div class="gm-rank-tabs">${[['promo','승진'],['stairs','무한의 계단'],['suika','수박 게임'],['tetris','테트리스'],['block','블록 블라스트'],['onecard','원카드'],['battleship','해전']]
       .map(([k,n])=>`<button type="button" class="${board===k?'on':''}" title="${n}" aria-label="${n}" onclick="gmShowRanking('${k}')">${ic(IC[k])}</button>`).join('')}</div>`;
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
     const info=x=>board==='block'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.block||0).toLocaleString()}점`:board==='onecard'||board==='battleship'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
-    const mine=board==='block'?`${(acc.bbBest||0).toLocaleString()}점`:board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
+    const W=weekly&&acc.wk&&acc.wk.k===weekKey()?acc.wk:null;
+    const mine=weekly&&!/^(onecard|battleship)$/.test(board)?`${((W&&W[board])||0).toLocaleString()}${board==='stairs'?'층':'점'} (이번 주)`:board==='block'?`${(acc.bbBest||0).toLocaleString()}점`:board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
     const title=board==='block'?'블록 블라스트 최고 점수':board==='onecard'?'원카드 전적 (같이 하기)':board==='battleship'?'해전 전적 (같이 하기)':board==='stairs'?'무한의 계단 최고 기록':board==='suika'?'수박 게임 최고 점수':board==='tetris'?'테트리스 최고 점수':'승진 랭킹';
-    const body=(j,stale)=>`<div class="gm-rank-title">${IC[board]?ic(IC[board]):'<span class="bs-ic">🧩</span>'}${title} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
-      (j.top.length?'':'<div class="gm-intro">아직 기록이 없습니다.</div>')+
+    const body=(j,stale)=>`<div class="gm-rank-title">${IC[board]?ic(IC[board]):'<span class="bs-ic">🧩</span>'}${title}${weekly?' · 이번 주':''} <small>(${j.players}명${stale?' · 갱신 중…':''})</small></div>`+
+      (j.top.length?'':`<div class="gm-intro">${weekly?'이번 주 기록이 아직 없어요. 첫 1위가 되어 보세요!':'아직 기록이 없습니다.'}</div>`)+
       j.top.map((x,i)=>`<div class="gm-rank-row${x.me?' me':''}${i<3?' top top'+(i+1):''}"><span>${i<3?`<img class="gm-medal" src="${UI}medal-${i+1}.png" alt="${i+1}위"/>`:i+1}</span><b>${escHtml(x.nickname)}</b><span>${info(x)}</span></div>`).join('')+
       (j.myRank>10?`<div class="gm-rank-row me"><span>${j.myRank}</span><b>${escHtml(nick)}</b><span>${(board==='onecard'||board==='battleship')&&j.mine?ocRecord(j.mine.w,j.mine.g):mine}</span></div>`:'')+
       (board==='onecard'||board==='battleship'?`<div class="gm-st-info">같이 하기 전적만 서버가 직접 기록해서 순위에 들어가요${j.mine?` · 내 전적 ${ocRecord(j.mine.w,j.mine.g)}`:''}</div>`:'');
     const paint=html=>{ const b=el('gmBody'); if(!b) return false;
-      b.innerHTML=tabs+html+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
+      b.innerHTML=tabs+scopeBar+html+lastLine()+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>'; lockBodySize(); return true; };
     // 전에 본 적 있으면 그걸 먼저 보여주고 뒤에서 갱신 — 서버가 2초 넘게 걸려서 빈 화면을 오래 보던 문제
-    const seen=rankCache[board];
+    const seen=rankCache[key];
+    const scopeBar=board==='promo'?'':`<div class="gm-rank-scope"><button type="button" class="${weekly?'on':''}" onclick="gmRankScope('w','${board}')">이번 주</button><button type="button" class="${weekly?'':'on'}" onclick="gmRankScope('all','${board}')">전체 기록</button></div>`;
+    const lastLine=()=>{ const L=rankLast&&rankLast.winners&&rankLast.winners[board]; if(!weekly||!L||!L.length) return '';
+      return `<div class="gm-rank-last">🏅 지난주 ${L.map((x,i)=>`${i+1}위 <b>${escHtml(x.nickname)}</b>`).join(' · ')} <small>(추천서 ${L.map(x=>x.prize).join('·')}장 지급)</small></div>`; };
     if(seen&&Date.now()-rankAt<RANK_FRESH){ paint(body(seen,false)); return; } // 방금 받은 것 — 기다림 없이 바로
     paint(seen?body(seen,true):'<div class="gm-intro">랭킹 불러오는 중…</div>');
     let j=null, why='';
     for(let attempt=0;attempt<2&&!j;attempt++){   // 한 번 실패하면 조용히 한 번 더 — 가끔 응답이 비던 문제
       try{
-        if(await rankFetchAll()) j=rankCache[board];
+        if(await rankFetchAll()) j=rankCache[key];
         else { const r=await gas({action:'gameRanking',playerId:pid,board}); if(!r.success) throw new Error(r.error||'실패'); j=r; }
       }catch(e){
         why=e&&e.name==='AbortError'?'서버 응답이 늦습니다':(e&&e.message&&e.message!=='no gas'?e.message:'네트워크 문제');
@@ -1156,7 +1259,7 @@
       }
     }
     if(!el('gmBody')||!el('gmBody').querySelector('.gm-rank-tabs')) return; // 그 사이 다른 화면으로 이동
-    if(j){ rankCache[board]=j; paint(body(j,false)); }
+    if(j){ rankCache[key]=j; paint(body(j,false)); }
     else if(seen) paint(body(seen,false)+`<div class="gm-rank-note">최신 정보를 받지 못했습니다 (${escHtml(why)})</div>`);
     else paint(`<div class="gm-intro">랭킹을 불러오지 못했습니다. (${escHtml(why)})</div><button type="button" class="gm-btn" onclick="gmShowRanking('${board}')">다시 시도</button>`);
   }
@@ -1172,7 +1275,7 @@
   // 사원 뽑기용 추천서 — 세 미니게임이 같은 기준(기준점수 대비 성적)으로 비슷하게 얻음. 기준점수면 3장, 10배면 약 19장
   function earnRefs(score,base){
     if(score<=0) return 0;
-    const n=Math.floor(3*Math.pow(score/base,0.8));
+    const n=Math.floor(3*Math.pow(score/base,0.8)*hoursMult());
     if(n>0){ acc.refs=(acc.refs||0)+n; dirty=true; }
     return n;
   }
@@ -1272,7 +1375,7 @@
     stairs.over=true; stairs.running=false; cancelAnimationFrame(stairs.raf);
     const n=stairs.count, exp=miniExp(n,STAIRS_BASE,st.stairLv,1+Math.floor(n/50)), refs=earnRefs(n,STAIRS_BASE); // 계단 단련으로 증가, 50층마다 한도 +1레벨
     const best=n>(acc.stairsBest||0);
-    if(best) acc.stairsBest=n;
+    if(best) acc.stairsBest=n; miniDone('stairs',n);
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const info=el('gmStInfo');
@@ -1369,7 +1472,7 @@
     g.strokeText(stairs.count.toLocaleString()+'층',W-16,H-12); g.fillStyle='#fff'; g.fillText(stairs.count.toLocaleString()+'층',W-16,H-12);
   }
   window.gmShowStairs=gmShowStairs;
-  if(window.__GM_TEST){ window.__gmStairs=()=>stairs; window.__gmSuika=()=>suika; } // 자동 테스트에서만 내부 상태 확인용
+  if(window.__GM_TEST){ window.__gmStairs=()=>stairs; window.__gmSuika=()=>suika; window.__misAdd=(id,n)=>misAdd(id,n); window.__acc=()=>acc; } // 자동 테스트에서만 내부 상태 확인용
 
   /* ---------- 수박 게임 ---------- */
   // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 육찬근 삼용훈 천병돌 하달순 쉰원옥 약옥녀 쉰원철 쉰동준.
@@ -1490,7 +1593,7 @@
     if(!suika||suika.over) return;
     suika.over=true;
     const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,1+1.3*(suika.maxT||0)), refs=earnRefs(n,SUIKA_BASE); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가(쉰동준 약 10레벨)
-    const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
+    const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n; miniDone('suika',n);
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const info=el('gmSkInfo');
@@ -1615,7 +1718,7 @@
     const t=tetris; if(!t||t.over) return;
     t.over=true;
     const n=t.score, exp=miniExp(n,TT_BASE,st.tetrisLv,Math.max(1,t.level)), refs=earnRefs(n,TT_BASE); // 테트리스 고수로 증가, 테트리스 단계 수만큼 한도(10단계 → 10레벨)
-    const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n;
+    const best=n>(acc.tetrisBest||0); if(best) acc.tetrisBest=n; miniDone('tetris',n);
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const info=el('gmTtInfo');
@@ -2097,6 +2200,7 @@
     if(oc.mode==='multi') score=Math.round(score*1.5);
     const exp=miniExp(score,OC_BASE,st.ocLv,rank===1?4:1.5), refs=earnRefs(score,OC_BASE);
     if(rank===1){ acc.ocWins=(acc.ocWins||0)+1; }
+    miniDone(null); if(oc.mode==='multi') misAdd('multi');
     acc.ocGames=(acc.ocGames||0)+1;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
@@ -2459,6 +2563,7 @@
     if(bs.mode==='multi') score=Math.round(score*1.5);
     const exp=miniExp(score,BS_BASE,st.bsLv,win?3:1.2), refs=earnRefs(score,BS_BASE);
     if(win) acc.bsWins=(acc.bsWins||0)+1; acc.bsGames=(acc.bsGames||0)+1;
+    miniDone(null); if(bs.mode==='multi') misAdd('multi');
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const d=document.createElement('div'); d.className='oc-result'+(win?' win':'');
@@ -2598,7 +2703,7 @@
   function bbEnd(){
     if(!bb||bb.over) return; bb.over=true;
     const n=bb.score, exp=miniExp(n,BB_BASE,st.tetrisLv,2+bb.lines/8), refs=earnRefs(n,BB_BASE); // 지운 줄이 많을수록 한도 증가
-    const best=n>(acc.bbBest||0); if(best) acc.bbBest=n; if(el('bbBest')) el('bbBest').textContent=(acc.bbBest||0).toLocaleString();
+    const best=n>(acc.bbBest||0); if(best) acc.bbBest=n; miniDone('block',n); if(el('bbBest')) el('bbBest').textContent=(acc.bbBest||0).toLocaleString();
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
     const d=document.createElement('div'); d.className='oc-result'+(best&&n?' win':'');
@@ -2807,7 +2912,7 @@
     n=n===11?11:1; teamCards();
     if(!canPull(n)) return;
     if(acc.inv.length+n>INV_MAX){ toast(`📦 보관함이 꽉 찼어요(${INV_MAX}명) — 방출하거나 강화해서 비워 주세요`,2600); return; }
-    addRefs(-PULL_COST[n]); dirty=true; lastInput=Date.now();
+    addRefs(-PULL_COST[n]); dirty=true; lastInput=Date.now(); misAdd('pull');
     const got=Array.from({length:n},()=>newMember(rollGrade(PULL_ODDS)));
     if(n===11&&!got.some(m=>m.grade>=3)) got[10]=newMember(rollGrade(PULL_SAFE));
     const owned=new Set([...st.team,...acc.inv].map(m=>m.id)), notes=got.map(m=>{ const nw=!owned.has(m.id); owned.add(m.id); return nw?'새 팀원!':'강화 재료!'; });
@@ -2939,7 +3044,7 @@
     // 서버 진행이 기준(항상 마지막으로 로그인한 기기만 저장할 수 있음). 서버에 아직 없을 때만 이 기기 저장 사용
     const pick=j.state||localSt;
     useAcc(hydrate(pick));
-    setForced(j.forcedEvent); applyGrants(j.refGrants);
+    setHoursFree(j.offFree); setForced(j.forcedEvent); applyGrants(j.refGrants);
     if(j.created) toast(`${j.nickname} 님, 입사를 환영합니다!`,3000);
     else toast(`${j.nickname} 님, 이어서 플레이합니다`,2500);
     dirty=true; saveServer(true); startPlay();
