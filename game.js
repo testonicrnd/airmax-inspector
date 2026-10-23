@@ -382,12 +382,16 @@
     nick=keepNick;
     if(el('gmBody')){ if(!isVisible()) gmShow(); renderNick(); setLoginMsg(msg||'다른 기기에서 로그인되어 로그아웃되었습니다. 다시 로그인하면 최신 진행을 불러옵니다.',true); }
   }
+  // 게임 전용 서버(googleDriveGame.js) 주소 — 비어 있으면 예전처럼 점검표 서버(GAS_URL)를 같이 씀.
+  // 게임 요청이 점검표 제출과 같은 잠금·실행 한도를 나눠 쓰지 않게 따로 둠(2026-10-23)
+  const GAME_GAS_URL='';
+  function gameUrl(){ return GAME_GAS_URL||(typeof GAS_URL!=='undefined'?GAS_URL:''); }
   async function gas(payload){
-    if(typeof GAS_URL==='undefined'||!GAS_URL) throw new Error('no gas');
+    if(!gameUrl()) throw new Error('no gas');
     const ctl=typeof AbortController!=='undefined'?new AbortController():null;
     const timer=ctl?setTimeout(()=>ctl.abort(),15000):0;
     try{
-      const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal:ctl?ctl.signal:undefined});
+      const res=await fetch(gameUrl(),{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal:ctl?ctl.signal:undefined});
       return JSON.parse(await res.text());
     }finally{ clearTimeout(timer); }
   }
