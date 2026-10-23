@@ -384,7 +384,7 @@
   }
   // 게임 전용 서버(googleDriveGame.js) 주소 — 비어 있으면 예전처럼 점검표 서버(GAS_URL)를 같이 씀.
   // 게임 요청이 점검표 제출과 같은 잠금·실행 한도를 나눠 쓰지 않게 따로 둠(2026-10-23)
-  const GAME_GAS_URL='';
+  const GAME_GAS_URL='https://script.google.com/macros/s/AKfycbzp7IN3xJJlGS26ZHJCvOgMHGB9f7ybdSWxmKaDMkwS4v-j3YJygFFC-Es0LPq8fMVX3Q/exec';
   function gameUrl(){ return GAME_GAS_URL||(typeof GAS_URL!=='undefined'?GAS_URL:''); }
   async function gas(payload){
     if(!gameUrl()) throw new Error('no gas');
