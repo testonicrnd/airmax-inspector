@@ -1157,12 +1157,11 @@
     if(src){ stairsFace=new Image(); stairsFace.src=src; stairsFace.onload=()=>drawStairs(); }
     stairsNew();
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>${ic(IC.stairs)}무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span></div>
+      <div class="gm-st-head"><b>${ic(IC.stairs)}무한의 계단</b><span>최고 <b id="gmStBest">${(acc.stairsBest||0).toLocaleString()}</b>층</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('stairs')">✕ 나가기</button></div>
       <canvas class="gm-st-cv" id="gmStCv"></canvas>
       <div class="gm-bar st"><i id="gmStTime" style="width:100%"></i></div>
       <div class="gm-st-info" id="gmStInfo">${isTouchDevice()?'◀ ▶ 버튼으로':'← → (또는 A / D) 키로'} 다음 계단 방향을 누르면 시작</div>
-      <div class="gm-st-btns"><button type="button" onpointerdown="event.preventDefault();gmStep(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();gmStep(1)">▶</button></div>
-      <button type="button" class="gm-btn" onclick="gmStairsExit()">${ic(IC.world)}월드로 돌아가기</button>`;
+      <div class="gm-st-btns"><button type="button" onpointerdown="event.preventDefault();gmStep(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();gmStep(1)">▶</button></div>`;
     lockBodySize();
     const cv=el('gmStCv'); cv.width=Math.round(cv.clientWidth*2)||540; cv.height=Math.round(cv.clientHeight*2)||340;
     drawStairs();
@@ -1322,10 +1321,9 @@
     if(suika) cancelAnimationFrame(suika.raf);
     if(stairs){ cancelAnimationFrame(stairs.raf); stairs=null; }
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>${ic(IC.suika)}수박 게임</b><span>점수 <b id="gmSkScore">0</b> · 최고 <b id="gmSkBest">${(acc.suikaBest||0).toLocaleString()}</b></span></div>
+      <div class="gm-st-head"><b>${ic(IC.suika)}수박 게임</b><span>점수 <b id="gmSkScore">0</b> · 최고 <b id="gmSkBest">${(acc.suikaBest||0).toLocaleString()}</b></span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('suika')">✕ 나가기</button></div>
       <canvas class="gm-st-cv gm-sk-cv" id="gmSkCv"></canvas>
-      <div class="gm-st-info" id="gmSkInfo">${isTouchDevice()?'떨어뜨릴 곳을 탭하세요':'← → 로 옮기고 Space(또는 ↓)로 떨어뜨리기 · 마우스로도 가능'}</div>
-      <button type="button" class="gm-btn" onclick="gmSuikaExit()">${ic(IC.world)}그만하고 월드로</button>`;
+      <div class="gm-st-info" id="gmSkInfo">${isTouchDevice()?'떨어뜨릴 곳을 탭하세요':'← → 로 옮기고 Space(또는 ↓)로 떨어뜨리기 · 마우스로도 가능'}</div>`;
     lockBodySize();
     const cv=el('gmSkCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
     suika={W:cv.width,H:cv.height,L:Math.round(cv.width*0.075),R:Math.round(cv.width*0.925),F:Math.round(cv.height*0.93),T:Math.round(cv.height*0.17),balls:[],score:0,over:false,dropX:cv.width/2,cur:skNextTier(),next:skNextTier(),cool:0,danger:0,flash:null,
@@ -1497,11 +1495,10 @@
     if(tetris) cancelAnimationFrame(tetris.raf);
     const touch=isTouchDevice();
     el('gmBody').innerHTML=`
-      <div class="gm-st-head"><b>${ic(IC.tetris)}테트리스</b><span>최고 <b id="gmTtBest">${(acc.tetrisBest||0).toLocaleString()}</b>점</span></div>
+      <div class="gm-st-head"><b>${ic(IC.tetris)}테트리스</b><span>최고 <b id="gmTtBest">${(acc.tetrisBest||0).toLocaleString()}</b>점</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('tetris')">✕ 나가기</button></div>
       <canvas class="gm-st-cv gm-tt-cv" id="gmTtCv"></canvas>
       <div class="gm-st-info" id="gmTtInfo">${touch?'아래 버튼으로 조작하세요':'← → 이동 · ↑ 회전 · ↓ 내리기 · Space 바로 내리기'}</div>
-      ${touch?`<div class="gm-st-btns gm-tt-btns"><button type="button" onpointerdown="event.preventDefault();ttMove(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();ttRotate(1)">⟳</button><button type="button" onpointerdown="event.preventDefault();ttMove(1)">▶</button><button type="button" onpointerdown="event.preventDefault();ttSoft()">▼</button><button type="button" onpointerdown="event.preventDefault();ttDrop()">⤓</button></div>`:''}
-      <button type="button" class="gm-btn" onclick="gmTetrisExit()">${ic(IC.world)}그만하고 월드로</button>`;
+      ${touch?`<div class="gm-st-btns gm-tt-btns"><button type="button" onpointerdown="event.preventDefault();ttMove(-1)">◀</button><button type="button" onpointerdown="event.preventDefault();ttRotate(1)">⟳</button><button type="button" onpointerdown="event.preventDefault();ttMove(1)">▶</button><button type="button" onpointerdown="event.preventDefault();ttSoft()">▼</button><button type="button" onpointerdown="event.preventDefault();ttDrop()">⤓</button></div>`:''}`;
     lockBodySize();
     const cv=el('gmTtCv'); cv.width=Math.round(cv.clientWidth*2)||700; cv.height=Math.round(cv.clientHeight*2)||700;
     tetris={grid:Array.from({length:TT_H},()=>Array(TT_W).fill(null)),bag:[],next:null,cur:null,score:0,lines:0,level:1,dropT:0,lockT:0,over:false,lastT:performance.now(),raf:0,flash:null};
@@ -1649,6 +1646,13 @@
   window.gmSuikaExit=function(){ if(suika){ cancelAnimationFrame(suika.raf); if(!suika.over&&suika.score>0) skEnd('그만함'); } suika=null; gmShowWorld(); };
   document.addEventListener('keyup',e=>{ if(!suika) return; if(['ArrowLeft','KeyA'].includes(e.code)) suika.keys.L=false; if(['ArrowRight','KeyD'].includes(e.code)) suika.keys.R=false; });
   window.gmStep=gmStep;
+  // 미니게임 나가기 — 제목 줄의 작은 버튼. 진행 중이면 한 번 더 확인(조작하다 잘못 눌러 꺼지는 것 방지)
+  window.gmExitAsk=function(kind){
+    const g=kind==='stairs'?stairs:kind==='suika'?suika:tetris;
+    const playing=g&&!g.over&&(kind==='stairs'?g.running:(g.score>0));
+    if(playing&&!confirm('진행 중인 게임을 그만할까요? (지금까지 점수만큼 보상을 받습니다)')) return;
+    ({stairs:gmStairsExit,suika:gmSuikaExit,tetris:gmTetrisExit})[kind]();
+  };
   window.gmStairsExit=function(){ if(stairs){ cancelAnimationFrame(stairs.raf); if(stairs.running) stairsEnd('그만 오름'); } stairs=null; gmShowWorld(); };
   // 직원(캐릭터) 목록 — 해금 상태와 진행, 바꾸기
   function gmShowChars(){
