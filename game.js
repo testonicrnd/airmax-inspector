@@ -1940,10 +1940,14 @@
     oc.lastTop=top;
     el('ocLog').textContent=v.log[v.log.length-1]||'';
     const sending=oc.sending, handEl=el('ocHand'), handSig=myTurn+'|'+(sending?sending.action+sending.card:'')+'|'+hand.map(c=>c+(can(c)?'+':'')).join(',');
-    handEl.classList.toggle('my',myTurn&&!sending); handEl.classList.toggle('busy',!!sending);
+    // 내 차례인데 낼 카드가 없으면 손패를 잠그고 '먹기' 버튼을 크게 강조
+    const stuck=myTurn&&!sending&&!hand.some(can); oc.stuck=stuck;
+    handEl.classList.toggle('my',myTurn&&!sending); handEl.classList.toggle('busy',!!sending); handEl.classList.toggle('stuck',stuck);
     if(oc.handSig!==handSig){ oc.handSig=handSig; handEl.innerHTML=hand.map((c,i)=>`<span class="oc-slot" style="width:${i===hand.length-1?42:w}px">${ocCardHtml(c,{btn:true,cls:(can(c)?' ok':'')+(sending&&sending.card===c?' sending':'')})}</span>`).join(''); }
+    if(stuck) el('ocLog').innerHTML=v.attack?`<b class="oc-must">막을 카드가 없어요 · 💢 ${v.attack}장 먹어야 해요</b>`:'<b class="oc-must">낼 카드가 없어요 · 한 장 먹으세요</b>';
     if(sending) el('ocLog').textContent=sending.action==='ocPlay'?'카드 내는 중…':sending.action==='ocTake'?'카드 먹는 중…':'원카드 외치는 중…';
-    const tb=el('ocTakeBtn'); tb.disabled=!myTurn||v.players[me].out||!!sending; tb.classList.toggle('sending',!!(sending&&sending.action==='ocTake')); tb.textContent=v.attack?`💢 ${v.attack}장 먹기`:'카드 먹기';
+    const tb=el('ocTakeBtn'); tb.disabled=!myTurn||v.players[me].out||!!sending; tb.classList.toggle('sending',!!(sending&&sending.action==='ocTake')); tb.classList.toggle('must',stuck); tb.classList.toggle('atk',stuck&&!!v.attack);
+    tb.textContent=v.attack?`💢 ${v.attack}장 먹기`:stuck?'👇 카드 먹기':'카드 먹기';
     el('ocPickBox').innerHTML=oc.pick?`<div class="oc-pick"><b>무늬를 고르세요</b><div>${OC_SUITS.map(su=>`<button type="button" class="${su==='H'||su==='D'?'red':''}" onclick="ocUiSuit('${su}')">${OC_SUIT_NAME[su]}</button>`).join('')}</div></div>`:'';
     ocLiveBits(v);
     if(v.winner>=0) ocFinish(v);
@@ -1983,7 +1987,7 @@
     if(one) one.innerHTML=o?`<b>${escHtml(v.players[o.p].name)}</b> 1장!`:'';
     const t=el('ocLog');
     const tm=el('ocTimer'); if(tm&&v.turnLeft!=null){ const f=Math.max(0,Math.min(1,v.turnLeft/30000)); tm.style.width=(f*100)+'%'; tm.classList.toggle('low',v.turnLeft<8000); tm.classList.toggle('mine',v.turn===me); }
-    if(t&&oc.mode==='multi'&&v.turn===me&&v.winner<0&&!oc.sending) t.textContent=`내 차례 · ${Math.ceil(v.turnLeft/1000)}초 안에 내거나 먹으세요`;
+    if(t&&oc.mode==='multi'&&v.turn===me&&v.winner<0&&!oc.sending&&!oc.stuck) t.textContent=`내 차례 · ${Math.ceil(v.turnLeft/1000)}초 안에 내거나 먹으세요`;
   }
   // 같이 하기는 서버 응답까지 1~2초 걸림 — 그동안 낸 카드를 띄워 '보내는 중'으로 보여 주고 다른 입력은 막음(여러 번 누르기 방지)
   async function ocSend(action,extra){

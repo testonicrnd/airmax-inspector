@@ -2198,3 +2198,9 @@ body.checklist-page-active { padding-bottom:46px; }
 .oc-emo.bottom { left:48px; bottom:36px; } .oc-emo.top { left:calc(50% + 30px); top:6px; }
 .oc-emo.left { left:56px; top:20%; } .oc-emo.right { right:56px; top:20%; }
 @keyframes ocEmo { 0% { opacity:0; transform:scale(0.3) translateY(10px); } 12% { opacity:1; transform:scale(1.25); } 22% { transform:scale(1); } 80% { opacity:1; transform:translateY(-6px); } 100% { opacity:0; transform:translateY(-16px); } }
+/* 원카드 — 낼 카드가 없을 때: 손패 잠그고 먹기 버튼 강조 */
+.oc-hand.stuck button.oc-card { opacity:0.35; filter:grayscale(0.9) brightness(0.9); cursor:not-allowed; pointer-events:none; transform:none; box-shadow:none; }
+.oc-take.must { border:none; color:#fff; font-weight:900; font-size:14px; background:linear-gradient(90deg,#ff9800,#ffb300); box-shadow:0 0 0 2px #fff, 0 0 16px rgba(255,167,38,0.9); animation:ocMust 0.7s ease-in-out infinite alternate; }
+.oc-take.must.atk { background:linear-gradient(90deg,#e53935,#ff7043); box-shadow:0 0 0 2px #fff, 0 0 18px rgba(255,82,82,0.95); }
+@keyframes ocMust { to { transform:scale(1.05); box-shadow:0 0 0 2px #fff, 0 0 26px rgba(255,138,80,1); } }
+.oc-must { color:#e53935; font-weight:900; }
