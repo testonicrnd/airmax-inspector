@@ -1375,7 +1375,7 @@ body.checklist-page-active { padding-bottom:46px; }
 #checklistForm.cl-wizard .checklist-title { margin-bottom:0; }
 #checklistForm.cl-wizard .cl-wizard-bar { padding:8px 0 10px; margin-bottom:0; }
 
-/* ===== 숨은 미니 게임 "테스토닉 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
+/* ===== 숨은 미니 게임 "좆좋소 키우기" — 대시보드를 가리지 않는 오른쪽 아래 작은 창 ===== */
 /* 관리 코드 입력 — 겉보기로는 내부 관리 기능처럼만 보이게(게임 티를 내지 않음) */
 .mg-ask { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; }
 .mg-ask-box { width:260px; background:var(--surface); color:var(--text); border:1.5px solid var(--border); border-radius:12px;
@@ -1492,7 +1492,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-rank-row b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-rank-row.me { background:var(--accent-bg); }
 
-/* 테스토닉 키우기 — 캐릭터 이미지 / 무소음 처리 영역 */
+/* 좆좋소 키우기 — 캐릭터 이미지 / 무소음 처리 영역 */
 .gm-avatar { position:relative; width:40px; height:40px; flex-shrink:0; }
 .gm-avatar img { width:40px; height:40px; border-radius:50%; object-fit:cover; background:#f1ede8; border:1.5px solid var(--border); display:block; }
 .gm-avatar i { position:absolute; right:-4px; bottom:-4px; font-style:normal; font-size:15px; line-height:1; }
@@ -1503,7 +1503,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-task { flex:1; min-width:0; text-align:center; align-self:center; }
 .gm-hint { font-size:10.5px; color:var(--text4); text-align:center; margin-top:4px; }
 
-/* 테스토닉 키우기 — 키보드 입력 */
+/* 좆좋소 키우기 — 키보드 입력 */
 .gm-widget:focus { outline:none; }
 .gm-widget:focus-within { border-color:var(--accent); }
 .gm-keys { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; align-items:center; margin-top:8px; min-height:27px; }
@@ -1518,11 +1518,11 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-hint.on { color:var(--ok-text); }
 .gm-intro-img { width:44px; height:44px; border-radius:50%; flex-shrink:0; background:#f1ede8; }
 
-/* 테스토닉 키우기 — 제목줄을 잡고 창 이동 */
+/* 좆좋소 키우기 — 제목줄을 잡고 창 이동 */
 .gm-head { cursor:move; touch-action:none; }
 .gm-head-btns button { cursor:pointer; }
 
-/* 테스토닉 키우기 — 이미지가 아직 없는 직원은 이름으로 대신 표시 / 직원 목록 */
+/* 좆좋소 키우기 — 이미지가 아직 없는 직원은 이름으로 대신 표시 / 직원 목록 */
 .gm-face-ph { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; border:1.5px solid var(--border); box-sizing:border-box; }
 .gm-hero-ph { width:72px; height:112px; border-radius:36px 36px 10px 10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:#fff; }
 .gm-hero-ph span { font-size:18px; font-weight:700; }
@@ -1538,7 +1538,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-char-row-diff { font-size:10.5px; color:var(--text4); white-space:nowrap; }
 .gm-foot { gap:6px; }
 
-/* 테스토닉 키우기 — PC 단어 입력 / 📌 고정 */
+/* 좆좋소 키우기 — PC 단어 입력 / 📌 고정 */
 .gm-keys.words { flex-wrap:wrap; }
 .gm-keys.words .gm-key { width:auto; min-width:0; padding:0 10px; font-size:14px; letter-spacing:0.5px; }
 .gm-type { width:100%; box-sizing:border-box; margin-top:6px; padding:8px 10px; border:1.5px solid var(--border); border-radius:8px; background:var(--input-bg); color:var(--text); font-size:15px; font-family:inherit; text-align:center; }
@@ -1546,14 +1546,14 @@ body.checklist-page-active { padding-bottom:46px; }
 #gmLockBtn { opacity:0.35; filter:grayscale(1); }
 .gm-widget.locked #gmLockBtn { opacity:1; filter:none; }
 
-/* 테스토닉 키우기 — 남은 업무 수치 / 강화 목록은 창 안에서 스크롤 (창이 계속 길어지지 않게) */
+/* 좆좋소 키우기 — 남은 업무 수치 / 강화 목록은 창 안에서 스크롤 (창이 계속 길어지지 않게) */
 .gm-hp-text { font-size:10.5px; color:var(--text3); margin-top:2px; font-variant-numeric:tabular-nums; }
 .gm-ups { max-height:150px; overflow-y:auto; overscroll-behavior:contain; padding-right:2px; }
 .gm-ups::-webkit-scrollbar { width:5px; }
 .gm-ups::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
 .gm-ups .gm-up { flex-shrink:0; }
 
-/* 테스토닉 키우기 — 강화 타일(4칸) + ? 설명 말풍선 */
+/* 좆좋소 키우기 — 강화 타일(4칸) + ? 설명 말풍선 */
 /* 타일 3줄까지만 보이고 그 아래는 스크롤 — 스킬이 늘어나도 창 높이는 그대로 */
 .gm-ups { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; max-height:190px; overflow-y:auto; align-content:start; padding-right:3px; }
 .gm-tile { position:relative; display:flex; flex-direction:column; align-items:center; gap:1px; min-width:0; padding:7px 2px 5px; border:1.5px solid var(--border); border-radius:9px;
@@ -1575,7 +1575,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-tip span { opacity:0.7; font-size:10.5px; }
 .gm-float.project { font-size:15px; color:#d9a23a; font-weight:800; }
 
-/* 테스토닉 키우기 — 무한의 계단 / 랭킹 탭 */
+/* 좆좋소 키우기 — 무한의 계단 / 랭킹 탭 */
 .gm-st-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:6px; }
 .gm-st-head span { font-size:11.5px; color:var(--text3); }
 .gm-st-cv { display:block; width:100%; height:170px; border:1.5px solid var(--border2); border-radius:10px; background:var(--input-bg); }
@@ -1591,13 +1591,13 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-rank-tabs button { flex:1; padding:6px 0; border:1.5px solid var(--border); border-radius:8px; background:none; color:var(--text3); font-family:inherit; font-size:12px; cursor:pointer; }
 .gm-rank-tabs button.on { border-color:var(--accent); color:var(--text); font-weight:700; background:var(--accent-bg); }
 
-/* 테스토닉 키우기 — 깜짝 이벤트 띠 / 황금 업무 */
+/* 좆좋소 키우기 — 깜짝 이벤트 띠 / 황금 업무 */
 .gm-event { margin:-2px 0 8px; padding:6px 10px; border-radius:8px; font-size:11.5px; font-weight:700; text-align:center; color:#5a3d00;
   background:linear-gradient(90deg,#ffd76a,#ffb547); animation:gmEventGlow 2s ease-in-out infinite; word-break:keep-all; }
 @keyframes gmEventGlow { 50% { filter:brightness(1.08); } }
 .gm-arena.golden { box-shadow:inset 0 0 0 2px #ffcf4a, 0 0 12px rgba(255,200,60,0.35); }
 
-/* 테스토닉 키우기 — 계단·랭킹·직원 화면도 플레이 화면과 같은 높이 */
+/* 좆좋소 키우기 — 계단·랭킹·직원 화면도 플레이 화면과 같은 높이 */
 .gm-body.fixed { display:flex; flex-direction:column; overflow-y:auto; overscroll-behavior:contain; }
 .gm-body.fixed > .gm-btn:last-child { margin-top:auto; }
 .gm-body.fixed .gm-st-cv { flex:1 1 auto; height:auto; min-height:120px; }
@@ -1605,10 +1605,10 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-body.fixed .gm-st-cv { flex-shrink:1; }
 .gm-body.fixed { box-sizing:border-box; }
 
-/* 테스토닉 키우기 — 창을 가로로 넓혀 강화 타일 한 줄 5칸 */
+/* 좆좋소 키우기 — 창을 가로로 넓혀 강화 타일 한 줄 5칸 */
 .gm-ups { grid-template-columns:repeat(5,1fr); }
 
-/* 테스토닉 키우기 — 세로 줄이기: 단어+입력칸 한 줄, 타일 3줄, 업무 영역 조금 작게 */
+/* 좆좋소 키우기 — 세로 줄이기: 단어+입력칸 한 줄, 타일 3줄, 업무 영역 조금 작게 */
 .gm-typerow { display:flex; align-items:center; gap:6px; margin-top:8px; }
 .gm-typerow .gm-keys { margin-top:0; flex:0 1 auto; justify-content:flex-start; min-height:0; }
 .gm-typerow .gm-type { flex:1 1 120px; min-width:110px; margin-top:0; padding:7px 10px; font-size:14px; }
@@ -1623,7 +1623,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-tile-top { padding:0 11px 0 2px; max-width:100%; box-sizing:border-box; }
 .gm-tile-q { width:12px; height:12px; line-height:12px; font-size:8.5px; top:3px; right:3px; }
 
-/* 테스토닉 키우기 — 약 600px 기준 정리: 타일 4줄(겹침 없이), 입력칸 전체 폭, 경험치 수치 */
+/* 좆좋소 키우기 — 약 600px 기준 정리: 타일 4줄(겹침 없이), 입력칸 전체 폭, 경험치 수치 */
 .gm-tile { padding:6px 2px 4px; gap:0; line-height:1.25; }
 .gm-tile-icon { font-size:16px; line-height:1.15; }
 .gm-tile-name { font-size:10.5px; margin-top:1px; }
@@ -1637,12 +1637,12 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-rank-l { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gm-exp-num { flex-shrink:0; font-size:10.5px; color:var(--text3); font-variant-numeric:tabular-nums; }
 
-/* 테스토닉 키우기 — 투명도 슬라이더 (마우스를 올려도 유지) */
+/* 좆좋소 키우기 — 투명도 슬라이더 (마우스를 올려도 유지) */
 .gm-opbar { display:flex; align-items:center; gap:8px; padding:6px 14px; border-bottom:1px solid var(--border2); font-size:11.5px; color:var(--text3); }
 .gm-opbar input { flex:1; accent-color:var(--accent); }
 .gm-opbar b { width:36px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums; }
 
-/* 테스토닉 키우기 — 🗺️ 미니게임 월드 (구름 섬 지도) */
+/* 좆좋소 키우기 — 🗺️ 미니게임 월드 (구름 섬 지도) */
 .gm-world { position:relative; flex:1 1 auto; min-height:260px; border-radius:12px; overflow:hidden;
   background:linear-gradient(180deg,#8fd0ff 0%,#c6e8ff 55%,#eaf7ff 100%); border:1.5px solid var(--border2); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:linear-gradient(180deg,#1d3a5c 0%,#2a5076 60%,#35628c 100%); } }
@@ -1677,7 +1677,7 @@ body.checklist-page-active { padding-bottom:46px; }
 /* 테트리스 — 휴대폰 버튼 5개 */
 .gm-tt-btns button { padding:10px 0; font-size:16px; }
 
-/* 테스토닉 키우기 — 그림 리소스 적용 */
+/* 좆좋소 키우기 — 그림 리소스 적용 */
 .gm-world, :root[data-theme="dark"] .gm-world { background:#8fd0ff url("assets/game/ui/world-map.jpg") center/cover no-repeat; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#8fd0ff url("assets/game/ui/world-map.jpg") center/cover no-repeat; } }
 .gm-cloud { background:rgba(255,255,255,0.7); }
@@ -1708,7 +1708,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-isle.art .gm-isle-label b { font-size:11.5px; }
 .gm-isle.art .gm-isle-label small { font-size:10px; }
 
-/* 테스토닉 키우기 — 이벤트 띠: 그라데이션이 흐르고 빛이 지나가는 효과 */
+/* 좆좋소 키우기 — 이벤트 띠: 그라데이션이 흐르고 빛이 지나가는 효과 */
 .gm-event { position:relative; overflow:hidden; display:flex; align-items:center; gap:7px; padding:5px 10px; text-align:left; color:#4a2c00;
   background:linear-gradient(90deg,#ffe082,#ffb74d,#ff8a65,#f48fb1,#ffb74d,#ffe082); background-size:300% 100%;
   animation:gmEvFlow 6s linear infinite; box-shadow:0 2px 10px rgba(255,150,60,0.35); }
@@ -1756,7 +1756,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-stats .gm-ic { height:14px; vertical-align:-2px; margin-right:3px; }
 .gm-chip img { height:22px; width:auto; display:block; }
 
-/* 테스토닉 키우기 — 효과 그림 */
+/* 좆좋소 키우기 — 효과 그림 */
 .gm-fx { position:absolute; top:18%; height:56px; width:auto; transform:translate(-50%,0) scale(0.4); pointer-events:none; z-index:3;
   animation:gmFxPop 0.9s ease-out forwards; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
 .gm-fx.big { height:104px; top:0; animation-duration:1.2s; }
@@ -1797,7 +1797,7 @@ body.checklist-page-active { padding-bottom:46px; }
 }
 
 /* 만렙 스킬 — 맨 아래 한 줄에 작은 아이콘으로 */
-/* 테스토닉 키우기 — 게임 관리(슈퍼 관리자) */
+/* 좆좋소 키우기 — 게임 관리(슈퍼 관리자) */
 .gm-adm-title { font-weight:800; font-size:13px; margin:2px 0 8px; display:flex; align-items:center; gap:5px; }
 .gm-adm-title small { font-weight:600; font-size:10px; color:#fff; background:var(--accent); padding:2px 6px; border-radius:99px; }
 .gm-adm-list { border:1px solid var(--border); border-radius:10px; overflow:hidden; max-height:300px; overflow-y:auto; }
@@ -1865,7 +1865,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-head-btns button { display:flex; align-items:center; justify-content:center; width:26px; height:24px; padding:0; line-height:1; font-size:16px; }
 .gm-head-btns button img, .gm-head-btns .gm-pin-ic { width:16px; height:16px; object-fit:contain; margin:0; }
 
-/* 테스토닉 키우기 — 아이콘 7종 + 그림 없는 UI 다듬기 */
+/* 좆좋소 키우기 — 아이콘 7종 + 그림 없는 UI 다듬기 */
 .gm-title { display:flex; align-items:center; gap:6px; }
 .gm-logo { height:22px; width:auto; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25)); }
 .gm-tile-icon img[src$="lock.png"] { height:18px; opacity:0.8; }

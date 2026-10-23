@@ -1,5 +1,5 @@
 /* =====================================================================
-   숨은 미니 게임 — "테스토닉 키우기" (이스터에그)
+   숨은 미니 게임 — "좆좋소 키우기" (이스터에그)
    하단 푸터의 AIRMAX 글자를 2초 안에 3번 누르면 오른쪽 아래에 작은 창으로 열림.
    대시보드 표를 가리지 않도록 작은 창 + 반투명 전환, Esc 또는 [−]로 즉시 숨기기(보스 키).
    1분 동안 입력이 없으면 자동 저장 후 창을 숨김.
@@ -9,14 +9,14 @@
    휴대폰: 화면 탭(지금 키를 맞게 누른 것으로 처리).
    🪜 무한의 계단: 주임을 달성한 직원이 있으면 열림. ←/→(A/D)로 다음 계단 방향을 맞춰 오르기, 끝나면 층수만큼 경험치(단어 입력보다 낮은 효율).
    최고 층수는 계정별로 저장하고 랭킹을 따로 집계.
-   🍉 수박 게임: 대리를 달성한 직원이 있으면 열림. 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체(오찬근 → … → 신동준).
+   🍉 수박 게임: 대리를 달성한 직원이 있으면 열림. 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체(육찬근 → … → 쉰동준).
    끝나면 점수만큼 경험치(단어 입력보다 낮은 효율), 최고 점수 랭킹 따로 집계.
    🧱 테트리스: 과장을 달성한 직원이 있으면 열림. 줄을 지운 점수만큼 경험치, 최고 점수 랭킹.
    🗺️ 미니게임 월드: 미니게임을 한곳에 모은 구름 지도. 잠긴 섬은 안개 + 🔒, 누르면 해금 직급 안내.
    ⚡ 깜짝 이벤트: 평일 하루 3번, 10~17시 중 무작위 정시에 시작해 1시간 진행(한국 시간). 날짜로 정해지므로 모두 같은 시간에 같은 이벤트.
    📌 고정: 켜 두면 1분 동안 입력이 없어도 창을 숨기지 않음(다른 탭을 보고 와도 그대로). 탭을 벗어난 동안은 커피 수혈 10%로 계산.
    실적으로 업무력/커피 수혈(자동 처리)/몰입(크리티컬)/성과금(실적 배율)/야근을 강화하며 인턴 → 사장으로 승진하는 노가다 게임.
-   캐릭터: 신동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
+   캐릭터: 쉰동준으로 시작, 직원 한 명을 사장까지 키울 때마다 원하는 직원 한 명을 입사시킬 수 있음.
    늦게 입사한 직원일수록(입사 순서 기준) 업무량·승진 경험치가 많아 더 어려움.
    캐릭터마다 진행(실적·강화·단계)은 따로.
 
@@ -102,25 +102,25 @@
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
   function drawCover(g,im,W,H){ const k=Math.max(W/im.naturalWidth,H/im.naturalHeight), w=im.naturalWidth*k, h=im.naturalHeight*k; g.drawImage(im,(W-w)/2,(H-h)/2,w,h); } // 사장 = 만렙(150)
-  // 캐릭터 — 신동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
+  // 캐릭터 — 쉰동준 다음은 사장 달성할 때마다 원하는 직원을 골라 입사. 이미지가 없는 캐릭터는 이름으로 대신 표시(이미지는 생기는 대로 추가)
   // 사장까지 키운 직원은 회사에 남아, 지금 키우는 직원에게 가끔 '격려'를 보낸다 — 직원마다 효과가 다름.
   // kind: power 업무력 / auto 커피 수혈 / gold 실적 / exp 경험치 / boss 보스 처리량 / crit 몰입 확률(+%p) / combo 콤보 유지 / golden 황금 업무
   const CHARS=[
-    {name:'신동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png',
+    {name:'쉰동준',face:'assets/game/dongjun-face.png',body:'assets/game/dongjun.png',
       cheer:{icon:'⌨️',name:'직접 뛰는 사장',kind:'power',v:3,sec:10,desc:'처리량 ×3'}},
-    {name:'신원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png?v=2',
+    {name:'쉰원철',face:'assets/game/wonchul-face.png',body:'assets/game/wonchul.png?v=2',
       cheer:{icon:'☕',name:'커피 한 잔 하자',kind:'auto',v:5,sec:12,desc:'커피 수혈 ×5'}},
-    {name:'강옥남',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png?v=2',
+    {name:'약옥녀',face:'assets/game/oknam-face.png',body:'assets/game/oknam.png?v=2',
       cheer:{icon:'💸',name:'이번 달 성과금',kind:'gold',v:3,sec:12,desc:'실적 ×3'}},
-    {name:'이용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png',
+    {name:'삼용훈',face:'assets/game/yonghun-face.png',body:'assets/game/yonghun.png',
       cheer:{icon:'🔥',name:'집중해서 가자',kind:'crit',v:0.5,sec:10,desc:'몰입 확률 +50%p'}},
-    {name:'하문숙',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png',
+    {name:'하달순',face:'assets/game/munsuk-face.png',body:'assets/game/munsuk.png',
       cheer:{icon:'📋',name:'결재는 내가 본다',kind:'boss',v:2.5,sec:15,desc:'보스 처리량 ×2.5'}},
-    {name:'신원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png?v=2',
+    {name:'쉰원옥',face:'assets/game/wonok-face.png',body:'assets/game/wonok.png?v=2',
       cheer:{icon:'📈',name:'배우면서 해라',kind:'exp',v:3,sec:15,desc:'경험치 ×3'}},
-    {name:'천병석',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png',
+    {name:'천병돌',face:'assets/game/byungsuk-face.png',body:'assets/game/byungsuk.png',
       cheer:{icon:'🔗',name:'흐름 끊지 마라',kind:'combo',v:1,sec:10,desc:'틀려도 콤보 유지'}},
-    {name:'오찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png',
+    {name:'육찬근',face:'assets/game/changeun-face.png',body:'assets/game/changeun.png',
       cheer:{icon:'🌟',name:'오늘은 다 황금이다',kind:'golden',v:1,sec:8,desc:'모든 업무가 황금 업무'}},
   ];
   const HP_STEP=1.6, EXP_STEP=1.12; // 입사 순서(tier)마다 업무량 ×1.6, 승진 경험치 ×1.12
@@ -326,7 +326,7 @@
   function canHire(){ return doneCount()>=hiredCount()&&hiredCount()<CHARS.length; } // 사장 달성 수만큼 입사권
 
   /* ---------- 저장 ---------- */
-  // 저장된 값 → 계정 구조. 예전(캐릭터 1명) 저장은 신동준 진행으로 옮김
+  // 저장된 값 → 계정 구조. 예전(캐릭터 1명) 저장은 쉰동준 진행으로 옮김
   function hydrate(raw){
     if(!raw) return acc0();
     if(!Array.isArray(raw.runs)){
@@ -504,7 +504,7 @@
       wordPop(want);
       if(mon&&seqPos>=seq.length){ if(seq.length>1) floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
-      if(!cheerHas('combo')) combo=0; // 천병석 사장님의 격려 중에는 틀려도 콤보가 안 풀림
+      if(!cheerHas('combo')) combo=0; // 천병돌 사장님의 격려 중에는 틀려도 콤보가 안 풀림
       const k=el('gmKeys'); if(k){ k.classList.remove('miss'); void k.offsetWidth; k.classList.add('miss'); }
       renderKeys();
     }
@@ -555,7 +555,7 @@
       work(comboMult());
       if(mon&&seqPos>=seq.length){ floatText('✔ 완료',false); newSeq(); } else renderKeys();
     } else {
-      if(!cheerHas('combo')) combo=0; // 천병석 사장님의 격려 중에는 틀려도 콤보가 안 풀림
+      if(!cheerHas('combo')) combo=0; // 천병돌 사장님의 격려 중에는 틀려도 콤보가 안 풀림
       const k=el('gmKeys'); if(k){ k.classList.remove('miss'); void k.offsetWidth; k.classList.add('miss'); }
       renderKeys();
     }
@@ -676,7 +676,7 @@
     w.id='gmWidget'; w.className='gm-widget'; w.tabIndex=0;
     w.innerHTML=`
       <div class="gm-head">
-        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>테스토닉 키우기</span>
+        <span class="gm-title"><img class="gm-logo" src="assets/game/ui/logo.png" alt=""/>좆좋소 키우기</span>
         <span class="gm-head-btns">
           <button type="button" id="gmLockBtn" title="고정 — 입력이 없어도 창을 숨기지 않음" onclick="gmToggleLock()"><img class="gm-pin-ic" src="assets/game/ui/menu-pin.png" alt="고정"/></button>
           <button type="button" title="투명도" onclick="gmToggleDim()"><img class="gm-pin-ic" src="assets/game/ui/menu-opacity.png" alt="투명도"/></button>
@@ -687,7 +687,7 @@
       <div class="gm-body" id="gmBody"></div>`;
     document.body.appendChild(w);
     const chip=document.createElement('button');
-    chip.id='gmChip'; chip.className='gm-chip'; chip.type='button'; chip.title='테스토닉 키우기'; chip.innerHTML=`<img src="${UI}skill-auto.png" alt="열기"/>`;
+    chip.id='gmChip'; chip.className='gm-chip'; chip.type='button'; chip.title='좆좋소 키우기'; chip.innerHTML=`<img src="${UI}skill-auto.png" alt="열기"/>`;
     chip.onclick=()=>gmShow();
     document.body.appendChild(chip);
     // 투명도 — 슬라이더로 정한 값을 마우스를 올리거나 플레이 중에도 그대로 유지(예전 '반투명' 켜 둔 기기는 35%로 시작)
@@ -743,7 +743,7 @@
     const guess=nick||(typeof LS_CL_INSPECTOR!=='undefined'&&lsGet(LS_CL_INSPECTOR,''))||'';
     el('gmBody').innerHTML=`
       <div class="gm-login-hero" style="background-image:url('${UI}login-bg.jpg')"><img src="${CHARS[0].body}" alt=""/></div>
-      <div class="gm-intro"><span>테스토닉에 신입 <b>${CHARS[0].name}</b>이 입사했습니다.<br>
+      <div class="gm-intro"><span>좆좋소에 신입 <b>${CHARS[0].name}</b>이 입사했습니다.<br>
         화면에 뜨는 단어를 입력해(휴대폰은 탭) 업무를 처리하고, 사장까지 승진시켜 주세요. 사장이 되면 다음 직원이 입사합니다.</span></div>
       <input class="gm-input" id="gmNick" maxlength="12" placeholder="닉네임 (랭킹에 표시)" autocomplete="off" value="${escHtml(guess)}" onkeydown="if(event.key==='Enter')document.getElementById('gmPin').focus()"/>
       <input class="gm-input" id="gmPin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN 숫자 4~6자리" autocomplete="off" onkeydown="if(event.key==='Enter')gmStart()"/>
@@ -1297,10 +1297,10 @@
   if(window.__GM_TEST){ window.__gmStairs=()=>stairs; window.__gmSuika=()=>suika; } // 자동 테스트에서만 내부 상태 확인용
 
   /* ---------- 수박 게임 ---------- */
-  // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 오찬근 이용훈 천병석 하문숙 신원옥 강옥남 신원철 신동준.
-  // 신동준 둘이 합쳐지면 사라지며 보너스. 공이 위쪽 선을 넘은 채 잠시 머물면 끝 → 점수 × 지금 단계 × 0.05 경험치
+  // 같은 얼굴 공 두 개가 닿으면 다음 크기로 합체. 크기 순서(작은 → 큰): 육찬근 삼용훈 천병돌 하달순 쉰원옥 약옥녀 쉰원철 쉰동준.
+  // 쉰동준 둘이 합쳐지면 사라지며 보너스. 공이 위쪽 선을 넘은 채 잠시 머물면 끝 → 점수 × 지금 단계 × 0.05 경험치
   const SUIKA_REQ=22, SUIKA_BASE=500;
-  const SK_NAMES=['오찬근','이용훈','천병석','하문숙','신원옥','강옥남','신원철','신동준'];
+  const SK_NAMES=['육찬근','삼용훈','천병돌','하달순','쉰원옥','약옥녀','쉰원철','쉰동준'];
   const SK_R=[0.042,0.056,0.072,0.09,0.11,0.135,0.164,0.198]; // 판 폭 대비 반지름
   const SK_COLORS=['#9ad1ff','#7fd99a','#ffd166','#ff9f6e','#f78fb3','#b392f0','#5ec2c2','#ff6b6b'];
   let suika=null;
@@ -1401,7 +1401,7 @@
     a.dead=b.dead=true;
     const t=a.t+1, x=(a.x+b.x)/2, y=(a.y+b.y)/2;
     suika.maxT=Math.max(suika.maxT||0,Math.min(t,SK_NAMES.length-1));
-    if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 신동준 합체! +100',until:performance.now()+1500}; }
+    if(t>=SK_NAMES.length){ suika.score+=100; suika.flash={text:'🎉 쉰동준 합체! +100',until:performance.now()+1500}; }
     else { suika.score+=t*(t+1)/2; const nr=skR(t);
       suika.balls.push({id:++suika.id,x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2,r:nr,t,age:1.3,a:((a.a||0)+(b.a||0))/2,w:((a.w||0)+(b.w||0))/2});
       // 합체 순간 커진 공이 자리를 차지하며 주변 공을 옆으로 살짝 밀어냄
@@ -1413,7 +1413,7 @@
   function skEnd(why){
     if(!suika||suika.over) return;
     suika.over=true;
-    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,1+1.3*(suika.maxT||0)); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가(신동준 약 10레벨)
+    const n=suika.score, exp=miniExp(n,SUIKA_BASE,st.suikaLv,1+1.3*(suika.maxT||0)); // 수박 장인으로 증가, 큰 공을 만들수록 한도 증가(쉰동준 약 10레벨)
     const best=n>(acc.suikaBest||0); if(best) acc.suikaBest=n;
     if(exp>0) gainExp(exp);
     dirty=true; saveServer(true);
