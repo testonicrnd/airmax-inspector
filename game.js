@@ -1880,6 +1880,7 @@
   function ocApply(j){
     lastInput=Date.now(); // 같이 하기 중 다른 사람 차례를 기다리는 동안 창이 흐려지거나 내려가지 않게
     if(j.room) oc.info=j.room;
+    if(j.emo) setTimeout(()=>ocTakeEmotes(j.emo),0);
     if(j.view){ if(oc.view&&j.view.ver<oc.view.ver) return; // 내가 낸 뒤에 도착한 옛 상태는 무시(카드가 손에 되돌아온 것처럼 보이는 문제)
       oc.view=j.view; oc.mode='multi'; ocGameRender(); } else ocRoomRender();
   }
@@ -1910,7 +1911,7 @@
     const pos=['bottom','left','top','right'];
     const seats=v.players.map((p,i)=>{ const rel=(i-me+n)%n;
       return `<div class="oc-seat ${pos[rel]}${i===v.turn&&v.winner<0?' turn':''}${p.out?' out':''}${v.winner===i?' win':''}">
-        ${ocFaceImg(p.face,'oc-face')}<b>${escHtml(p.name)}</b>
+        ${ocFaceImg(p.face,'oc-face')}<b>${escHtml(p.name)}</b>${!rel&&i===v.turn&&v.winner<0?'<span class="oc-mine">내 차례!</span>':''}
         <span class="oc-cnt">${p.out?'파산':p.n+'장'}</span>${rel?`<span class="oc-fan">${Array.from({length:Math.min(p.n,8)},()=>'<i></i>').join('')}</span>`:''}</div>`; }).join('');
     const top=v.top, suitChanged=v.suit&&(v.suit==='*'||ocJoker(top)||v.suit!==ocSuit(top));
     const myTurn=v.turn===me&&v.winner<0, hand=v.hand||[];
@@ -1918,11 +1919,14 @@
     const w=Math.max(10,Math.min(42,(340-40)/Math.max(1,hand.length-1)));
     const body=el('gmBody');
     if(force||!el('ocTable')||body.dataset.oc!=='g'){
-      body.innerHTML=ocHead(oc.mode==='solo'?'혼자 하기':'같이 하기')+`<div class="oc-table" id="ocTable"></div><div class="oc-log" id="ocLog"></div><div class="oc-hand" id="ocHand"></div>
-        <div class="oc-btns"><button type="button" class="gm-btn oc-take" id="ocTakeBtn" onclick="ocUiTake()">카드 먹기</button><button type="button" class="gm-btn oc-onebtn" id="ocOneBtn" onclick="ocUiCall()">원카드!</button></div><div id="ocPickBox"></div>`;
+      body.innerHTML=ocHead(oc.mode==='solo'?'혼자 하기':'같이 하기')+`<div class="oc-table" id="ocTable"><div class="oc-table-in" id="ocTableIn"></div><div class="oc-fx" id="ocFx"></div>${oc.mode==='multi'?'<div class="oc-timer"><i id="ocTimer"></i></div>':''}</div><div class="oc-log" id="ocLog"></div><div class="oc-hand" id="ocHand"></div>
+        <div class="oc-btns"><button type="button" class="gm-btn oc-take" id="ocTakeBtn" onclick="ocUiTake()">카드 먹기</button><button type="button" class="gm-btn oc-onebtn" id="ocOneBtn" onclick="ocUiCall()">원카드!</button>
+          <span class="oc-emo-wrap"><button type="button" class="gm-btn oc-emo-btn" title="이모지" onclick="ocUiEmoOpen()">😀</button><span class="oc-emo-pal" id="ocEmoPal">${OC_EMOTES.map((e,i)=>`<button type="button" onclick="ocUiEmote(${i})">${e}</button>`).join('')}</span></span></div><div id="ocPickBox"></div>`;
       body.dataset.oc='g'; oc.bodyHtml=null; oc.handSig=null; lockBodySize();
     }
-    el('ocTable').innerHTML=`${seats}
+    const tbl=el('ocTable'); tbl.classList.toggle('myturn',myTurn&&!oc.sending);
+    if(myTurn&&!oc.wasMyTurn) ocFxBanner(); oc.wasMyTurn=myTurn;
+    el('ocTableIn').innerHTML=`${seats}
         <div class="oc-center">
           <div class="oc-deck">${ocCardHtml('BACK')}<small>${v.deck}</small></div>
           <div class="oc-pile${top!==oc.lastTop?' new':''}">${ocCardHtml(top)}</div>
@@ -1944,6 +1948,30 @@
     ocLiveBits(v);
     if(v.winner>=0) ocFinish(v);
   }
+  // ---- 이모지(정해진 8개) · 내 차례 배너
+  const OC_EMOTES=['👍','😂','😭','😡','😱','🔥','🙏','👏'];
+  function ocFxBanner(){ const fx=el('ocFx'); if(!fx) return; const d=document.createElement('div'); d.className='oc-turn-banner'; d.textContent='내 차례!'; fx.appendChild(d); setTimeout(()=>d.remove(),1400); }
+  function ocShowEmote(seat,e){
+    const fx=el('ocFx'), v=ocCurView(); if(!fx||!v||!OC_EMOTES[e]) return;
+    const pos=['bottom','left','top','right'][(seat-v.me+v.players.length)%v.players.length];
+    fx.querySelectorAll('.oc-emo.'+pos).forEach(x=>x.remove());
+    const d=document.createElement('div'); d.className='oc-emo '+pos; d.textContent=OC_EMOTES[e]; fx.appendChild(d); setTimeout(()=>d.remove(),2600);
+  }
+  function ocTakeEmotes(list){ // 서버에서 온 것 중 새것만(내 건 누를 때 이미 띄움)
+    if(!oc||!Array.isArray(list)) return; const v=ocCurView();
+    list.forEach(x=>{ if(x.id>(oc.emoSeen||0)){ oc.emoSeen=x.id; if(!v||x.s!==v.me) ocShowEmote(x.s,x.e); } });
+  }
+  window.ocUiEmoOpen=function(){ const p=el('ocEmoPal'); if(p) p.classList.toggle('open'); };
+  window.ocUiEmote=function(i){
+    lastInput=Date.now(); const p=el('ocEmoPal'); if(p) p.classList.remove('open');
+    const v=ocCurView(); if(!v||Date.now()-(oc.emoAt||0)<1200) return; oc.emoAt=Date.now();
+    ocShowEmote(v.me,i);
+    if(oc.mode==='multi'){ const me=oc; gas({action:'ocEmote',room:me.room,key:me.key,e:i}).then(j=>{ if(oc===me) ocTakeEmotes(j.emo); }).catch(()=>{}); return; }
+    // 혼자 하기 — 컴퓨터가 가끔 받아 줌
+    if(Math.random()<0.5){ const ai=v.players.map((q,k)=>k).filter(k=>k!==v.me&&!v.players[k].out); const k=ai[Math.floor(Math.random()*ai.length)];
+      const reply={0:[0,7,1],1:[1,0,5],2:[6,1,0],3:[4,1,6],4:[1,4],5:[5,7,0],6:[0,6],7:[7,0,5]}[i]; const me=oc;
+      if(k!=null) setTimeout(()=>{ if(oc===me) ocShowEmote(k,reply[Math.floor(Math.random()*reply.length)]); },700+Math.random()*900); }
+  };
   // 자주 바뀌는 부분(원카드 버튼·남은 시간)만 갱신
   function ocLiveBits(v){
     const b=el('ocOneBtn'), one=el('ocOne'); if(!b) return;
@@ -1954,6 +1982,7 @@
     b.classList.toggle('hot',!!o);
     if(one) one.innerHTML=o?`<b>${escHtml(v.players[o.p].name)}</b> 1장!`:'';
     const t=el('ocLog');
+    const tm=el('ocTimer'); if(tm&&v.turnLeft!=null){ const f=Math.max(0,Math.min(1,v.turnLeft/30000)); tm.style.width=(f*100)+'%'; tm.classList.toggle('low',v.turnLeft<8000); tm.classList.toggle('mine',v.turn===me); }
     if(t&&oc.mode==='multi'&&v.turn===me&&v.winner<0&&!oc.sending) t.textContent=`내 차례 · ${Math.ceil(v.turnLeft/1000)}초 안에 내거나 먹으세요`;
   }
   // 같이 하기는 서버 응답까지 1~2초 걸림 — 그동안 낸 카드를 띄워 '보내는 중'으로 보여 주고 다른 입력은 막음(여러 번 누르기 방지)
@@ -1968,7 +1997,8 @@
     const guard=setTimeout(()=>{ if(me.sending){ me.sending=null; if(oc===me) ocGameRender(); } },10000);
     try{ const j=await gas(Object.assign({action,room:me.room,key:me.key},extra||{})); if(oc!==me) return;
       if(!j.success&&j.error) toast(`⚠ ${j.error}`,1800);
-      if(j.view&&!(me.view&&j.view.ver<me.view.ver)) me.view=j.view; }
+      if(j.view&&!(me.view&&j.view.ver<me.view.ver)) me.view=j.view;
+      if(j.emo) setTimeout(()=>ocTakeEmotes(j.emo),0); }
     catch(e){ if(oc===me) toast('⚠ 서버에 연결하지 못했습니다',2000); }
     finally{ clearTimeout(guard); me.sending=null; if(oc===me&&!me.done) ocGameRender(); }
   }

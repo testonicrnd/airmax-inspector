@@ -83,7 +83,7 @@ try {
     if (action === 'attachChecklistSignature') return handleAttachChecklistSignature(data);
     if (action === 'gameLogin' || action === 'gameLoad' || action === 'gameSave' || action === 'gameRanking') return handleGameAction(data);
     if (GAME_ADMIN_ACTIONS[action]) return handleGameAdmin(data);
-    if (/^oc(Lobby|Create|Join|Leave|Start|State|Play|Take|Call)$/.test(action)) return handleOneCard(data);
+    if (/^oc(Lobby|Create|Join|Leave|Start|State|Play|Take|Call|Emote)$/.test(action)) return handleOneCard(data);
     if (action === 'listChecklists' || action === 'getChecklist' || action === 'getChecklistPdf' || action === 'resendChecklistMail') return handleChecklistRecords(data);
     if (action === 'getInspectors' || action === 'addInspector' || action === 'removeInspector') return handleInspectorAction(data);
     // 모르는 요청이 아래 점검 결과 저장으로 흘러가 엉뚱한 오류가 나지 않게 막음 (앱만 새 버전이고 GAS가 예전 코드일 때 등)
@@ -2124,6 +2124,9 @@ function ocLobbyIds() { try { return JSON.parse(ocCache().get(OC_LOBBY_KEY) || '
 function ocSetLobby(ids) { ocCache().put(OC_LOBBY_KEY, JSON.stringify(ids.slice(-30)), OC_ROOM_TTL); }
 function ocNewKey() { return Utilities.getUuid().replace(/-/g, '').slice(0, 20); }
 function ocSeatIndex(room, key) { for (var i = 0; i < room.seats.length; i++) if (room.seats[i].key === key) return i; return -1; }
+// 게임 중 이모지 — 정해진 8개 중 번호만 받음(아무 글자나 못 보내게). 자리마다 1.2초에 한 번, 최근 8개만 6초 동안 보여 줌
+var OC_EMOTE_N = 8, OC_EMOTE_GAP = 1200, OC_EMOTE_SHOW = 6000;
+function ocEmotes(room, now) { return (room.emo || []).filter(function(x) { return now - x.at < OC_EMOTE_SHOW; }); }
 function ocRoomInfo(room) {
     return { id: room.id, title: room.title, host: room.seats.length ? room.seats[0].nick : '', started: !!room.state, ended: !!(room.state && room.state.winner >= 0),
         seats: room.seats.map(function(x) { return { nick: x.nick, face: x.face, left: !!x.left }; }) };
@@ -2186,6 +2189,17 @@ function handleOneCard(data) {
             rm.state = ocNew(players, now);
             ocSaveRoom(rm);
         }
+        if (act === 'ocEmote') {
+            var ei = Math.floor(Number(data.e));
+            if (!rm.state || !(ei >= 0 && ei < OC_EMOTE_N)) return buildJson({ success: false });
+            rm.emo = ocEmotes(rm, now);
+            var lastMine = rm.emo.filter(function(x) { return x.s === si; }).pop();
+            if (!lastMine || now - lastMine.at >= OC_EMOTE_GAP) {
+                rm.emoN = (rm.emoN || 0) + 1;
+                rm.emo.push({ id: rm.emoN, s: si, e: ei, at: now }); rm.emo = rm.emo.slice(-8);
+                ocSaveRoom(rm);
+            }
+        }
         if (act === 'ocPlay' || act === 'ocTake' || act === 'ocCall') {
             if (!rm.state) return buildJson({ success: false, error: '아직 시작 전입니다.' });
             var err = act === 'ocPlay' ? ocPlay(rm.state, si, String(data.card || ''), String(data.suit || ''), now)
@@ -2198,7 +2212,7 @@ function handleOneCard(data) {
             var v0 = rm.state.ver;
             for (var t = 0; t < 4; t++) ocTick(rm.state, now, OC_TURN_MS);   // 밀린 컴퓨터 차례를 조금씩 진행
             if (rm.state.ver !== v0) ocSaveRoom(rm);
-            return buildJson({ success: true, room: ocRoomInfo(rm), view: ocView(rm.state, si, now) });
+            return buildJson({ success: true, room: ocRoomInfo(rm), view: ocView(rm.state, si, now), emo: ocEmotes(rm, now) });
         }
         if (act === 'ocState') ocSaveRoom(rm); // 대기실에 있다는 표시
         return buildJson({ success: true, room: ocRoomInfo(rm), seat: si });
