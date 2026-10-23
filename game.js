@@ -187,7 +187,7 @@
     {key:'signLv',    icon:'👑', name:'전결권',    desc:lv=>`보스(결재) 중에는 콤보 한계 ×${(1+0.3*lv).toFixed(1)}`, base:400000000000, grow:1.4, max:15, req:130},
   ];
   // 저장 구조 — 계정(acc) 안에 캐릭터별 진행(runs). st는 지금 키우는 캐릭터의 진행
-  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0});
+  const run0=()=>({lv:1,exp:0,gold:0,totalGold:0,atkLv:0,autoLv:0,critLv:0,bonusLv:0,offLv:0,stairLv:0,suikaLv:0,tetrisLv:0,extLv:0,mastLv:0,cafLv:0,focusLv:0,awakeLv:0,projLv:0,payLv:0,bossLv:0,preLv:0,vetLv:0,critPowLv:0,orgLv:0,signLv:0,stage:1,kills:0,bossFails:0,keys:0,bestCombo:0,done:false,tier:0,team:[]});
   // runs는 캐릭터 번호 자리에 저장(입사 안 한 직원은 null)
   const acc0=()=>({v:4,ch:0,runs:[run0()],inactiveAt:0,lastSave:Date.now(),created:Date.now()});
   let acc=acc0(), st=acc.runs[0], pid='', token='', nick='', dirty=false, serverOk=null, mon=null, opened=false, ticker=null, saver=null, lastRender=0;
@@ -293,7 +293,7 @@
   }
   function evChance(kind){ const e=currentEvent(); return e&&e[kind]||0; }
 
-  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*vetMult(s)*evMult('power')*cheerMult('power'); } // 업무력 × 숙련 × 관록 × 이벤트
+  function power(s){ return atkOf(s.atkLv,s.lv)*(1+0.1*(s.mastLv||0))*vetMult(s)*evMult('power')*cheerMult('power')*(1+teamHelp(s)); } // 업무력 × 숙련 × 관록 × 이벤트 × 팀원 도움
   // 임원 강화 — 기존 강화를 한 번 더 곱해서 올림. 보스(결재)가 일반 업무보다 8배 단단해서 고직급에서 막히던 걸 푼다
   function vetMult(s){ return 1+0.2*((s||st).vetLv||0); }            // 관록 — 업무력 자체를 배수로
   function orgMult(s){ return 1+0.3*((s||st).orgLv||0); }            // 조직력 — 커피 수혈을 배수로
@@ -450,6 +450,7 @@
     if(mon.golden) floatText('🌟 황금 업무! 실적 ×10',true,true);
     st.gold+=g; st.totalGold+=g;
     fxPop('fx-coin',{cls:'coin',gap:250,ms:800});
+    teamMistake(g);
     gainExp(mon.boss?st.stage*6:st.stage);
     if(mon.boss){ st.stage++; st.kills=0; st.bossFails=0; toast(`🎉 ${mon.name} 통과! ${st.stage}단계로`); }
     else st.kills++;
@@ -779,7 +780,7 @@
         :'<div class="gm-keys" id="gmKeys" onpointerdown="gmTouchTap(event)"></div><div class="gm-hint" id="gmFocusHint"></div>'}
       <div class="gm-ups" id="gmUps" onmouseleave="gmTipHide()"></div>
       <div class="gm-tip" id="gmTip" style="display:none"></div>
-      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}미니게임 월드</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
+      <div class="gm-foot"><button type="button" class="gm-link" onclick="gmShowRanking()">${menuIcon('rank')}랭킹</button><button type="button" class="gm-link" onclick="gmShowChars()">${menuIcon('staff')}직원</button><button type="button" class="gm-link${teamUnlocked()?'':' locked'}" onclick="gmShowTeam()">${ic('ticket.png')}팀원</button><button type="button" class="gm-link" onclick="gmShowWorld()">${menuIcon('world')}미니게임 월드</button><span id="gmSave"></span><button type="button" class="gm-link" onclick="gmLogout()">${menuIcon('logout')}로그아웃</button></div>`;
     render(); renderMonster(); renderKeys(); renderFocus();
     { const w=el('gmWidget'), b=el('gmBody'), short=GM_MIN_H-w.offsetHeight; // 창이 550px보다 짧으면 본문을 늘림
       if(short>0){ b.style.minHeight=(b.offsetHeight+short)+'px'; b.classList.add('padded'); } }
@@ -1657,6 +1658,104 @@
       }).join('')+'<button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>';
     lockBodySize();
   }
+
+  /* ---------- 팀원 뽑기 (과장부터) ---------- */
+  // 다른 팀의 인턴·사원을 데려와 팀을 꾸림. 도움(처리량 +%)을 주지만 업무를 끝낼 때 확률로 실수해서 실적을 까먹음.
+  // 인턴 뽑기는 싸고 실수가 많음, 사원 뽑기는 비싸고 등급이 높음. 같은 팀원이 또 나오면 그 팀원 레벨업(최대 5).
+  // 팀은 직원(캐릭터)마다 따로. 이미지가 오기 전까지는 색 원 + 이름
+  const TEAM_REQ=35; // 과장
+  const TEAM_NAMES=['간소영','긴성훈','박근찬','정생주','추지원','정택후','김남석','우인득'];
+  const TEAM_FACES={}; // 이름 → 얼굴 이미지 경로 (받는 대로 추가)
+  const TEAM_COLORS=['#f48fb1','#64b5f6','#81c784','#ffb74d','#ba68c8','#4db6ac','#e57373','#a1887f'];
+  const TEAM_GRADE_HELP=[0,0.03,0.06,0.10,0.16,0.25];       // 등급별 기본 도움(처리량 +%)
+  const TEAM_TRAITS={
+    '성실':{help:1,   miss:0.6, desc:'실수 적음'},
+    '열정':{help:1.3, miss:1.2, desc:'도움 많고 실수 조금 많음'},
+    '덜렁':{help:1.5, miss:1.8, desc:'도움 많지만 자주 실수'},
+    '칼퇴':{help:0.8, miss:0.5, desc:'도움 적고 실수 적음'},
+    '무난':{help:1,   miss:1,   desc:'평범'},
+  };
+  const TEAM_PULL={
+    intern:{name:'인턴 뽑기', rank:'인턴', cost:40,  odds:[0,50,30,15,4.5,0.5], miss:0.08, loss:1.5, helpMul:1},
+    staff: {name:'사원 뽑기', rank:'사원', cost:200, odds:[0,0,40,35,20,5],     miss:0.04, loss:1, helpMul:1.5},
+  };
+  const TEAM_MISTAKES=['서류를 잘못 보냄','엑셀 수식을 날림','거래처에 엉뚱한 메일 발송','회의 시간을 착각','복사기를 고장 냄','결재 서류를 분실','커피를 키보드에 쏟음','견적서 숫자를 틀림'];
+  function teamUnlocked(){ return st.lv>=TEAM_REQ; }
+  function teamSlots(){ const n=rankNo(st.lv); return n<5?0:Math.min(5,n-3); } // 과장 2 · 차장 3 · 부장 4 · 이사 이상 5
+  function memberHelp(m){ const P=TEAM_PULL[m.kind]; return TEAM_GRADE_HELP[m.grade]*P.helpMul*TEAM_TRAITS[m.trait].help*(1+0.25*(m.lv-1)); }
+  function memberMiss(m){ const P=TEAM_PULL[m.kind]; return Math.max(0.005,P.miss*(1.2-0.15*m.grade)*TEAM_TRAITS[m.trait].miss*(1-0.12*(m.lv-1))); }
+  function teamHelp(s){ return (s&&s.team||[]).reduce((a,m)=>a+memberHelp(m),0); }
+  function pullCost(kind){ return Math.ceil(4*Math.pow(1.17,st.stage-1)*goldMult(st.bonusLv)*TEAM_PULL[kind].cost); } // 지금 단계 업무 보상 N건치
+  // 업무를 끝낼 때마다 팀원별로 실수 판정 — 실수하면 그 업무 보상의 몇 배를 까먹음(가진 실적까지만)
+  function teamMistake(g){
+    for(const m of st.team||[]){
+      if(Math.random()>=memberMiss(m)) continue;
+      const loss=Math.min(st.gold,Math.ceil(g*TEAM_PULL[m.kind].loss*(1-0.1*(m.grade-1))));
+      if(loss<=0) continue;
+      st.gold-=loss; dirty=true;
+      floatText(`😵 ${TEAM_NAMES[m.id]} 실수! -${fmt(loss)}`,false);
+      if(Math.random()<0.25) toast(`😵 ${TEAM_NAMES[m.id]}이(가) ${TEAM_MISTAKES[Math.floor(Math.random()*TEAM_MISTAKES.length)]}! 실적 -${fmt(loss)}`,2600);
+      return; // 한 번에 한 명만
+    }
+  }
+  function teamFace(id,cls){
+    const f=TEAM_FACES[TEAM_NAMES[id]];
+    return f?`<img class="${cls||''}" src="${f}" alt=""/>`:`<span class="gm-face-ph gm-team-ph ${cls||''}" style="background:${TEAM_COLORS[id]}">${escHtml(TEAM_NAMES[id].slice(1))}</span>`;
+  }
+  const stars=g=>'★'.repeat(g)+'☆'.repeat(5-g);
+  function gmShowTeam(){
+    if(!teamUnlocked()){ toast(`🔒 지금 키우는 직원이 과장(Lv.${TEAM_REQ}) 이상이면 팀원을 뽑을 수 있습니다`,2800); return; }
+    st.team=st.team||[];
+    const slots=teamSlots(), full=st.team.length>=slots;
+    const rows=st.team.map((m,i)=>`<div class="gm-team-row">
+        <span class="gm-avatar">${teamFace(m.id)}</span>
+        <span class="gm-team-text"><b>${escHtml(TEAM_NAMES[m.id])} <small class="gm-team-rank ${m.kind}">${TEAM_PULL[m.kind].rank}</small> <span class="gm-team-stars g${m.grade}">${stars(m.grade)}</span>${m.lv>1?` <small>Lv.${m.lv}</small>`:''}</b>
+          <small>${m.trait} · 도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></span>
+        <button type="button" class="gm-team-out" onclick="gmTeamRelease(${i})">방출</button></div>`).join('');
+    const empty=Array.from({length:Math.max(0,slots-st.team.length)},()=>`<div class="gm-team-row empty"><span class="gm-avatar"><span class="gm-face-ph gm-team-ph">?</span></span><span class="gm-team-text"><b>빈 자리</b><small>뽑기로 팀원을 데려오세요</small></span></div>`).join('');
+    const pullBtn=k=>{ const P=TEAM_PULL[k], c=pullCost(k), ok=st.gold>=c&&!full;
+      return `<button type="button" class="gm-team-pull ${k}" ${ok?'':'disabled'} onclick="gmTeamPull('${k}')"><b>${P.name}</b><small>${MONEY}${fmt(c)}</small></button>`; };
+    el('gmBody').innerHTML=`<div class="gm-rank-title">${ic('ticket.png')}팀원 <small>${st.team.length}/${slots}명 · 팀 도움 +${(teamHelp(st)*100).toFixed(1)}%</small></div>
+      <div class="gm-team-list">${rows}${empty}</div>
+      <div class="gm-team-pulls">${pullBtn('intern')}${pullBtn('staff')}</div>
+      <div class="gm-st-info" id="gmTeamMsg">${full?'자리가 꽉 찼습니다. 방출하면 새로 뽑을 수 있어요':'인턴은 싸지만 실수가 많고, 사원은 비싸지만 든든합니다'}</div>
+      <button type="button" class="gm-btn" onclick="gmBack()">돌아가기</button>`;
+    lockBodySize();
+  }
+  function rollGrade(odds){ let r=Math.random()*100; for(let g=1;g<odds.length;g++){ r-=odds[g]; if(r<0) return g; } return odds.length-1; }
+  window.gmTeamPull=function(kind){
+    const P=TEAM_PULL[kind], c=pullCost(kind);
+    st.team=st.team||[];
+    if(st.gold<c||st.team.length>=teamSlots()) return;
+    st.gold-=c; dirty=true; lastInput=Date.now();
+    const id=Math.floor(Math.random()*TEAM_NAMES.length), grade=rollGrade(P.odds);
+    const traits=Object.keys(TEAM_TRAITS), trait=traits[Math.floor(Math.random()*traits.length)];
+    const dup=st.team.find(m=>m.id===id);
+    let result;
+    if(dup){ // 이미 있는 팀원 → 레벨업(최대 5), 더 높은 등급이 나오면 등급도 올림
+      dup.lv=Math.min(5,dup.lv+1); if(grade>dup.grade) dup.grade=grade; if(kind==='staff') dup.kind='staff';
+      result={m:dup,dup:true};
+    } else { const m={id,kind,grade,trait,lv:1}; st.team.push(m); result={m,dup:false}; }
+    saveServer(true);
+    gmShowTeam();
+    // 카드 뒤집기 연출
+    const w=el('gmWidget'), m=result.m, d=document.createElement('div');
+    d.className='gm-pull g'+m.grade;
+    d.innerHTML=`<div class="gm-pull-card"><div class="gm-pull-back">?</div><div class="gm-pull-front">
+      <div class="gm-pull-face">${teamFace(m.id,'gm-pull-img')}</div>
+      <div class="gm-team-stars g${m.grade}">${stars(m.grade)}</div>
+      <b>${escHtml(TEAM_NAMES[m.id])}</b><small>${TEAM_PULL[m.kind].rank} · ${m.trait}${result.dup?` · Lv.${m.lv}로 레벨업!`:''}</small>
+      <small>도움 +${(memberHelp(m)*100).toFixed(1)}% · 실수 ${(memberMiss(m)*100).toFixed(1)}%</small></div></div>`;
+    d.addEventListener('click',()=>d.remove()); setTimeout(()=>d.remove(),4200);
+    w.appendChild(d);
+    if(m.grade>=4) fxPop('fx-confetti',{cls:'big',ms:1400,x:50});
+  };
+  window.gmTeamRelease=function(i){
+    const m=st.team&&st.team[i]; if(!m) return;
+    if(!confirm(`${TEAM_NAMES[m.id]}을(를) 방출할까요? (되돌릴 수 없음)`)) return;
+    st.team.splice(i,1); dirty=true; saveServer(true); gmShowTeam();
+  };
+  window.gmShowTeam=gmShowTeam;
 
   /* ---------- 열기/닫기 ---------- */
   async function gmOpen(){

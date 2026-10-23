@@ -1923,3 +1923,39 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-tt-btns { gap:5px; }
 .gm-tt-btns button { padding:7px 0; font-size:15px; }
 .gm-body.fixed > .gm-tt-btns + .gm-btn { margin-top:6px; }
+
+/* 좆좋소 키우기 — 팀원 뽑기 */
+.gm-team-ph { width:40px; height:40px; font-size:12px; }
+.gm-team-list { display:flex; flex-direction:column; gap:5px; }
+.gm-team-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; background:var(--input-bg); border:1px solid var(--border2); }
+.gm-team-row.empty { opacity:0.55; border-style:dashed; }
+.gm-team-text { flex:1; min-width:0; display:flex; flex-direction:column; font-size:12px; }
+.gm-team-text small { color:var(--text3); font-size:10.5px; }
+.gm-team-rank { font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:6px; color:#fff; vertical-align:1px; }
+.gm-team-rank.intern { background:#8bc34a; } .gm-team-rank.staff { background:#42a5f5; }
+.gm-team-stars { font-size:10.5px; letter-spacing:-1px; color:#c7c7c7; }
+.gm-team-stars.g3 { color:#42a5f5; } .gm-team-stars.g4 { color:#ab47bc; } .gm-team-stars.g5 { color:#ffb300; text-shadow:0 0 4px rgba(255,179,0,0.6); }
+.gm-team-out { flex-shrink:0; padding:4px 8px; border-radius:8px; border:1px solid var(--border); background:none; color:var(--text3); font-size:11px; font-family:inherit; cursor:pointer; }
+.gm-team-out:hover { color:#e53935; border-color:#e53935; }
+.gm-team-pulls { display:flex; gap:8px; margin-top:10px; }
+.gm-team-pull { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 6px; border:none; border-radius:12px; color:#fff; font-family:inherit; cursor:pointer;
+  box-shadow:0 4px 0 rgba(0,0,0,0.25); }
+.gm-team-pull b { font-size:13px; } .gm-team-pull small { font-size:11px; font-weight:700; }
+.gm-team-pull.intern { background:linear-gradient(180deg,#9ccc65,#689f38); }
+.gm-team-pull.staff { background:linear-gradient(180deg,#64b5f6,#1e88e5); }
+.gm-team-pull:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,0.25); }
+.gm-team-pull:disabled { opacity:0.45; cursor:default; transform:none; }
+.gm-team-pull .gm-money { height:13px; }
+/* 뽑기 카드 연출 */
+.gm-pull { position:absolute; inset:0; z-index:45; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); animation:gmFade 0.2s; perspective:800px; }
+.gm-pull-card { position:relative; width:200px; height:250px; transform-style:preserve-3d; animation:gmFlip 0.9s ease-out 0.15s both; }
+@keyframes gmFlip { from { transform:rotateY(180deg) scale(0.7); } to { transform:rotateY(0) scale(1); } }
+.gm-pull-back, .gm-pull-front { position:absolute; inset:0; border-radius:16px; backface-visibility:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; }
+.gm-pull-back { transform:rotateY(180deg); background:linear-gradient(135deg,#5c6bc0,#283593); color:#fff; font-size:60px; font-weight:800; }
+.gm-pull-front { background:var(--surface); color:var(--text); border:3px solid #bdbdbd; box-shadow:0 10px 30px rgba(0,0,0,0.4); padding:10px; text-align:center; }
+.gm-pull-front b { font-size:17px; } .gm-pull-front small { font-size:11px; color:var(--text3); }
+.gm-pull-face .gm-face-ph, .gm-pull-img { width:84px !important; height:84px !important; font-size:22px; border-radius:50%; }
+.gm-pull.g3 .gm-pull-front { border-color:#42a5f5; }
+.gm-pull.g4 .gm-pull-front { border-color:#ab47bc; box-shadow:0 0 24px rgba(171,71,188,0.6); }
+.gm-pull.g5 .gm-pull-front { border-color:#ffb300; box-shadow:0 0 32px rgba(255,179,0,0.8); }
+.gm-pull-front .gm-team-stars { font-size:16px; }
