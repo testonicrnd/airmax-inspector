@@ -97,7 +97,7 @@
   function menuIcon(n){ return `<img class="gm-menu-ic" src="${UI}menu-${n}.png" alt=""/>`; }
   // 제목·탭·버튼에 쓰는 작은 그림 아이콘 (이모지 대신)
   function ic(f){ return `<img class="gm-ic" src="${UI}${f}" alt=""/>`; }
-  const IC={battleship:'skill-battleship.png',onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
+  const IC={block:'skill-block.png',battleship:'skill-battleship.png',onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
   const artCache={};
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
@@ -1113,7 +1113,9 @@
   function ocRecord(w,g){ w=w||0; g=Math.max(g||0,w); return `${w.toLocaleString()}승 ${(g-w).toLocaleString()}패 · <b>${g?Math.round(w/g*100):0}%</b>`; }
   async function gmShowRanking(board){
     board=['stairs','suika','tetris','block','onecard','battleship'].includes(board)?board:'promo';
-    const tabs=`<div class="gm-rank-tabs"><button type="button" class="${board==='promo'?'on':''}" onclick="gmShowRanking('promo')">${ic(IC.promo)}승진</button><button type="button" class="${board==='stairs'?'on':''}" onclick="gmShowRanking('stairs')">${ic(IC.stairs)}계단</button><button type="button" class="${board==='suika'?'on':''}" onclick="gmShowRanking('suika')">${ic(IC.suika)}수박</button><button type="button" class="${board==='tetris'?'on':''}" onclick="gmShowRanking('tetris')">${ic(IC.tetris)}테트리스</button><button type="button" class="${board==='block'?'on':''}" onclick="gmShowRanking('block')">🧩블록</button><button type="button" class="${board==='onecard'?'on':''}" onclick="gmShowRanking('onecard')">${ic(IC.onecard)}원카드</button><button type="button" class="${board==='battleship'?'on':''}" onclick="gmShowRanking('battleship')">${ic(IC.battleship)}해전</button></div>`;
+    // 탭은 아이콘만(게임이 늘어 한 줄에 다 들어가게) — 이름은 마우스를 올리면 보임, 지금 탭 이름은 아래 제목에
+    const tabs=`<div class="gm-rank-tabs">${[['promo','승진'],['stairs','무한의 계단'],['suika','수박 게임'],['tetris','테트리스'],['block','블록 블라스트'],['onecard','원카드'],['battleship','해전']]
+      .map(([k,n])=>`<button type="button" class="${board===k?'on':''}" title="${n}" aria-label="${n}" onclick="gmShowRanking('${k}')">${ic(IC[k])}</button>`).join('')}</div>`;
     const nth=x=>`<span class="gm-nth" title="${(x.tier||0)+1}번째로 키우는 직원">${(x.tier||0)+1}기</span>`;
     const info=x=>board==='block'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.block||0).toLocaleString()}점`:board==='onecard'||board==='battleship'?ocRecord(x.onecard,x.ocGames):board==='promo'?`${rankBadge(x.level,'gm-row-badge')}${nth(x)}${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`:board==='stairs'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.stairs||0).toLocaleString()}층`:board==='suika'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.suika||0).toLocaleString()}점`:board==='tetris'?`${nth(x)}${escHtml(charName(x.ch||0))} · ${(x.tetris||0).toLocaleString()}점`:`${escHtml(charName(x.ch||0))} ${rankOf(x.level)[2]} · ${x.stage}단계`;
     const mine=board==='block'?`${(acc.bbBest||0).toLocaleString()}점`:board==='onecard'?ocRecord(acc.ocWins,acc.ocGames):board==='battleship'?ocRecord(acc.bsWins,acc.bsGames):board==='stairs'?`${(acc.stairsBest||0).toLocaleString()}층`:board==='suika'?`${(acc.suikaBest||0).toLocaleString()}점`:board==='tetris'?`${(acc.tetrisBest||0).toLocaleString()}점`:'나';
@@ -2600,20 +2602,20 @@
   // 태양계처럼 본사 섬을 가운데 두고 미니게임 섬들이 궤도 위에 떠 있음. orb: [몇 번째 궤도, 각도(0=오른쪽, -90=위)]
   // 새 미니게임은 바깥 궤도 빈 자리에 각도만 정해서 추가하면 됨. 궤도가 꽉 차면 WORLD_ORBITS에 한 줄 더
   const WORLD=[
-    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[0,168],img:'isle-stairs.png',ar:1.42},
-    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[0,-22],img:'isle-suika.png',ar:1.07},
-    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-125],img:'isle-tetris.png',ar:1.11},
-    {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-72],img:'isle-battleship.png',ar:1.01,size:1.05},
-    {id:'block', icon:'🧩',name:'블록 블라스트',req:BB_REQ,best:()=>(acc.bbBest||0).toLocaleString()+'점',go:()=>gmShowBlock(),orb:[1,100]},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,55],img:'isle-onecard.png',ar:1.09,size:1.25},
+    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[1,150],img:'isle-stairs.png',ar:1.42},
+    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[1,-30],img:'isle-suika.png',ar:1.07},
+    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-150],img:'isle-tetris.png',ar:1.11},
+    {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-90],img:'isle-battleship.png',ar:1.01,size:1.05},
+    {id:'block', icon:'🧩',name:'블록 블라스트',req:BB_REQ,best:()=>(acc.bbBest||0).toLocaleString()+'점',go:()=>gmShowBlock(),orb:[1,90],img:'isle-block.png',ar:0.94,size:1.05},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,30],img:'isle-onecard.png',ar:1.09,size:1.15},
   ];
-  const WORLD_ORBITS=[[0.34,0.25],[0.40,0.40]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
+  const WORLD_ORBITS=[[0.34,0.25],[0.37,0.32]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
   function placeIsles(){
     const box=el('gmWorld'); if(!box) return;
-    const W=box.clientWidth, H=box.clientHeight, cx=W/2, cy=H*0.5, unit=Math.min(W,H*0.85);
-    const hq=box.querySelector('.gm-hq'), hw=Math.round(unit*0.36); hq.style.width=hw+'px'; hq.style.left=(cx-hw/2)+'px'; hq.style.top=(cy-hw*0.5)+'px';
+    const W=box.clientWidth, H=box.clientHeight, cx=W/2, cy=H*0.46, unit=Math.min(W,H*0.85); // 아래 섬 이름표 자리를 위해 조금 위로
+    const hq=box.querySelector('.gm-hq'), hw=Math.round(unit*0.32); hq.style.width=hw+'px'; hq.style.left=(cx-hw/2)+'px'; hq.style.top=(cy-hw*0.5)+'px';
     box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], [rx,ry]=WORLD_ORBITS[w.orb[0]], t=w.orb[1]*Math.PI/180;
-      const x=cx+Math.cos(t)*rx*W, y=cy+Math.sin(t)*ry*H, iw=Math.round(unit*0.27*(w.size||1));
+      const x=cx+Math.cos(t)*rx*W, y=cy+Math.sin(t)*ry*H, iw=Math.round(unit*0.25*(w.size||1));
       b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*(w.ar||1)*0.5)+'px'; });
   }
   function gmShowWorld(){
