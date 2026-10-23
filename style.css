@@ -2098,7 +2098,7 @@ body.checklist-page-active { padding-bottom:46px; }
 .oc-seat.out { opacity:0.4; filter:grayscale(1); }
 .oc-seat.win .oc-face { box-shadow:0 0 0 3px #69f0ae, 0 0 18px #69f0ae; }
 .oc-cnt { font-size:10px; font-weight:800; padding:1px 7px; border-radius:8px; background:rgba(0,0,0,0.45); }
-.oc-fan { display:flex; margin-top:2px; } .oc-fan i { width:9px; height:13px; margin-left:-4px; border-radius:2px; background:linear-gradient(135deg,#c62828,#7b1fa2); border:1px solid #fff; }
+.oc-fan { display:flex; margin-top:2px; } .oc-fan i { width:9px; height:13px; margin-left:-4px; border-radius:2px; background:#b71c1c url(assets/game/ui/oc-back.png) center/100% 100% no-repeat; box-shadow:0 1px 2px rgba(0,0,0,0.4); }
 .oc-fan i:first-child { margin-left:0; }
 .oc-center { position:absolute; left:50%; top:46%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:12px; }
 .oc-deck { position:relative; } .oc-deck small { position:absolute; bottom:-14px; left:0; right:0; text-align:center; color:#fff; font-size:10px; opacity:0.8; }
@@ -2117,7 +2117,7 @@ body.checklist-page-active { padding-bottom:46px; }
   display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; box-shadow:0 2px 4px rgba(0,0,0,0.3); flex-shrink:0; }
 .oc-card .r { font-size:13px; font-weight:900; line-height:1; } .oc-card .su { font-size:22px; line-height:1; align-self:center; margin-bottom:6px; }
 .oc-card.red { color:#d32f2f; }
-.oc-card.back { background:repeating-linear-gradient(45deg,#c62828 0 5px,#b71c1c 5px 10px); border:2px solid #fff; }
+.oc-card.back { background:#b71c1c url(assets/game/ui/oc-back.png) center/100% 100% no-repeat; border:none; padding:0; }
 .oc-card.joker .r { font-size:8px; letter-spacing:0.5px; } .oc-card.joker .su { font-size:24px; }
 .oc-card.joker.bj { background:linear-gradient(160deg,#fff,#cfd8dc); }
 .oc-card.joker.cj { background:linear-gradient(160deg,#fff59d,#f48fb1,#90caf9); }

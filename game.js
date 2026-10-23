@@ -97,7 +97,7 @@
   function menuIcon(n){ return `<img class="gm-menu-ic" src="${UI}menu-${n}.png" alt=""/>`; }
   // 제목·탭·버튼에 쓰는 작은 그림 아이콘 (이모지 대신)
   function ic(f){ return `<img class="gm-ic" src="${UI}${f}" alt=""/>`; }
-  const IC={onecard:'skill-tetris.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
+  const IC={onecard:'skill-onecard.png',promo:'menu-rank.png',stairs:'skill-stair.png',suika:'skill-suika.png',tetris:'skill-tetris.png',world:'menu-world.png',staff:'menu-staff.png'};
   const artCache={};
   function art(name){ if(!artCache[name]){ const im=new Image(); im.src=UI+name; artCache[name]=im; } return artCache[name]; }
   function artReady(im){ return im&&im.complete&&im.naturalWidth>0; }
@@ -1823,7 +1823,7 @@
   async function ocLobbyLoad(){
     try{ const j=await gas({action:'ocLobby'}); if(oc&&oc.mode==='lobby'&&j.success) ocLobbyRender(j.rooms||[]); }catch(e){}
   }
-  function ocHead(info){ return `<div class="gm-st-head"><b>${ic('skill-tetris.png')}원카드</b><span>${info||''}</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('onecard')">✕ 나가기</button></div>`; }
+  function ocHead(info){ return `<div class="gm-st-head"><b>${ic('skill-onecard.png')}원카드</b><span>${info||''}</span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('onecard')">✕ 나가기</button></div>`; }
   function ocLobbyRender(rooms){
     if(!oc||oc.mode!=='lobby') return;
     el('gmBody').innerHTML=ocHead(`승리 <b>${(acc.ocWins||0).toLocaleString()}</b>회`)+`
@@ -2000,7 +2000,7 @@
     {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),pos:[0.645,0.545],img:'isle-stairs.png',ar:1.42,top:0.62},
     {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), pos:[0.32,0.345],img:'isle-suika.png',ar:1.07,top:0.45},
     {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),pos:[0.645,0.16],img:'isle-tetris.png',ar:1.11,top:0.45},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),pos:[0.19,0.15]},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>(acc.ocWins||0).toLocaleString()+'승',go:()=>gmShowOneCard(),pos:[0.19,0.15],img:'isle-onecard.png',ar:1.09,top:0.45},
   ];
   const MAP_W=760, MAP_H=1064; // world-map.jpg 크기
   // 지도 그림을 영역에 꽉 채웠을 때(cover, 세로는 위쪽 20% 기준 — CSS background-position과 같게) 섬 위치를 화면 좌표로.
