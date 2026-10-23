@@ -2022,6 +2022,7 @@
     inn.style.height=Math.round((MAP_H+MAP_EXT)*k)+'px';
     inn.querySelectorAll('.gm-world-map,.gm-world-path').forEach(m=>{ m.style.left=ox+'px'; m.style.width=MAP_W*k+'px'; });
     inn.querySelector('.gm-world-map').style.top=oy+'px';
+    const sky=inn.querySelector('.gm-world-sky'); sky.style.left=ox+'px'; sky.style.width=MAP_W*k+'px'; sky.style.height=(oy+MAP_H*k*0.1)+'px';
     box.querySelectorAll('.gm-isle').forEach(b=>{ const w=WORLD[+b.dataset.i], x=ox+w.pos[0]*MAP_W*k, y=oy+w.pos[1]*MAP_H*k;
       if(w.img){ const iw=Math.round((w.size||0.30)*MAP_W*k); b.style.width=iw+'px'; b.style.left=(x-iw/2)+'px'; b.style.top=(y-iw*w.ar*w.top)+'px'; }
       else { b.style.left=x+'px'; b.style.top=y+'px'; } });
@@ -2035,7 +2036,7 @@
     el('gmBody').innerHTML=`
       <div class="gm-st-head"><b>${ic(IC.world)}미니게임 월드</b><span>경험치는 지금 키우는 직원에게</span></div>
       <div class="gm-world" id="gmWorld"><div class="gm-world-up" id="gmWorldUp">▲ 위로 더 있어요</div><div class="gm-world-in" id="gmWorldIn">
-        <img class="gm-world-map" src="${UI}world-map.jpg" alt=""/>${worldPath()}
+        <i class="gm-world-sky"></i><img class="gm-world-map" src="${UI}world-map.jpg" alt=""/>${worldPath()}
         <i class="gm-cloud c1"></i><i class="gm-cloud c2"></i><i class="gm-cloud c3"></i><i class="gm-cloud c4"></i>
         ${WORLD.map((w,i)=>{ const o=open(w), soon=w.req==null;
           return `<button type="button" class="gm-isle${o?'':' locked'}${soon?' soon':''}${w.img?' art':''}" data-i="${i}" style="animation-delay:${-i*0.7}s" onclick="gmWorldGo(${i})">

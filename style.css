@@ -2146,11 +2146,8 @@ body.checklist-page-active { padding-bottom:46px; }
 /* 좆좋소 키우기 — 세로로 긴 월드(위로 스크롤). 지도 그림 위쪽은 같은 색 하늘로 이어 붙임 */
 .gm-world, :root[data-theme="dark"] .gm-world { overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; background:#4facf5; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gm-world { background:#4facf5; } }
-.gm-world-in { position:relative; overflow:hidden;
-  background:radial-gradient(ellipse 34% 7% at 12% 18%,rgba(255,255,255,0.85),transparent 70%),
-    radial-gradient(ellipse 30% 6% at 88% 34%,rgba(255,255,255,0.8),transparent 70%),
-    radial-gradient(ellipse 26% 5% at 82% 6%,rgba(255,255,255,0.7),transparent 70%),
-    linear-gradient(180deg,#2f86de 0%,#4facf5 30%); }
+.gm-world-in { position:relative; overflow:hidden; background:#106ff0; }
+.gm-world-sky { position:absolute; top:0; background:#106ff0 url("assets/game/ui/world-sky.jpg") center bottom/100% auto no-repeat; pointer-events:none; }
 .gm-world-map { position:absolute; display:block; height:auto; pointer-events:none; user-select:none; }
 .gm-world-path { position:absolute; top:0; height:100%; pointer-events:none; overflow:visible; }
 .gm-world-path path { fill:none; stroke:rgba(255,255,255,0.88); stroke-width:7; stroke-linecap:round; stroke-dasharray:16 13; }
@@ -2161,4 +2158,4 @@ body.checklist-page-active { padding-bottom:46px; }
 .gm-world-up.show { opacity:1; }
 .gm-body.fixed .gm-world { flex:1 1 0; flex-shrink:1; min-height:200px; }
 .gm-body:not(.fixed) .gm-world { height:420px; }
-.gm-world-map { -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 9%); mask-image:linear-gradient(180deg,transparent 0,#000 9%); }
+.gm-world-map { -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 13%); mask-image:linear-gradient(180deg,transparent 0,#000 13%); }
