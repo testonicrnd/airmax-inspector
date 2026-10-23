@@ -254,6 +254,7 @@
   function evMult(kind){ const e=currentEvent(); return e&&e[kind]?e[kind]:1; }
   // 새로 생긴 것 카드 — 버전이 바뀌면 게임을 열 때 한 번(계정에 본 버전 기억). 최신이 위
   const PATCH_NOTES=[
+    {v:'2.53.0', items:['🎰 <b>슬롯머신</b> — 이사부터, 실적을 걸고 한 판! 왕관 3개면 ×300 잭팟','🚢 해전 포격 효과가 두 번 터지던 문제 수정']},
     {v:'2.52.0', items:['📋 <b>오늘의 미션</b> — 평일마다 3개, 끝내면 추천서 (위 숫자 줄의 📋)','🏆 <b>주간 랭킹</b> — 미니게임 순위가 매주 월요일 새로 시작, 지난주 1~3위 추천서 10·6·3장','⚡ <b>근무 외 시간 사고</b> — 평일 8~19시 밖·주말엔 정전·인터넷 먹통 같은 사고로 효율 50%']},
     {v:'2.50.0', items:['🧩 <b>블록 블라스트</b> — 과장부터, 미니게임 월드에서']},
     {v:'2.49.0', items:['🚢 <b>해전</b> — 주임부터, 컴퓨터 또는 동료와 1:1','🔄 같이 하기 중 새로고침해도 로비를 열면 이어서']},
@@ -2514,7 +2515,7 @@
     const cells=[];
     const sending=bs.sending&&bs.sending.cell;
     const pc=(m,i)=>m[i]?` ship p-${m[i].p}${m[i].v?' v':''}`:'';
-    const pop=(on,res)=>on?`<i class="bs-pop ${res==='miss'?'miss':'hit'}"></i>`:'';
+    const pop=(on,res)=>on&&bs.popNow?`<i class="bs-pop ${res==='miss'?'miss':'hit'}"></i>`:''; // 새 포격일 때만 터짐(다시 그릴 때마다 또 터지던 문제)
     if(kind==='enemy'){
       const sunk=bsPieces(bsSunkShips(v.myShots)), rev=bsPieces(v.oppShips);
       for(let i=0;i<BS_N*BS_N;i++){
@@ -2541,6 +2542,7 @@
     const sig=v.ver+'|'+v.phase+'|'+v.ready+'|'+(bs.sending?bs.sending.action+bs.sending.cell:'')+'|'+placeSig;
     if(!force&&sig===bs.sig){ bsLive(v); return; } bs.sig=sig;
     const me=v.me, opp=v.players[1-me], myTurn=v.phase==='play'&&v.turn===me&&v.winner<0;
+    const lastKey=v.last?v.last.p+':'+v.last.cell:''; bs.popNow=!!lastKey&&lastKey!==bs.popKey; // 같은 칸은 한 번만 쏘므로 쏜 사람+칸이 포격 하나
     let main='';
     if(v.phase==='place'&&!v.ready){
       main=`<div class="bs-title">⚓ 내 함대 배치 <small>배를 누르면 방향이 바뀌어요</small></div>${bsBoard('place',v)}
@@ -2561,12 +2563,12 @@
       body.innerHTML=bsHead(bs.mode==='solo'?'혼자 하기':'같이 하기')+`<div class="bs-main" id="bsMain"></div><div class="oc-fx" id="bsFx"></div>`;
       body.dataset.bs='g'; body.dataset.oc=''; bs.bodyHtml=null; lockBodySize();
     }
-    el('bsMain').innerHTML=main;
+    el('bsMain').innerHTML=main; bs.popKey=lastKey;
     if(myTurn&&!bs.wasMyTurn){ const fx=el('bsFx'), d=document.createElement('div'); d.className='oc-turn-banner'; d.textContent='내 차례!'; fx.appendChild(d); setTimeout(()=>d.remove(),1400);
       if(bs.mode==='multi'&&(document.hidden||!document.hasFocus())) ocTitleAlert(true); }
     if(!myTurn) ocTitleAlert(false);
     bs.wasMyTurn=myTurn;
-    if(v.last&&v.last.cell!==bs.lastFx&&v.phase!=='place'){ bs.lastFx=v.last.cell; if(v.last.res==='sunk') fxPop('fx-combo',{ms:900,x:50}); }
+    if(bs.popNow&&v.last.res==='sunk'&&v.phase!=='place') fxPop('fx-combo',{ms:900,x:50});
     bsLive(v);
     if(v.winner>=0) bsFinish(v);
   }
@@ -2591,7 +2593,7 @@
     if(win) fxPop('fx-confetti',{cls:'big',ms:1500,x:50});
   }
   window.gmShowBattleship=gmShowBattleship;
-  if(window.__GM_TEST){ window.__bs=()=>bs; window.__bsRender=bsRender; } // 자동 테스트에서만
+  if(window.__GM_TEST){ window.__bs=()=>bs; window.__bsRender=bsRender; window.__bsEng={bsView,bsTick}; } // 자동 테스트에서만
   // 나가기 — 하다가 나가면 패(같이 하기는 컴퓨터가 이어받음)
   function bsLeave(){
     if(!bs) return;
@@ -2734,15 +2736,89 @@
   if(window.__GM_TEST){ window.__bb=()=>bb; window.__bbPlace=bbPlace; window.__bbRender=bbRender; } // 자동 테스트에서만
   window.gmBlockExit=function(){ if(bb&&!bb.over&&bb.score>0) bbEnd(); bbCleanup(); bb=null; gmShowWorld(); };
 
+  // ===== 슬롯머신 — 이사부터. 실적을 걸고 돌리는 회사 카지노(실적 소모처). 기대값 약 0.96이라 오래 하면 조금씩 잃음 =====
+  // 배당: 같은 그림 3개 = 큰 배당, 2개 = 작은 배당(본전 아래인 것도 있음). 추천서 3개면 추천서 +3 덤
+  const SLOT_REQ=95, SLOT_BETS=[10,50,200]; // 판돈 = 지금 단계 업무 보상 × 건수
+  const SLOT_SYMS=[
+    {k:'coffee', img:'task-coffee2', w:7,   x3:5,   x2:0.7},
+    {k:'clip',   img:'task-clip',    w:6,   x3:8,   x2:0.9},
+    {k:'report', img:'task-report',  w:5,   x3:12,  x2:1.4},
+    {k:'money',  img:'skill-bonus',  w:3,   x3:30,  x2:2.2},
+    {k:'medal',  img:'medal-1',      w:2,   x3:80,  x2:3.5},
+    {k:'ticket', img:'ticket',       w:1.5, x3:10,  x2:1, refs:3},
+    {k:'crown',  img:'rank-11',      w:1.3, x3:300, x2:7},
+  ];
+  let slot=null; // {bet:0|1|2, spinning, last}
+  function slotUnlocked(){ return acc.runs.some(r=>r&&r.lv>=SLOT_REQ); }
+  function slotPick(){ let t=Math.random()*SLOT_SYMS.reduce((a,s)=>a+s.w,0); for(const s of SLOT_SYMS){ t-=s.w; if(t<0) return s; } return SLOT_SYMS[0]; }
+  function slotBetAmt(i){ return Math.ceil(rewardOf(st.stage,false)*SLOT_BETS[i]); }
+  function slotImg(s,cls){ return `<img class="${cls||''}" src="${UI}${s.img}.png" alt=""/>`; }
+  function gmShowSlot(){
+    if(!slotUnlocked()){ toast(`🔒 이사(Lv.${SLOT_REQ}) 이상 달성 시 자동으로 해금됩니다`,2500); return; }
+    slot={bet:slot?slot.bet:0,spinning:false,last:null};
+    const strip=()=>[slotPick(),slotPick(),slotPick()].map(s=>`<div class="sl-sym">${slotImg(s)}</div>`).join('');
+    el('gmBody').innerHTML=`
+      <div class="gm-st-head"><b>🎰 슬롯머신</b><span>${MONEY} <b id="slGold">${fmt(st.gold)}</b></span><button type="button" class="gm-exit" tabindex="-1" onmousedown="event.preventDefault()" onclick="gmExitAsk('slot')">✕ 나가기</button></div>
+      <div class="sl-main">
+        <div class="sl-machine" id="slMachine">
+          <div class="sl-lights"></div>
+          <div class="sl-reels">${[0,1,2].map(i=>`<div class="sl-reel"><div class="sl-strip" id="slStrip${i}">${strip()}</div></div>`).join('')}<i class="sl-line"></i></div>
+          <div class="sl-result" id="slResult">판돈을 고르고 돌려 보세요</div>
+        </div>
+        <div class="sl-bets">${SLOT_BETS.map((n,i)=>`<button type="button" class="sl-bet${i===slot.bet?' on':''}" onclick="slotBet(${i})"><b>${fmt(slotBetAmt(i))}</b><small>업무 ${n}건치</small></button>`).join('')}</div>
+        <button type="button" class="sl-spin" id="slSpin" onclick="slotSpin()">🎰 돌리기</button>
+        <div class="sl-table">${SLOT_SYMS.slice().reverse().map(s=>`<span>${slotImg(s)}${slotImg(s)}${slotImg(s)}<b>×${s.x3}</b>${s.refs?`<em>+추천서 ${s.refs}</em>`:''}</span>`).join('')}<span class="sl-pair">같은 그림 2개 ×0.7~7</span></div>
+      </div>
+      <div class="gm-st-info" id="slInfo">${slotInfo()}</div>`;
+    lockBodySize();
+  }
+  window.slotBet=function(i){ if(!slot||slot.spinning) return; slot.bet=i; document.querySelectorAll('.sl-bet').forEach((b,k)=>b.classList.toggle('on',k===i)); };
+  window.slotSpin=function(){
+    if(!slot||slot.spinning) return;
+    const bet=slotBetAmt(slot.bet);
+    if(st.gold<bet){ toast('💸 실적이 모자라요 — 판돈을 줄이거나 업무를 더 하세요',2200); return; }
+    lastInput=Date.now(); slot.spinning=true; st.gold-=bet; dirty=true;
+    el('slGold').textContent=fmt(st.gold); el('slSpin').disabled=true; el('slResult').textContent='돌아가는 중…'; el('slMachine').classList.remove('win','jackpot');
+    const res=[slotPick(),slotPick(),slotPick()], H=el('slStrip0').querySelector('.sl-sym').offsetHeight||60;
+    res.forEach((r,i)=>{ const strip=el('slStrip'+i), n=14+i*5; // 뒤 릴일수록 더 오래 돌다 멈춤
+      const syms=[]; for(let k=0;k<n;k++) syms.push(slotPick()); syms.push(r,slotPick()); // 결과는 가운데 줄
+      strip.style.transition='none'; strip.style.transform='translateY(0)';
+      strip.innerHTML=`<div class="sl-sym">${slotImg(slotPick())}</div>`+syms.map(s=>`<div class="sl-sym">${slotImg(s)}</div>`).join('');
+      void strip.offsetHeight;
+      strip.style.transition=`transform ${0.9+i*0.35}s cubic-bezier(.15,.85,.25,1.03)`;
+      strip.style.transform=`translateY(-${n*H}px)`; });
+    setTimeout(()=>slotDone(res,bet),0.9*1000+2*350+120);
+  };
+  function slotDone(res,bet){
+    if(!slot) return; slot.spinning=false;
+    const [a,b,c]=res; let mult=0, sym=null, triple=false;
+    if(a.k===b.k&&b.k===c.k){ mult=a.x3; sym=a; triple=true; }
+    else { const p=a.k===b.k?a:b.k===c.k?b:a.k===c.k?a:null; if(p){ mult=p.x2; sym=p; } }
+    const win=Math.floor(bet*mult);
+    st.gold+=win; st.totalGold+=Math.max(0,win-bet); acc.slotSpins=(acc.slotSpins||0)+1; if(mult>(acc.slotBest||0)) acc.slotBest=mult; dirty=true;
+    if(triple&&sym.refs){ addRefs(sym.refs); }
+    const m=el('slMachine'), r=el('slResult'); if(!m) return;
+    el('slGold').textContent=fmt(st.gold); el('slSpin').disabled=false; if(el('slInfo')) el('slInfo').innerHTML=slotInfo();
+    if(!mult){ r.innerHTML='꽝… 다시 한 번?'; return; }
+    r.innerHTML=`${triple?(sym.k==='crown'?'👑 잭팟!! ':'🎉 '):''}<b>×${mult}</b> · ${MONEY} +${fmt(win)}${triple&&sym.refs?` · ${ic('ticket.png')}추천서 +${sym.refs}`:''}`;
+    m.classList.add(triple&&sym.k==='crown'?'jackpot':'win');
+    if(mult>=10) fxPop('fx-coin',{cls:'big',ms:1200,x:50});
+    if(triple&&sym.k==='crown'){ fxPop('fx-confetti',{cls:'big',ms:1800,x:50}); const w=el('gmWidget'); w.classList.add('gm-shake'); setTimeout(()=>w.classList.remove('gm-shake'),600); saveServer(true); }
+  }
+  function slotInfo(){ return `최고 배당 <b>×${acc.slotBest||0}</b> · 돌린 횟수 ${(acc.slotSpins||0).toLocaleString()}회 · 오래 하면 조금씩 잃어요`; }
+  window.gmShowSlot=gmShowSlot;
+  if(window.__GM_TEST){ window.__slot=()=>slot; window.__slotDone=slotDone; window.__SLOT_SYMS=SLOT_SYMS; }
+
   // 태양계처럼 본사 섬을 가운데 두고 미니게임 섬들이 궤도 위에 떠 있음. orb: [몇 번째 궤도, 각도(0=오른쪽, -90=위)]
   // 새 미니게임은 바깥 궤도 빈 자리에 각도만 정해서 추가하면 됨. 궤도가 꽉 차면 WORLD_ORBITS에 한 줄 더
   const WORLD=[
-    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[1,150],img:'isle-stairs.png',ar:1.42},
-    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[1,-30],img:'isle-suika.png',ar:1.07},
-    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-150],img:'isle-tetris.png',ar:1.11},
+    {id:'stairs',icon:'🪜',name:'무한의 계단',req:STAIRS_REQ,best:()=>(acc.stairsBest||0).toLocaleString()+'층',go:()=>gmShowStairs(),orb:[1,167],img:'isle-stairs.png',ar:1.42},
+    {id:'suika', icon:'🍉',name:'수박 게임',  req:SUIKA_REQ, best:()=>(acc.suikaBest||0).toLocaleString()+'점', go:()=>gmShowSuika(), orb:[1,-39],img:'isle-suika.png',ar:1.07},
+    {id:'tetris',icon:'🧱',name:'테트리스',   req:TT_REQ,    best:()=>(acc.tetrisBest||0).toLocaleString()+'점',go:()=>gmShowTetris(),orb:[1,-141],img:'isle-tetris.png',ar:1.11},
     {id:'battleship',icon:'🚢',name:'해전',     req:BS_REQ,    best:()=>{ const w=acc.bsWins||0, g=Math.max(acc.bsGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('bs'),go:()=>gmShowBattleship(),orb:[1,-90],img:'isle-battleship.png',ar:1.01,size:1.05},
-    {id:'block', icon:'🧩',name:'블록 블라스트',req:BB_REQ,best:()=>(acc.bbBest||0).toLocaleString()+'점',go:()=>gmShowBlock(),orb:[1,90],img:'isle-block.png',ar:0.94,size:1.05},
-    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,30],img:'isle-onecard.png',ar:1.09,size:1.15},
+    {id:'block', icon:'🧩',name:'블록 블라스트',req:BB_REQ,best:()=>(acc.bbBest||0).toLocaleString()+'점',go:()=>gmShowBlock(),orb:[1,64],img:'isle-block.png',ar:0.94,size:1.05},
+    {id:'slot',  icon:'🎰',name:'슬롯머신',  req:SLOT_REQ,  best:()=>`최고 ×${acc.slotBest||0}`,rec:true,go:()=>gmShowSlot(),orb:[1,116]},
+    {id:'onecard',icon:'🃏',name:'원카드',    req:OC_REQ,    best:()=>{ const w=acc.ocWins||0, g=Math.max(acc.ocGames||0,w); return `${w}승 ${g-w}패`; },rec:true,resume:()=>roomSaved('oc'),go:()=>gmShowOneCard(),orb:[1,13],img:'isle-onecard.png',ar:1.09,size:1.15},
   ];
   const WORLD_ORBITS=[[0.34,0.25],[0.37,0.32]]; // 궤도 가로·세로 반지름(영역 너비·높이 대비) — 선은 그리지 않고 섬 위치만 정함
   function placeIsles(){
@@ -2790,6 +2866,7 @@
   window.gmStep=gmStep;
   // 미니게임 나가기 — 제목 줄의 작은 버튼. 진행 중이면 한 번 더 확인(조작하다 잘못 눌러 꺼지는 것 방지)
   window.gmExitAsk=function(kind){
+    if(kind==='slot'){ if(slot&&slot.spinning) return; slot=null; gmShowWorld(); return; }
     if(kind==='block'){ if(bb&&!bb.over&&bb.score>0&&!confirm('이번 판을 여기서 끝낼까요? (지금 점수로 보상)')) return; gmBlockExit(); return; }
     if(kind==='battleship'){ const playing=bs&&(bs.mode==='solo'||bs.mode==='multi')&&!bs.done;
       if(playing&&!confirm(bs.mode==='multi'?'해전에서 나갈까요? (패로 기록되고 내 함대는 컴퓨터가 이어받습니다)':'진행 중인 해전을 그만할까요? (패로 기록, 보상 없음)')) return;
