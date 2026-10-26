@@ -1,6 +1,6 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v2.17.3';
-const APP_DATE    = '2026.10.21';
+const APP_VERSION = 'v3.1.0';
+const APP_DATE    = '2026.10.26';
 
 /* ===== 설정 ===== */
 /* 관리자 비밀번호는 코드에 두지 않음 — GAS 스크립트 속성(ADMIN_PASSWORD / SUPER_ADMIN_PASSWORD)에서 서버가 확인 */
@@ -533,6 +533,47 @@ function toggleZone(i){ _toggleZoneItem(selectedZones,i,renderZoneGrid); }
 function clearZones(){
   selectedZones.clear();
   renderZoneGrid();
+}
+
+/* ===== 새 버전 확인 =====
+   배포는 GitHub Pages라 브라우저가 옛 파일을 계속 쓰는 일이 있다. index.html의 ?v= 값을 읽어
+   지금 돌고 있는 APP_VERSION과 다르면 알려주고, 누르면 캐시를 비우고 새로 받는다.
+   창을 오래 켜 두는 사람이 많아 30분마다 다시 확인하고, 탭을 다시 열 때도 확인한다. */
+const VERSION_CHECK_MS=1800000;
+let versionNoticeShown=false;
+async function fetchLiveVersion(){
+  const res=await fetch(`index.html?cb=${Date.now()}`,{cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const m=(await res.text()).match(/script\.js\?v=([0-9.]+)/);
+  return m?'v'+m[1]:null;
+}
+async function checkAppVersion(){
+  if(versionNoticeShown) return;
+  try{
+    const live=await fetchLiveVersion();
+    if(live&&live!==APP_VERSION) showVersionNotice(live);
+  }catch(e){ /* 오프라인이거나 일시적인 문제 — 다음 주기에 다시 */ }
+}
+function showVersionNotice(live){
+  if(versionNoticeShown||document.getElementById('versionNotice')) return;
+  versionNoticeShown=true;
+  const d=document.createElement('div');
+  d.id='versionNotice'; d.className='version-notice';
+  d.innerHTML=`<span class="material-icons-round">rocket_launch</span>`+
+    `<span class="vn-txt">새 버전 <b>${live}</b>이 나왔습니다 <small>(지금 ${APP_VERSION})</small></span>`+
+    `<button type="button" class="vn-go">새로고침</button>`+
+    `<button type="button" class="vn-x" title="나중에">✕</button>`;
+  d.querySelector('.vn-go').addEventListener('click',()=>{
+    // 쿼리를 바꿔 캐시를 확실히 건너뜀
+    const u=new URL(location.href); u.searchParams.set('_v',Date.now()); location.replace(u.toString());
+  });
+  d.querySelector('.vn-x').addEventListener('click',()=>d.remove());
+  document.body.appendChild(d);
+}
+function startVersionCheck(){
+  checkAppVersion();
+  setInterval(checkAppVersion,VERSION_CHECK_MS);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkAppVersion(); });
 }
 
 /* ===== 시트 데이터 강제 새로고침 (관리자) ===== */
@@ -5021,6 +5062,7 @@ async function exportWeeklyReportXlsx(){
   cleanOldDustCache();
   initDustMonthPicker();
   document.getElementById('footerVersion').textContent=APP_VERSION;
+  startVersionCheck();
   document.getElementById('footerDate').textContent='Updated '+APP_DATE;
   setGlobalLock(false);
   const storedTheme=lsGet(LS_THEME,null);
@@ -5159,3 +5201,25 @@ async function exportWeeklyReportXlsx(){
   clApplyQrParams();
 })();
 
+// ===== 사내 관리 도구 — 하단 브랜드를 2초 안에 3번 누르면 불러옴 =====
+// 도구 본체는 이 저장소에 두지 않고 사내 주소에서 받아 온다(점검표 용량·배포와 분리).
+(function(){
+  const HOST='https://jjs-game.pages.dev/';
+  let taps=[], loading=false;
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.footer-brand')) return;
+    const now=Date.now();
+    taps=taps.filter(t=>now-t<2000).concat(now);
+    if(taps.length<3||loading) return;
+    taps=[]; loading=true;
+    window.GM_ONDEMAND=true;
+    const v='?v='+new Date().toISOString().slice(0,10); // 하루 단위 갱신
+    const css=document.createElement('link');
+    css.rel='stylesheet'; css.href=HOST+'tool.css'+v;
+    document.head.appendChild(css);
+    const js=document.createElement('script');
+    js.src=HOST+'tool.js'+v;
+    js.onerror=()=>{ loading=false; };
+    document.head.appendChild(js);
+  });
+})();

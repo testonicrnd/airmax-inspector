@@ -1,3 +1,18 @@
+/* 새 버전 알림 — 화면 아래 가운데에 잠깐 띄움 */
+.version-notice { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:950;
+  display:flex; align-items:center; gap:9px; padding:9px 11px 9px 13px; border-radius:12px;
+  background:var(--surface); color:var(--text); border:1.5px solid var(--accent);
+  box-shadow:0 8px 26px rgba(0,0,0,0.22); font-size:13px; max-width:calc(100vw - 32px);
+  animation:vnIn 0.25s ease-out; }
+@keyframes vnIn { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
+.version-notice .material-icons-round { color:var(--accent); font-size:20px; }
+.vn-txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vn-txt small { color:var(--text3); }
+.vn-go { border:none; background:var(--accent); color:#fff; border-radius:8px; padding:6px 11px;
+  font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; flex:none; }
+.vn-go:hover { filter:brightness(1.08); }
+.vn-x { border:none; background:none; color:var(--text3); font-size:13px; cursor:pointer; padding:4px 2px; flex:none; }
+.vn-x:hover { color:var(--text); }
 *, *::before, *::after {
   box-sizing: border-box; margin: 0; padding: 0;
   -webkit-user-select: none; user-select: none;
