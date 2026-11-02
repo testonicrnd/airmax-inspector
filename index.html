@@ -21,7 +21,7 @@
      한글 본문은 Pretendard 유지 (Geist엔 한글 글리프가 없음) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"/>
-<link rel="stylesheet" href="style.css?v=3.1.1"/>
+<link rel="stylesheet" href="style.css?v=3.1.2"/>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -565,11 +565,11 @@
 <!-- ===== 점검 히스토리 페이지 (관리자 전용) ===== -->
 <div id="historyPage" style="display:none; padding:8px 24px 16px;">
   <div class="history-toolbar">
-    <select id="historyMonthSel" class="list-filter-sel" style="min-width:130px" onchange="loadHistoryGrid(this.value)"></select>
+    <select id="historyMonthSel" class="list-filter-sel" style="min-width:130px" onchange="pickHistoryMonth(this.value)"></select>
     <select id="historyDaySel" class="list-filter-sel" style="min-width:120px" onchange="filterHistoryDay(this.value)">
       <option value="">전체 일자</option>
     </select>
-    <button class="btn-ghost" id="historyRefreshBtn" onclick="loadHistoryGrid(document.getElementById('historyMonthSel').value)" title="최신 데이터로 새로고침"><span class="material-icons-round ico-solo">refresh</span></button>
+    <button class="btn-ghost" id="historyRefreshBtn" onclick="loadHistoryGrid(document.getElementById('historyMonthSel').value);refreshHistoryMonthList()" title="최신 데이터로 새로고침"><span class="material-icons-round ico-solo">refresh</span></button>
     <input type="text" id="historySearchInput" class="id-input" placeholder="제품 ID / 영역 / 설치 장소 검색…"
       style="flex:1;max-width:260px;min-width:0" oninput="filterHistoryGrid(this.value)"/>
     <span class="history-toolbar-spacer"></span>
@@ -1041,6 +1041,6 @@
   <span class="footer-date" id="footerDate"></span>
 </div>
 
-<script defer src="script.js?v=3.1.1"></script>
+<script defer src="script.js?v=3.1.2"></script>
 </body>
 </html>

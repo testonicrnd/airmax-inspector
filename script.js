@@ -1,5 +1,5 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v3.1.1';
+const APP_VERSION = 'v3.1.2';
 const APP_DATE    = '2026.11.02';
 
 /* ===== 설정 ===== */
@@ -3090,7 +3090,7 @@ function switchPage(page){
   document.body.classList.toggle('history-page-active', page==='history');
   document.body.classList.toggle('checklist-page-active', page==='checklist'||page==='qr');
   // 히스토리 탭에 들어올 때마다 최신 데이터로 동기화 (당일 점검 후 바로 확인 못했을 수 있으므로 캐시된 월도 강제 재조회)
-  if(page==='history') loadHistoryMonths(true);
+  if(page==='history'){ loadHistoryMonths(true); refreshHistoryMonthList(); }
   if(page==='checklist') initChecklistDate();
   if(page==='qr') initQrPage();
 }
@@ -4662,6 +4662,22 @@ function qrMakeLabelCanvas(item){
 }
 
 /* ===== 점검 히스토리 ===== */
+let historyMonthPicked=false; // 사용자가 월을 직접 골랐는지 — 안 골랐으면 새 달이 생길 때 최신 월로 따라감
+function pickHistoryMonth(v){ historyMonthPicked=true; loadHistoryGrid(v); }
+// v3.1.2 — 월 목록은 1시간 캐시라 새 달 시트(예: 11월)가 생겨도 지난 목록(10월까지)만 보였음 →
+// 히스토리 탭에 들어오거나 새로고침할 때마다 월 목록을 서버에서 다시 받아, 바뀌었으면 고르는 칸을 다시 그림
+async function refreshHistoryMonthList(){
+  if(!GAS_URL) return;
+  try{
+    const json=await (await fetch(GAS_URL)).json();
+    if(!json.success||!Array.isArray(json.monthSheets)) return;
+    const changed=JSON.stringify(json.monthSheets)!==JSON.stringify(historyMonths);
+    historyMonths=json.monthSheets;
+    const cached=lsGet(LS_SHEET_CACHE,null);
+    if(cached) lsSet(LS_SHEET_CACHE,Object.assign({},cached,{monthSheets:historyMonths}));
+    if(changed) loadHistoryMonths(false);
+  }catch(e){}
+}
 function loadHistoryMonths(forceReload){
   const sel=document.getElementById('historyMonthSel');
   if(!historyMonths.length){
@@ -4674,7 +4690,8 @@ function loadHistoryMonths(forceReload){
   const ordered=[...historyMonths].reverse(); // 최신 월 먼저
   const prevVal=sel.value;
   sel.innerHTML=ordered.map(m=>`<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
-  const target=ordered.includes(prevVal)?prevVal:ordered[0];
+  // v3.1.2 — 직접 고른 달이 아니면 늘 최신 월(새 달 시트가 생기면 그쪽으로)
+  const target=historyMonthPicked&&ordered.includes(prevVal)?prevVal:ordered[0];
   sel.value=target;
   if(forceReload || historyLoadedMonth!==target) loadHistoryGrid(target);
 }
