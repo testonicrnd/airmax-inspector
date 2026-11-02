@@ -1,6 +1,6 @@
 ﻿/* ===== 버전 ===== */
-const APP_VERSION = 'v3.1.0';
-const APP_DATE    = '2026.10.26';
+const APP_VERSION = 'v3.1.1';
+const APP_DATE    = '2026.11.02';
 
 /* ===== 설정 ===== */
 /* 관리자 비밀번호는 코드에 두지 않음 — GAS 스크립트 속성(ADMIN_PASSWORD / SUPER_ADMIN_PASSWORD)에서 서버가 확인 */
@@ -4075,11 +4075,14 @@ function clResetWindTestDefault(){
 }
 const CL_USAGE_RATE_IDS=['clBagRate','clHepaRate','clMotorRate'];
 const CL_USAGE_NAMES={clBagRate:'먼지봉투',clHepaRate:'HEPA 필터',clMotorRate:'모터'};
-// 구형 로고 LCD 제품은 화면에 소모품 사용률(%) 대신 사용시간(Hr)만 표시되므로 입력 단위가 다름
+// 구형 로고 LCD 제품은 화면에 소모품 사용률(%) 대신 사용시간(Hr)만 표시되므로 입력 단위가 다름.
+// v3.1.1 — LED 제품도 소모품을 사용시간(Hr)으로 기록함(%는 신형 LCD만)
 function clUsageIsHours(){
-  return (document.getElementById('clDisplayType')?.dataset.value||'')==='LCD'
-    &&(document.getElementById('clLcdVersion')?.dataset.value||'')==='구형';
+  const type=document.getElementById('clDisplayType')?.dataset.value||'';
+  return type==='LED'||type==='LCD'&&(document.getElementById('clLcdVersion')?.dataset.value||'')==='구형';
 }
+// 소모품 기록 대상 제품 — LED·LCD (Air Crew는 표시 화면이 없어 입력 안 함)
+function clUsageApplies(type){ return type==='LED'||type==='LCD'; }
 // %는 0~100 정수로 제한, 시간(Hr)은 상한 없이 소수점까지 허용
 function clSanitizeUsageInput(el){
   if(clUsageIsHours()) clSanitizeNumberInput(el,null,true);
@@ -4091,7 +4094,7 @@ function clUpdateUsageMode(){
   const changed=mode!==clUsageMode;
   clUsageMode=mode;
   const title=document.getElementById('clUsageTitle');
-  if(title) title.textContent=mode==='Hr'?'① 소모품 사용시간 기록 (LCD 제품 필수)':'① 소모품 사용률 기록 (LCD 제품 필수)';
+  if(title) title.textContent=mode==='Hr'?'① 소모품 사용시간 기록 (LED·LCD 제품 필수)':'① 소모품 사용률 기록 (LED·LCD 제품 필수)';
   CL_USAGE_RATE_IDS.forEach(id=>{
     const label=document.getElementById(id+'Label');
     if(label) label.textContent=CL_USAGE_NAMES[id]+(mode==='Hr'?' 사용시간 (Hr)':' 사용률 (%)');
@@ -4120,8 +4123,8 @@ function clSelectDisplayType(type,btnEl){
   CL_USAGE_RATE_IDS.forEach(id=>{
     const el=document.getElementById(id);
     if(!el) return;
-    el.disabled=type!=='LCD';
-    if(type!=='LCD') el.value='';
+    el.disabled=!clUsageApplies(type);
+    if(!clUsageApplies(type)) el.value='';
   });
   clUpdateInputDoneAvailability();
   clUpdateUsageMode();
@@ -4261,7 +4264,13 @@ function getChecklistMissingItems(){
   if(!tog('clSensorResult')) missing.push('집진기 ② 센서 상태');
   const displayType=tog('clDisplayType');
   if(!displayType) missing.push('집진기 제품 종류 선택 (LED/LCD/Air Crew)');
-  else if(displayType==='LED'&&!tog('clLedResult')) missing.push('집진기 ③ LED 표시상태');
+  else if(displayType==='LED'){
+    if(!tog('clLedResult')) missing.push('집진기 ③ LED 표시상태');
+    // v3.1.1 — LED 제품도 소모품 사용시간(Hr) 세 항목 필수
+    CL_USAGE_RATE_IDS.forEach(id=>{
+      if(!val(id)) missing.push('소모품 ① '+CL_USAGE_NAMES[id]+' 사용시간 (LED 제품 필수)');
+    });
+  }
   else if(displayType==='LCD'){
     if(!tog('clLcdVersion')) missing.push('집진기 LCD 제품 버전 (구형/신형 로고)');
     if(!tog('clLcdResult')) missing.push('집진기 ③ LCD 표시상태');
